@@ -7,9 +7,14 @@ fi
 # initialize compiler
 # ICC
 USE_ICC=0
+SET_ICC_PATH=0
+ICC_EXEC=icc
 ICC_PATH=$(which icc)
 # GCC
 USE_GCC=0
+SET_GCC_PATH=0
+GCC_EXEC=gcc
+GXX_EXEC=g++
 GCC_PATH=$(which gcc)
 GXX_PATH=$(which g++)
 
@@ -198,16 +203,45 @@ until [ -z "$1" ]; do
 	    ;;
 
 	--icc-dir)
-	    ICC_PATH=${2}/icc
+	    ICC_PATH=${2}/${ICC_EXEC}
+	    SET_ICC_PATH=1
 	    echo "user-defined icc path ${ICC_PATH}"
 	    shift 2
 	    ;;
 
 	--gcc-dir)
-	    GCC_PATH=${2}/gcc
-	    GXX_PATH=${2}/g++
-	    echo "user-defined gcc path ${GCC_PATH} ${G++_PATH}"
+	    GCC_PATH=${2}/${GCC_EXEC}
+	    GXX_PATH=${2}/${GXX_EXEC}
+	    SET_GCC_PATH=1
+	    echo "user-defined gcc path ${GCC_PATH} ${GXX_PATH}"
 	    shift 2
+	    ;;
+
+	--icc-exec)
+	    ICC_EXEC=${2}
+	    if [[ "${SET_ICC_PATH}" == "1" ]]; then
+		ICC_PATH=${ICC_PATH%/*}/${ICC_EXEC}
+	    else
+		ICC_PATH=$(which ${ICC_EXEC})
+	    fi
+	    ARGCACHE=${ARGCACHE}" --icc-exec ${ICC_EXEC}"
+	    echo "user-defined icc executable ${ICC_EXEC}"
+	    shift 2
+	    ;;
+
+	--gcc-exec)
+	    GCC_EXEC=${2}
+	    GXX_EXEC=${3}
+	    if [[ "${SET_GCC_PATH}" == "1" ]]; then
+		GCC_PATH=${GCC_PATH%/*}/${GCC_EXEC}
+		ICC_PATH=${ICC_PATH%/*}/${ICC_EXEC}
+	    else
+		GCC_PATH=$(which ${GCC_EXEC})
+		GXX_PATH=$(which ${GXX_EXEC})		
+	    fi
+	    ARGCACHE=${ARGCACHE}" --gcc-exec ${GCC_EXEC} ${GXX_EXEC}"
+	    echo "user-defined gcc executable ${GCC_EXEC} ${GXX_EXEC}"
+	    shift 3
 	    ;;
 
 	--cmake-dir)
