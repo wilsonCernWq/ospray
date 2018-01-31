@@ -24,15 +24,14 @@ namespace ospray {
       createChild("size", "vec2i", size);
       createChild("displayWall", "string", std::string(""));
 
-      // Tone mapping with default parameters set to ACES
-      createChild("toneMapping", "bool", false);
+      createChild("toneMapping", "bool", true);
 
       createChild("exposure", "float", 0.0f,
                     NodeFlags::required |
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(-8.f, 8.f);
 
-      createChild("contrast", "float", 1.6773f,
+      createChild("contrast", "float", 1.4773f,
                     NodeFlags::required |
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(1.f, 5.f);
@@ -42,20 +41,22 @@ namespace ospray {
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(0.9f, 1.f);
 
-      createChild("midIn", "float", 0.18f,
+      createChild("midIn", "float", 0.468f,
                     NodeFlags::required |
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(0.f, 1.f);
 
-      createChild("midOut", "float", 0.18f,
+      createChild("midOut", "float", 0.278f,
                     NodeFlags::required |
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(0.f, 1.f);
 
-      createChild("hdrMax", "float", 11.0785f,
+      createChild("hdrMax", "float", 1.5785f,
                     NodeFlags::required |
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(1.f, 64.f);
+
+      createChild("useVarianceBuffer", "bool", true);
 
       createFB();
     }
@@ -66,6 +67,7 @@ namespace ospray {
       if (lastModified() >= lastCommitted()
           || child("size").lastModified() >= lastCommitted()
           || child("displayWall").lastModified() >= lastCommitted()
+          || child("useVarianceBuffer").lastModified() >= lastCommitted()
           || child("toneMapping").lastModified() >= lastCommitted())
       {
         std::string displayWall = child("displayWall").valueAs<std::string>();
@@ -161,12 +163,14 @@ namespace ospray {
     void ospray::sg::FrameBuffer::createFB()
     {
       auto fbsize = size();
+
+      auto useVariance = child("useVarianceBuffer").valueAs<bool>();
       ospFrameBuffer = ospNewFrameBuffer((osp::vec2i&)fbsize,
                                          (displayWallStream=="")
                                          ? OSP_FB_SRGBA
                                          : OSP_FB_NONE,
                                          OSP_FB_COLOR | OSP_FB_ACCUM |
-                                         OSP_FB_VARIANCE);
+                                         (useVariance ? OSP_FB_VARIANCE : 0));
       clearAccum();
       setValue(ospFrameBuffer);
     }

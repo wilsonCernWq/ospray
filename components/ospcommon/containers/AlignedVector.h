@@ -1,5 +1,5 @@
 // ======================================================================== //
-// Copyright 2017-2018 Intel Corporation                                    //
+// Copyright 2009-2018 Intel Corporation                                    //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -14,13 +14,16 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include "ospray_test_fixture.h"
+#pragma once
 
-OSPRayEnvironment * ospEnv;
+#include "aligned_allocator.h"
+#include <vector>
 
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  ospEnv = new OSPRayEnvironment(argc, argv);
-  AddGlobalTestEnvironment(ospEnv);
-  return RUN_ALL_TESTS();
-}
+namespace ospcommon {
+  namespace containers {
+
+    template <typename T>
+    using AlignedVector = std::vector<T, aligned_allocator<T>>;
+
+  }  // namespace container
+}  // namespace ospcommon

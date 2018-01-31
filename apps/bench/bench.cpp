@@ -18,14 +18,20 @@
 #include "ospapp/OSPApp.h"
 #include "common/sg/SceneGraph.h"
 #include "ospcommon/utility/SaveImage.h"
+
+#include "sg/Renderer.h"
 #include "sg/common/FrameBuffer.h"
 
 namespace ospray {
   namespace app {
 
-    class OSPBenchmark : public OSPApp
+    struct OSPBenchmark : public OSPApp
     {
-      void render(const std::shared_ptr<ospray::sg::Node> &) override;
+      OSPBenchmark();
+
+    private:
+
+      void render(const std::shared_ptr<sg::Node> &) override;
       int parseCommandLine(int &ac, const char **&av) override;
 
       template <typename T>
@@ -35,26 +41,34 @@ namespace ospray {
       std::string imageOutputFile = "";
     };
 
-    void OSPBenchmark::render(const std::shared_ptr<ospray::sg::Node> &renderer)
+    OSPBenchmark::OSPBenchmark()
     {
-      auto sgFB = renderer->child("frameBuffer").nodeAs<sg::FrameBuffer>();
+      addPlane = false; // NOTE(jda) - override default behavior, can still
+                        //             force on/off via standard command-line
+                        //             options
+    }
+
+    void OSPBenchmark::render(const std::shared_ptr<sg::Node> &root)
+    {
+      auto renderer = root->nodeAs<sg::Renderer>();
+      auto fb       = renderer->child("frameBuffer").nodeAs<sg::FrameBuffer>();
 
       for (size_t i = 0; i < numWarmupFrames; ++i)
-        renderer->traverse("render");
+        renderer->renderFrame(fb, OSP_FB_COLOR | OSP_FB_ACCUM);
 
       auto benchmarker =
           pico_bench::Benchmarker<std::chrono::milliseconds>{ numBenchFrames };
 
       auto stats = benchmarker([&]() {
-        renderer->traverse("render");
+        renderer->renderFrame(fb, OSP_FB_COLOR | OSP_FB_ACCUM);
         // TODO: measure just ospRenderFrame() time from within ospray_sg
         // return std::chrono::milliseconds{500};
       });
 
       if (!imageOutputFile.empty()) {
-        auto *srcPB = (const uint32_t *)sgFB->map();
+        auto *srcPB = (const uint32_t *)fb->map();
         utility::writePPM(imageOutputFile + ".ppm", width, height, srcPB);
-        sgFB->unmap(srcPB);
+        fb->unmap(srcPB);
       }
 
       outputStats(stats);

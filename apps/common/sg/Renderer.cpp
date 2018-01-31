@@ -47,6 +47,7 @@ namespace ospray {
                                           std::string("primID"),
                                           std::string("geomID"),
                                           std::string("instID"),
+                                          std::string("testFrame"),
                                           std::string("pathtracer"),
                                           std::string("pt")});
       createChild("world",
@@ -55,7 +56,7 @@ namespace ospray {
       createChild("frameBuffer", "FrameBuffer");
       createChild("lights");
 
-      createChild("bgColor", "vec3f", vec3f(0.9f, 0.9f, 0.9f),
+      createChild("bgColor", "vec3f", vec3f(0.15f, 0.15f, 0.15f),
                   NodeFlags::required |
                   NodeFlags::valid_min_max |
                   NodeFlags::gui_color);
@@ -120,6 +121,13 @@ namespace ospray {
       createChild("aoTransparencyEnabled", "bool", true, NodeFlags::required);
     }
 
+    void Renderer::renderFrame(std::shared_ptr<FrameBuffer> fb, int flags)
+    {
+      RenderContext ctx;
+      traverse(ctx, "render");
+      variance = ospRenderFrame(fb->valueAs<OSPFrameBuffer>(), ospRenderer, flags);
+    }
+
     std::string Renderer::toString() const
     {
       return "ospray::sg::Renderer";
@@ -135,10 +143,9 @@ namespace ospray {
         Node::traverse(ctx,operation);
     }
 
-    void Renderer::postRender(RenderContext &)
+    void Renderer::traverse(const std::string& operation)
     {
-      auto fb = (OSPFrameBuffer)child("frameBuffer").valueAs<OSPObject>();
-      variance = ospRenderFrame(fb, ospRenderer, OSP_FB_COLOR | OSP_FB_ACCUM);
+      Node::traverse(operation);
     }
 
     void Renderer::preRender(RenderContext& ctx)

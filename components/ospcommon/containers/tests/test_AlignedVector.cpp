@@ -1,5 +1,5 @@
 // ======================================================================== //
-// Copyright 2017-2018 Intel Corporation                                    //
+// Copyright 2009-2017 Intel Corporation                                    //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -14,13 +14,17 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include "ospray_test_fixture.h"
+#include "../../testing/catch.hpp"
 
-OSPRayEnvironment * ospEnv;
+#include "../AlignedVector.h"
 
-int main(int argc, char **argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  ospEnv = new OSPRayEnvironment(argc, argv);
-  AddGlobalTestEnvironment(ospEnv);
-  return RUN_ALL_TESTS();
+using ospcommon::containers::AlignedVector;
+
+TEST_CASE("Interface Tests", "[all]")
+{
+  AlignedVector<int> aligned_vec;
+
+  aligned_vec.resize(500);
+
+  REQUIRE(ospcommon::isAligned(aligned_vec.data()));
 }

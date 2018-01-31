@@ -171,11 +171,11 @@ namespace ospray {
 // ImGuiViewer definitions ////////////////////////////////////////////////////
 
   ImGuiViewer::ImGuiViewer(const std::shared_ptr<sg::Node> &scenegraph)
-    : ImGuiViewer(scenegraph, nullptr)
+    : ImGuiViewer(scenegraph->nodeAs<sg::Renderer>(), nullptr)
   {}
 
-  ImGuiViewer::ImGuiViewer(const std::shared_ptr<sg::Node> &scenegraph,
-                           const std::shared_ptr<sg::Node> &scenegraphDW)
+  ImGuiViewer::ImGuiViewer(const std::shared_ptr<sg::Renderer> &scenegraph,
+                           const std::shared_ptr<sg::Renderer> &scenegraphDW)
     : ImGui3DWidget(ImGui3DWidget::FRAMEBUFFER_NONE),
       scenegraph(scenegraph),
       scenegraphDW(scenegraphDW),
@@ -189,9 +189,6 @@ namespace ospray {
     if (useDynamicLoadBalancer)
       numPreAllocatedTiles = OSPRAY_DYNAMIC_LOADBALANCER.value();
 
-    //do initial commit to make sure bounds are correctly computed
-    scenegraph->traverse("verify");
-    scenegraph->traverse("commit");
     auto bbox = scenegraph->child("world").bounds();
     if (bbox.empty()) {
       bbox.lower = vec3f(-5,0,-5);

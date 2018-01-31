@@ -61,18 +61,7 @@ namespace ospray {
       // access/load symbols/sg::Nodes dynamically
       loadLibrary("ospray_sg");
 
-      result = parseGeneralCommandLine(argc, argv);
-      switch (result) {
-      // Everything is ok - continue
-      case 0:
-        break;
-      // Everything is done - return without further execution
-      case 2:
-        return 0;
-      // Something went wrong - exit with error
-      default:
-        return 1;
-      }
+      parseGeneralCommandLine(argc, argv);
 
       auto rendererPtr = sg::createNode("renderer", "Renderer");
       auto &renderer = *rendererPtr;
@@ -95,21 +84,23 @@ namespace ospray {
       // last, to be able to modify all created SG nodes
       parseCommandLineSG(argc, argv, renderer);
 
-      if (debug) {
+      if (debug)
         renderer.traverse(sg::PrintNodes{});
-      }
+
+      // recommit in case any command line options modified the scene graph
+      renderer.traverse("verify");
+      renderer.traverse("commit");
 
       render(rendererPtr);
 
       return 0;
     }
 
-    int OSPApp::parseGeneralCommandLine(int &ac, const char **&av)
+    void OSPApp::parseGeneralCommandLine(int &ac, const char **&av)
     {
       // Call children command line parsing methods
-      if (parseCommandLine(ac, av) != 0) {
-        return 1;
-      }
+      if (parseCommandLine(ac, av) != 0)
+        return;
 
       clTransform currentCLTransform;
       bool inAnimation = false;
@@ -118,7 +109,7 @@ namespace ospray {
         if (arg == "--help") {
           printHelp();
           // We don't want to do anything else so return 2.
-          return 2;
+          std::exit(0);
         } else if (arg == "-r" || arg == "--renderer") {
           initialRendererType = av[i + 1];
           removeArgs(ac, av, i, 2);
@@ -142,7 +133,7 @@ namespace ospray {
           removeArgs(ac, av, i, 1);
           --i;
         } else if (arg == "--no-plane") {
-          noPlane = true;
+          addPlane = false;
           removeArgs(ac, av, i, 1);
           --i;
         } else if (arg == "--no-lights") {
@@ -244,10 +235,9 @@ namespace ospray {
         } else {
           std::cerr << "Error: unknown parameter '" << arg << "'." << std::endl;
           printHelp();
-          return 1;
+          std::exit(1);
         }
       }
-      return 0;
     }
 
     void OSPApp::parseCommandLineSG(int ac, const char **&av, sg::Node &root)
@@ -364,12 +354,12 @@ namespace ospray {
         auto &sun = lights.createChild("sun", "DirectionalLight");
         sun["color"] = vec3f(1.f, 232.f / 255.f, 166.f / 255.f);
         sun["direction"] = vec3f(0.462f, -1.f, -.1f);
-        sun["intensity"] = 1.5f;
+        sun["intensity"] = 3.0f;
 
         auto &bounce = lights.createChild("bounce", "DirectionalLight");
         bounce["color"] = vec3f(127.f / 255.f, 178.f / 255.f, 255.f / 255.f);
         bounce["direction"] = vec3f(-.93, -.54f, -.605f);
-        bounce["intensity"] = 0.25f;
+        bounce["intensity"] = 1.25f;
 
         if (hdriLightFile == "") {
           auto &ambient = lights.createChild("ambient", "AmbientLight");
@@ -523,7 +513,7 @@ namespace ospray {
     void OSPApp::addPlaneToScene(sg::Node &renderer)
     {
       auto &world = renderer["world"];
-      if (noPlane == true || (world.numChildren() > 1 && addPlane == false)) {
+      if (world.numChildren() > 1 && addPlane == false) {
         return;
       }
       auto bbox = world.bounds();
