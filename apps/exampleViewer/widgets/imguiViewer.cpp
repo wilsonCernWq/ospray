@@ -39,6 +39,15 @@ namespace ospray {
 
   // Functions to make ImGui widgets for SG nodes /////////////////////////////
 
+  static void sgWidget_box3f(const std::string &text,
+                             std::shared_ptr<sg::Node> node)
+  {
+    box3f val = node->valueAs<box3f>();
+    ImGui::Text("(%f, %f, %f)", val.lower.x, val.lower.y, val.lower.z);
+    ImGui::SameLine();
+    ImGui::Text("(%f, %f, %f)", val.upper.x, val.upper.y, val.upper.z);
+  }
+
   static void sgWidget_vec3f(const std::string &text,
                              std::shared_ptr<sg::Node> node)
   {
@@ -161,7 +170,9 @@ namespace ospray {
         {"float", sgWidget_float},
         {"int", sgWidget_int},
         {"vec2i", sgWidget_vec2i},
+        {"vec2f", sgWidget_vec2f},
         {"vec3f", sgWidget_vec3f},
+        {"box3f", sgWidget_box3f},
         {"string", sgWidget_string},
         {"bool", sgWidget_bool},
         {"TransferFunction", sgWidget_TransferFunction}
@@ -408,14 +419,15 @@ namespace ospray {
   {
     ImGuiWindowFlags flags = ImGuiWindowFlags_MenuBar;
 
-    static bool demo_window = false;
-
     ImGui::Begin("Viewer Controls: press 'g' to show/hide", nullptr, flags);
     ImGui::SetWindowFontScale(0.5f*fontScale);
 
     guiMenu();
 
-    if (demo_window) ImGui::ShowTestWindow(&demo_window);
+#if 0 // NOTE(jda) - enable to see ImGui example window
+    static bool demo_window = true;
+    ImGui::ShowTestWindow(&demo_window);
+#endif
 
     guiRenderStats();
     guiFindNode();
@@ -462,16 +474,16 @@ namespace ospray {
   void ImGuiViewer::guiMenuView()
   {
     if (ImGui::BeginMenu("View")) {
-      bool orbitMode = (manipulator == inspectCenterManipulator);
-      bool flyMode   = (manipulator == moveModeManipulator);
+      bool orbitMode = (manipulator == inspectCenterManipulator.get());
+      bool flyMode   = (manipulator == moveModeManipulator.get());
 
       if (ImGui::Checkbox("Orbit Camera Mode", &orbitMode))
-        manipulator = inspectCenterManipulator;
+        manipulator = inspectCenterManipulator.get();
 
       if (orbitMode) ImGui::Checkbox("Anchor 'Up' Direction", &upAnchored);
 
       if (ImGui::Checkbox("Fly Camera Mode", &flyMode))
-        manipulator = moveModeManipulator;
+        manipulator = moveModeManipulator.get();
 
       if (ImGui::MenuItem("Reset View")) resetView();
       if (ImGui::MenuItem("Reset Accumulation")) viewPort.modified = true;
@@ -701,7 +713,7 @@ namespace ospray {
       text += node->type() + "##" + std::to_string(node->uniqueID());
       if (ImGui::TreeNodeEx(text.c_str(),
                             (node->numChildren() > 20) ?
-                              0 : ImGuiTreeNodeFlags_DefaultOpen)) {
+                             0 : ImGuiTreeNodeFlags_DefaultOpen)) {
         guiNodeContextMenu(name, node);
 
         if (!node->isValid())

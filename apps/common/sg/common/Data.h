@@ -35,10 +35,13 @@ namespace ospray {
     struct OSPSG_INTERFACE DataBuffer : public Node
     {
       DataBuffer(OSPDataType type)
-        : type(type), data(nullptr)
+        : type(type)
       {}
 
-      virtual ~DataBuffer() override = default;
+      virtual ~DataBuffer() override
+      {
+        if(data) ospRelease(data);
+      }
 
       virtual std::string toString() const override
       { return "DataBuffer<abstract>"; }
@@ -82,7 +85,7 @@ namespace ospray {
       size_t numBytes() const { return size() * bytesPerElement(); }
 
       OSPDataType type;
-      OSPData     data;
+      OSPData     data {nullptr};
     };
 
     // -------------------------------------------------------
@@ -168,6 +171,7 @@ namespace ospray {
     using DataVector4i  = DataVectorT<vec4i, OSP_INT4>;
     using DataVectorOSP = DataVectorT<OSPObject, OSP_OBJECT>;
     using DataVectorRAW = DataVectorT<byte_t, OSP_RAW>;
+    using DataVectorAffine3f = DataVectorT<ospcommon::affine3f, OSP_RAW>;
 
     template<typename T>
     std::shared_ptr<T> make_shared_aligned(void *data, size_t num)

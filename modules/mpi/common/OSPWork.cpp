@@ -246,7 +246,7 @@ namespace ospray {
       {
         ManagedObject *obj = handle.lookup();
         Assert(obj);
-        obj->findParam(name.c_str(), true)->set(val.c_str());
+        obj->findParam(name.c_str(), true)->set(val);
       }
 
       template<>
@@ -257,7 +257,7 @@ namespace ospray {
 
         ManagedObject *obj = handle.lookup();
         if (dynamic_cast<Renderer*>(obj) || dynamic_cast<Volume*>(obj)) {
-          obj->findParam(name.c_str(), true)->set(val.c_str());
+          obj->findParam(name.c_str(), true)->set(val);
         }
       }
 
@@ -362,9 +362,6 @@ namespace ospray {
         // it), so let's assert that nobody accidentally uses it.
         assert(format != OSP_STRING);
 
-        Data *ospdata = new Data(nItems, format, dataView.data());
-        handle.assign(ospdata);
-
         if (format == OSP_OBJECT ||
             format == OSP_CAMERA  ||
             format == OSP_DATA ||
@@ -385,13 +382,16 @@ namespace ospray {
              what the core expects are pointers; to make the core
              happy we translate all data items back to pointers at
              this stage */
-          ObjectHandle   *asHandle = (ObjectHandle*)ospdata->data;
-          ManagedObject **asObjPtr = (ManagedObject**)ospdata->data;
+          ObjectHandle   *asHandle = (ObjectHandle*)dataView.data();
+          ManagedObject **asObjPtr = (ManagedObject**)dataView.data();
           for (size_t i = 0; i < nItems; ++i) {
             if (asHandle[i] != NULL_HANDLE)
               asObjPtr[i] = asHandle[i].lookup();
           }
         }
+
+        Data *ospdata = new Data(nItems, format, dataView.data());
+        handle.assign(ospdata);
       }
 
       void NewData::serialize(WriteStream &b) const

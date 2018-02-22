@@ -16,36 +16,21 @@
 
 #pragma once
 
-#include "sg/geometry/Geometry.h"
+#include <string>
+#include <typeinfo>
 
-namespace ospray {
-  namespace sg {
+#include "../common.h"
 
-    /*! A Simple Triangle Mesh that stores vertex, normal, texcoord,
-        and vertex color in separate arrays */
-    struct OSPSG_INTERFACE TriangleMesh : public sg::Geometry
+namespace ospcommon {
+  namespace utility {
+
+    OSPCOMMON_INTERFACE std::string demangle(const char* name);
+
+    template <class T>
+    inline std::string nameOf()
     {
-      TriangleMesh();
+      return demangle(typeid(T).name());
+    }
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
-
-      box3f bounds() const override;
-
-      void preCommit(RenderContext& ctx) override;
-
-      // NOTE(jda) - Experimental modules may want to make custom triangle
-      //             meshes, which mimic everything this ("normal") TriangleMesh
-      //             does _except_ for the string type given to ospNewGeometry.
-      //             If a custom app assigns a different value to this, then
-      //             something other than the default "triangles" geometry
-      //             will be created --> in other words, this string is what
-      //             is passed to the base Geometry. THIS NEEDS TO BE REVISED
-      //             AND IS NOT A PREMENANT SOLUTION!
-      static std::string geometry_type;
-    };
-
-  } // ::ospray::sg
-} // ::ospray
-
-
+  } // ::ospcommon::utility
+} // ::ospcommon

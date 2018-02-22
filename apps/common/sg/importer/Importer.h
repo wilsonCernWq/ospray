@@ -17,7 +17,7 @@
 #pragma once
 
 // ospray::sg
-#include "../common/World.h"
+#include "../common/Model.h"
 #include "ospcommon/FileName.h"
 
 namespace ospray {
@@ -52,15 +52,6 @@ namespace ospray {
     };
 
 
-    struct OSPSG_INTERFACE ImportState
-    {
-      ImportState(std::shared_ptr<sg::World> world)
-        : world(world)
-      {}
-
-      std::shared_ptr<sg::World> world;
-    };
-
     struct OSPSG_INTERFACE Importer : public sg::Renderable
     {
       Importer();
@@ -68,11 +59,24 @@ namespace ospray {
       virtual void setChildrenModified(TimeStamp t) override;
 
       std::string loadedFileName;
+
+    private:
+
+      void importURL(std::shared_ptr<Node> world,
+                     const FileName &fileName,
+                     const FormatURL &fu) const;
+      void importRegistryGenerator(std::shared_ptr<Node> world,
+                                   const std::string &type) const;
+      void importRegistryFileLoader(std::shared_ptr<Node> world,
+                                    const std::string &type,
+                                    const FileName &fileName) const;
+      void importDefaultExtensions(std::shared_ptr<Node> world,
+                                   const FileName &filename) const;
     };
 
     /*! prototype for any scene graph importer function */
-    using ImporterFunction = void (*)(const FileName &fileName,
-                                      sg::ImportState &importerState);
+    using ImporterFunction = void (*)(std::shared_ptr<Node> world,
+                                      const FileName &fileName);
 
     /*! declare an importer function for a given file extension */
     OSPSG_INTERFACE
@@ -82,13 +86,8 @@ namespace ospray {
     /*! import a given file. throws a sg::RuntimeError if this could
      *  not be done */
     OSPSG_INTERFACE
-    void importFile(std::shared_ptr<sg::World> &world,
+    void importFile(std::shared_ptr<sg::Model> &world,
                     const FileName &fileName);
-
-    /*! create a world from an already existing OSPModel */
-    OSPSG_INTERFACE
-    void importOSPModel(Node &world, OSPModel model,
-                        const ospcommon::box3f &bbox);
 
     /*! import an OBJ wavefront model, and add its contents to the given
         world */
@@ -117,8 +116,8 @@ namespace ospray {
                                    const FileName &fileName);
 
     /*! chombo amr */
-    OSPSG_INTERFACE void importAMR(const FileName &fileName,
-                                   sg::ImportState &importerState);
+    OSPSG_INTERFACE void importAMR(std::shared_ptr<Node> world,
+                                   const FileName &fileName);
 
     OSPSG_INTERFACE
     std::shared_ptr<sg::Node> loadOSP(const std::string &fileName);
@@ -142,6 +141,18 @@ namespace ospray {
     OSPSG_INTERFACE
     void writeOSPSG(const std::shared_ptr<Node> &world,
                     const std::string &fileName);
+
+
+    // Macro to register importers ////////////////////////////////////////////
+
+#define OSPSG_REGISTER_IMPORT_FUNCTION(function, name)                         \
+    extern "C" void ospray_sg_import_##name(std::shared_ptr<Node> world,       \
+                                            const FileName fileName)           \
+    {                                                                          \
+      function(world, fileName);                                               \
+    }                                                                          \
+    /* additional declaration to avoid "extra ;" -Wpedantic warnings */        \
+    void ospray_sg_import_##name()
 
   } // ::ospray::sg
 } // ::ospray

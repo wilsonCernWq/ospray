@@ -85,13 +85,15 @@ OSPRAY_CREATE_LIBRARY(ospray_sg SHARED
   common/Light.cpp
   common/Material.cpp
   common/Node.cpp
+  common/NodeParameter.cpp
   common/Renderable.cpp
   common/RenderContext.h
   common/Serialization.cpp
   common/TimeStamp.cpp
   common/Texture2D.cpp
   common/Transform.cpp
-  common/World.cpp
+  common/Model.cpp
+  common/Instance.cpp
   common/Animator.cpp
   common/Animator.h
   common/AnimationController.h
@@ -112,7 +114,6 @@ OSPRAY_CREATE_LIBRARY(ospray_sg SHARED
   importer/Importer.cpp
   importer/importPoints.cpp
   importer/importOSP.cpp
-  importer/importOSPModel.cpp
   importer/importOSPSG.cpp
   importer/importOSX.cpp
   importer/importOBJ.cpp

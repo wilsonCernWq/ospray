@@ -16,42 +16,32 @@
 
 #pragma once
 
-#include <ospcommon/vec.h>
-#include <ospcommon/box.h>
-#include <stdexcept>
+#include "Renderable.h"
+#include "Serialization.h"
+#include "../camera/Camera.h"
 
-/*! _everything_ in the ospray core universe should _always_ be in the
-  'ospray' namespace. */
 namespace ospray {
+  namespace sg {
 
-  /*! though not required, it is good practice to put any module into
-    its own namespace (isnide of ospray:: ). Unlike for the naming of
-    library and init function, the naming for this namespace doesn't
-    particularlly matter. E.g., 'bilinearPatch', 'module_blp',
-    'bilinar_patch' etc would all work equally well. */
-  namespace bilinearPatch {
+    struct OSPSG_INTERFACE Model : public Renderable
+    {
+      Model();
+      virtual ~Model() override = default;
+      virtual std::string toString() const override;
 
-    // use ospcommon for vec3f etc
-    using namespace ospcommon;
-    
-    /*! helper class to parse command-line arguments */
-    struct CommandLine {
-      CommandLine(int ac, const char **av);
-      std::vector<std::string> inputFiles;
+      //commit caches renders.  It will render children during commit, and add
+      //cached rendered children during render call.
+      virtual void traverse(RenderContext &ctx,
+                            const std::string& operation) override;
+      virtual void preCommit(RenderContext &ctx) override;
+      virtual void postCommit(RenderContext &ctx) override;
+
+    protected:
+
+      OSPModel stashedModel{nullptr};
     };
 
-    inline CommandLine::CommandLine(int ac, const char **av)
-    {
-      for (int i=1;i<ac;i++) {
-        const std::string arg = av[i];
-        if (arg[0] == '-') {
-          throw std::runtime_error("un-handled cmdline argument '"+arg+"'");
-        } else {
-          // no arg: must be an input file
-          inputFiles.push_back(arg);
-        }
-      }
-    }
-    
-  } // ::ospray::bilinearPatch
+  } // ::ospray::sg
 } // ::ospray
+
+

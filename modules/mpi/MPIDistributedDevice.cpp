@@ -47,7 +47,6 @@ namespace ospray {
     inline API_TYPE createLocalObject(const char *type)
     {
       auto *instance = OSPRAY_TYPE::createInstance(type);
-      instance->refInc();
       return (API_TYPE)instance;
     }
 
@@ -111,7 +110,7 @@ namespace ospray {
         int _ac = 1;
         const char *_av[] = {"ospray_mpi_distributed_device"};
 
-        MPI_Comm *setComm = static_cast<MPI_Comm*>(getVoidPtr("worldCommunicator", nullptr));
+        MPI_Comm *setComm = static_cast<MPI_Comm*>(getParamVoidPtr("worldCommunicator", nullptr));
         shouldFinalizeMPI = mpicommon::init(&_ac, _av, setComm == nullptr);
 
         if (setComm) {
@@ -264,7 +263,7 @@ namespace ospray {
                                          const char *s)
     {
       auto *object = lookupObject<ManagedObject>(_object);
-      object->findParam(bufName, true)->set(s);
+      object->findParam(bufName, true)->set(std::string(s));
     }
 
     int MPIDistributedDevice::loadModule(const char *name)

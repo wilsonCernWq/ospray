@@ -14,38 +14,27 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
-
-#include "sg/geometry/Geometry.h"
+#include "NodeParameter.h"
 
 namespace ospray {
   namespace sg {
 
-    /*! A Simple Triangle Mesh that stores vertex, normal, texcoord,
-        and vertex color in separate arrays */
-    struct OSPSG_INTERFACE TriangleMesh : public sg::Geometry
-    {
-      TriangleMesh();
-
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
-
-      box3f bounds() const override;
-
-      void preCommit(RenderContext& ctx) override;
-
-      // NOTE(jda) - Experimental modules may want to make custom triangle
-      //             meshes, which mimic everything this ("normal") TriangleMesh
-      //             does _except_ for the string type given to ospNewGeometry.
-      //             If a custom app assigns a different value to this, then
-      //             something other than the default "triangles" geometry
-      //             will be created --> in other words, this string is what
-      //             is passed to the base Geometry. THIS NEEDS TO BE REVISED
-      //             AND IS NOT A PREMENANT SOLUTION!
-      static std::string geometry_type;
-    };
+    //OSPRay types
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<float>, float);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<int>, int);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<bool>, bool);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<vec2f>, vec2f);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<vec2i>, vec2i);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<vec3f>, vec3f);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<vec3i>, vec3i);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<vec3fa>, vec3fa);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<vec4f>, vec4f);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<box2f>, box2f);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<box2i>, box2i);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<box3f>, box3f);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<box3i>, box3i);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<std::string>, string);
+    OSP_REGISTER_SG_NODE_NAME(NodeParam<OSPObject>, OSPObject);
 
   } // ::ospray::sg
 } // ::ospray
-
-

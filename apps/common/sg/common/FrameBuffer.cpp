@@ -56,6 +56,7 @@ namespace ospray {
                     NodeFlags::valid_min_max |
                     NodeFlags::gui_slider).setMinMax(1.f, 64.f);
 
+      createChild("useSRGB", "bool", true);
       createChild("useVarianceBuffer", "bool", true);
 
       createFB();
@@ -68,6 +69,7 @@ namespace ospray {
           || child("size").lastModified() >= lastCommitted()
           || child("displayWall").lastModified() >= lastCommitted()
           || child("useVarianceBuffer").lastModified() >= lastCommitted()
+          || child("useSRGB").lastModified() >= lastCommitted()
           || child("toneMapping").lastModified() >= lastCommitted())
       {
         std::string displayWall = child("displayWall").valueAs<std::string>();
@@ -77,14 +79,11 @@ namespace ospray {
         createFB();
 
         bool toneMapping = child("toneMapping").valueAs<bool>();
-        if (toneMapping)
-        {
+        if (toneMapping) {
           toneMapper = ospNewPixelOp("tonemapper");
           ospCommit(toneMapper);
           ospSetPixelOp(ospFrameBuffer, toneMapper);
-        }
-        else
-        {
+        } else {
           toneMapper = nullptr;
         }
 
@@ -107,8 +106,7 @@ namespace ospray {
         ospCommit(ospFrameBuffer);
       }
 
-      if (toneMapper)
-      {
+      if (toneMapper) {
         float exposure = child("exposure").valueAs<float>();
         float linearExposure = exp2(exposure);
         ospSet1f(toneMapper, "exposure", linearExposure);
@@ -163,11 +161,14 @@ namespace ospray {
     void ospray::sg::FrameBuffer::createFB()
     {
       auto fbsize = size();
+      auto useSRGB = child("useSRGB").valueAs<bool>();
+
+      auto format = useSRGB ? OSP_FB_SRGBA : OSP_FB_RGBA8;
 
       auto useVariance = child("useVarianceBuffer").valueAs<bool>();
       ospFrameBuffer = ospNewFrameBuffer((osp::vec2i&)fbsize,
                                          (displayWallStream=="")
-                                         ? OSP_FB_SRGBA
+                                         ? format
                                          : OSP_FB_NONE,
                                          OSP_FB_COLOR | OSP_FB_ACCUM |
                                          (useVariance ? OSP_FB_VARIANCE : 0));

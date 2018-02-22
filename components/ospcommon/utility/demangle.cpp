@@ -14,38 +14,35 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
+#include "demangle.h"
 
-#include "sg/geometry/Geometry.h"
+#ifdef __GNUG__
+#  include <cstdlib>
+#  include <memory>
+#  include <cxxabi.h>
+#endif
 
-namespace ospray {
-  namespace sg {
+namespace ospcommon {
+  namespace utility {
 
-    /*! A Simple Triangle Mesh that stores vertex, normal, texcoord,
-        and vertex color in separate arrays */
-    struct OSPSG_INTERFACE TriangleMesh : public sg::Geometry
+#ifdef __GNUG__
+    std::string demangle(const char* name)
     {
-      TriangleMesh();
+      int status = 0;
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
+      std::unique_ptr<char, void(*)(void*)> res {
+          abi::__cxa_demangle(name, NULL, NULL, &status),
+          std::free
+      };
 
-      box3f bounds() const override;
+      return (status == 0) ? res.get() : name ;
+    }
+#else
+    std::string demangle(const char* name)
+    {
+      return name;
+    }
+#endif
 
-      void preCommit(RenderContext& ctx) override;
-
-      // NOTE(jda) - Experimental modules may want to make custom triangle
-      //             meshes, which mimic everything this ("normal") TriangleMesh
-      //             does _except_ for the string type given to ospNewGeometry.
-      //             If a custom app assigns a different value to this, then
-      //             something other than the default "triangles" geometry
-      //             will be created --> in other words, this string is what
-      //             is passed to the base Geometry. THIS NEEDS TO BE REVISED
-      //             AND IS NOT A PREMENANT SOLUTION!
-      static std::string geometry_type;
-    };
-
-  } // ::ospray::sg
-} // ::ospray
-
-
+  } // ::ospcommon::utility
+} // ::ospcommon
