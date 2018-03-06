@@ -27,7 +27,7 @@
 #include "common/Material.h"
 #include "volume/Volume.h"
 #include "transferFunction/TransferFunction.h"
-#include "LocalDevice.h"
+#include "Device.h"
 
 #ifdef _WIN32
 #  include <process.h> // for getpid
@@ -71,7 +71,7 @@ inline std::string toString(OSPObject obj)
   } catch (const std::bad_alloc &) {                                          \
     handleError(OSP_OUT_OF_MEMORY, "OSPRay was unable to allocate memory");   \
     return a;                                                                 \
-  } catch (const std::runtime_error &e) {                                     \
+  } catch (const std::exception &e) {                                         \
     handleError(OSP_UNKNOWN_ERROR, e.what());                                 \
     return a;                                                                 \
   } catch (...) {                                                             \
@@ -224,10 +224,10 @@ OSPRAY_CATCH_BEGIN
     }
   }
 
-  // no device created on cmd line, yet, so default to localdevice
+  // no device created on cmd line, yet, so default to ISPCDevice
   if (!deviceIsSet()) {
-    loadDefaultLibrary();
-    currentDevice = std::make_shared<ospray::api::LocalDevice>();
+    ospLoadModule("ispc");
+    currentDevice.reset(Device::createDevice("default"));
   }
 
   ospray::initFromCommandLine(_ac,&_av);
@@ -474,6 +474,20 @@ OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
+extern "C" OSPMaterial ospNewMaterial2(const char *renderer_type,
+                                       const char *material_type)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  auto material = currentDevice().newMaterial(renderer_type, material_type);
+  if (material == nullptr) {
+    postStatusMsg(1) << "#ospray: could not create material '"
+                     << material_type << "'";
+  }
+  return material;
+}
+OSPRAY_CATCH_END(nullptr)
+
 extern "C" OSPLight ospNewLight(OSPRenderer renderer, const char *type)
 OSPRAY_CATCH_BEGIN
 {
@@ -482,6 +496,20 @@ OSPRAY_CATCH_BEGIN
   OSPLight light = currentDevice().newLight(renderer, type);
   if (light == nullptr) {
     postStatusMsg(1) << "#ospray: could not create light '" << type << "'";
+  }
+  return light;
+}
+OSPRAY_CATCH_END(nullptr)
+
+extern "C" OSPLight ospNewLight2(const char *renderer_type,
+                                 const char *light_type)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  OSPLight light = currentDevice().newLight(renderer_type, light_type);
+  if (light == nullptr) {
+    postStatusMsg(1) << "#ospray: could not create light '"
+                     << light_type << "'";
   }
   return light;
 }

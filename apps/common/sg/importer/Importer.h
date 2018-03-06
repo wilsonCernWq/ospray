@@ -94,6 +94,11 @@ namespace ospray {
     OSPSG_INTERFACE void importOBJ(const std::shared_ptr<Node> &world,
                                    const FileName &fileName);
 
+    /*! import an X3D model, as forexample a ParaView contour exported
+      using ParaView's X3D exporter */
+    OSPSG_INTERFACE void importX3D(const std::shared_ptr<Node> &world,
+                                   const FileName &fileName);
+
     /*! import an OSX streamlines model, and add its contents to the given
         world */
     OSPSG_INTERFACE void importOSX(const std::shared_ptr<Node> &world,
@@ -104,8 +109,8 @@ namespace ospray {
                                    const FileName &fileName);
 
 #ifdef OSPRAY_APPS_SG_VTK
-    OSPSG_INTERFACE void importTetVolume(const std::shared_ptr<Node> &world,
-                                         const FileName &fileName);
+    OSPSG_INTERFACE void importUnstructuredVolume(const std::shared_ptr<Node> &world,
+                                                  const FileName &fileName);
 #endif
 
     /*! import an X3D-format model, and add its contents to the given world */
@@ -115,12 +120,11 @@ namespace ospray {
     OSPSG_INTERFACE void importXYZ(const std::shared_ptr<Node> &world,
                                    const FileName &fileName);
 
+#ifdef OSPRAY_APPS_SG_CHOMBO
     /*! chombo amr */
-    OSPSG_INTERFACE void importAMR(std::shared_ptr<Node> world,
-                                   const FileName &fileName);
-
-    OSPSG_INTERFACE
-    std::shared_ptr<sg::Node> loadOSP(const std::string &fileName);
+    OSPSG_INTERFACE void importCHOMBO(std::shared_ptr<Node> world,
+                                      const FileName &fileName);
+#endif
 
     OSPSG_INTERFACE
     void loadOSP(std::shared_ptr<sg::Node> world, const std::string &fileName);

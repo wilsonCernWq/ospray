@@ -14,50 +14,27 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include "sg/common/TimeStamp.h"
+#pragma once
 
-namespace ospray {
-  namespace sg {
+#include "../../common/OSPCommon.ih"
+#include "../Volume.ih"
+#include "MinMaxBVH2.ih"
 
-    //! \brief the uint64_t that stores the time value
-    std::atomic<size_t> TimeStamp::global {0};
+struct UnstructuredVolume
+{
+  //! Fields common to all Volume subtypes (must be the first entry of this
+  //! struct).
+  Volume super;
 
-    TimeStamp::TimeStamp(const TimeStamp &other)
-    {
-      this->value = other.value.load();
-    }
+  uniform int nVertices;
+  const vec3f *uniform vertices;
 
-    TimeStamp::TimeStamp(TimeStamp &&other)
-    {
-      this->value = other.value.load();
-    }
+  uniform int nCells;
+  const vec4i *uniform indices;     // indices into vertices array.
+  const float *uniform field;       // Attribute value at each vertex.
+  const vec3f *uniform faceNormals;
 
-    TimeStamp &TimeStamp::operator=(const TimeStamp &other)
-    {
-      this->value = other.value.load();
-      return *this;
-    }
+  uniform MinMaxBVH2 bvh;
 
-    TimeStamp &TimeStamp::operator=(TimeStamp &&other)
-    {
-      this->value = other.value.load();
-      return *this;
-    }
-
-    TimeStamp::operator size_t() const
-    {
-      return value;
-    }
-
-    void TimeStamp::renew()
-    {
-      value = nextValue();
-    }
-
-    size_t TimeStamp::nextValue()
-    {
-      return global++;
-    }
-
-  } // ::ospray::sg
-} // ::ospray
+  uniform enum {PLANAR, NONPLANAR} hexMethod;
+};

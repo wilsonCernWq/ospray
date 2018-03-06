@@ -16,23 +16,37 @@
 
 #pragma once
 
-#include "../../../common/OSPCommon.ih"
-#include "../../Volume.ih"
-#include "../MinMaxBVH2.ih"
+#include "../common.h"
 
-struct TetrahedralVolume
-{
-  //! Fields common to all Volume subtypes (must be the first entry of this
-  //! struct).
-  Volume super;
+#include <atomic>
 
-  uniform int nVertices;
-  const vec3f *uniform vertices;
+namespace ospcommon {
+  namespace utility {
 
-  uniform int nTetrahedra;
-  const vec4i *uniform tetrahedra;  // indices into vertices array.
-  const float *uniform field;       // Attribute value at each vertex.
-  const vec3f *uniform faceNormals;
+    struct OSPCOMMON_INTERFACE TimeStamp
+    {
+      TimeStamp() = default;
+      TimeStamp(const TimeStamp &);
+      TimeStamp(TimeStamp &&);
 
-  uniform MinMaxBVH2 bvh;
-};
+      TimeStamp &operator=(const TimeStamp &);
+      TimeStamp &operator=(TimeStamp &&);
+
+      operator size_t() const;
+
+      void renew();
+
+    private:
+
+      static size_t nextValue();
+
+      // Data members //
+
+      std::atomic<size_t> value {nextValue()};
+
+      //! \brief the uint64_t that stores the time value
+      static std::atomic<size_t> global;
+    };
+
+  } // ::ospray::sg
+} // ::ospray

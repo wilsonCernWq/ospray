@@ -108,7 +108,6 @@ namespace ospray {
         renderer["maxDepth"] = 3;
         renderer["frameBuffer"]["toneMapping"] = false;
         renderer["frameBuffer"]["useVarianceBuffer"] = false;
-        renderer["frameBuffer"]["useSRGB"] = false;
         addPlane = false;
       }
 
@@ -119,7 +118,7 @@ namespace ospray {
       setupCamera(renderer);
 
       renderer["frameBuffer"]["size"] = vec2i(width, height);
-      renderer.traverse("verify");
+      renderer.traverse(sg::Node::VerifyNodes{});
       renderer.traverse("commit");
 
       // last, to be able to modify all created SG nodes
@@ -129,7 +128,7 @@ namespace ospray {
         renderer.traverse(sg::PrintNodes{});
 
       // recommit in case any command line options modified the scene graph
-      renderer.traverse("verify");
+      renderer.traverse(sg::Node::VerifyNodes{});
       renderer.traverse("commit");
 
       render(rendererPtr);
@@ -402,21 +401,23 @@ namespace ospray {
           (lights.numChildren() <= 0 || addDefaultLights == true)) {
         if (!fast) {
           auto &sun = lights.createChild("sun", "DirectionalLight");
-          sun["color"] = vec3f(1.f, 232.f / 255.f, 166.f / 255.f);
+          sun["color"] = vec3f(1.f, 247.f / 255.f, 201.f / 255.f);
           sun["direction"] = vec3f(0.462f, -1.f, -.1f);
           sun["intensity"] = 3.0f;
+          sun["angularDiameter"] = 0.8f;
 
           auto &bounce = lights.createChild("bounce", "DirectionalLight");
-          bounce["color"] = vec3f(127.f / 255.f, 178.f / 255.f, 255.f / 255.f);
+          bounce["color"] = vec3f(202.f / 255.f, 216.f / 255.f, 255.f / 255.f);
           bounce["direction"] = vec3f(-.93, -.54f, -.605f);
           bounce["intensity"] = 1.25f;
+          bounce["angularDiameter"] = 3.0f;
         }
 
         if (hdriLightFile == "") {
           auto &ambient = lights.createChild("ambient", "AmbientLight");
           ambient["intensity"] = fast ? 1.25f : 0.9f;
           ambient["color"] = fast ?
-              vec3f(1.f) : vec3f(174.f / 255.f, 218.f / 255.f, 255.f / 255.f);
+              vec3f(1.f) : vec3f(217.f / 255.f, 230.f / 255.f, 255.f / 255.f);
         }
       }
 
@@ -440,7 +441,19 @@ namespace ospray {
       for (auto file : files) {
         FileName fn = file.file;
         if (fn.ext() == "ospsg")
+        {
+          auto& cam = renderer["camera"];
+          auto dirTS = cam["dir"].lastModified();
+          auto posTS = cam["pos"].lastModified();
+          auto upTS = cam["up"].lastModified();
           sg::loadOSPSG(renderer.shared_from_this(), fn.str());
+          if (cam["dir"].lastModified() > dirTS)
+            gaze = (cam["pos"].valueAs<vec3f>() + cam["dir"].valueAs<vec3f>());
+          if (cam["pos"].lastModified() > posTS)
+            pos = cam["pos"].valueAs<vec3f>();
+          if (cam["up"].lastModified() > upTS)
+            up = cam["up"].valueAs<vec3f>();
+        }
         else {
           // create material array
           for (int i = 0; i < matrix_i; i++) {
@@ -606,8 +619,8 @@ namespace ospray {
       sg_plane->add(index);
       auto &planeMaterial =
           (*plane["materialList"].nodeAs<sg::MaterialList>())[0];
-      planeMaterial["Kd"] = vec3f(0.5f);
-      planeMaterial["Ks"] = vec3f(0.1f);
+      planeMaterial["Kd"] = vec3f(0.3f);
+      planeMaterial["Ks"] = vec3f(0.0f);
       planeMaterial["Ns"] = 10.f;
 
       renderer.traverse("verify");

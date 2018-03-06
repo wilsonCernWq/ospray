@@ -14,40 +14,27 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
+#include "../../testing/catch.hpp"
 
-#include "common.h"
+#include "../Observer.h"
 
-namespace ospcommon
+using namespace ospcommon::utility;
+
+TEST_CASE("Observable/Observer interfaces", "[]")
 {
-#define ALIGN_PTR(ptr,alignment) \
-  ((((size_t)ptr)+alignment-1)&((size_t)-(ssize_t)alignment))
+  Observable at;
 
-  /*! aligned allocation */
-  OSPCOMMON_INTERFACE void* alignedMalloc(size_t size, size_t align = 64);
-  OSPCOMMON_INTERFACE void alignedFree(void* ptr);
+  Observer look1(at);
+  Observer look2(at);
 
-  template <typename T>
-   __forceinline T* alignedMalloc(size_t nElements, size_t align = 64)
-  {
-    return (T*)alignedMalloc(nElements*sizeof(T), align);
-  }
+  REQUIRE(!look1.wasNotified());
+  REQUIRE(!look2.wasNotified());
 
-  inline bool isAligned(void *ptr, int alignment = 64)
-  {
-    return reinterpret_cast<size_t>(ptr) % alignment == 0;
-  }
+  at.notifyObservers();
 
-// NOTE(jda) - can't use function wrapped alloca solution as Clang won't inline
-//             a function containing alloca()...but it works with gcc/icc
-#if 0
-  template<typename T>
-  __forceinline T* stackBuffer(size_t nElements)
-  {
-    return static_cast<T*>(alloca(sizeof(T) * nElements));
-  }
-#else
-#  define STACK_BUFFER(TYPE, nElements) (TYPE*)alloca(sizeof(TYPE)*nElements)
-#endif
+  REQUIRE(look1.wasNotified());
+  REQUIRE(look2.wasNotified());
+
+  REQUIRE(!look1.wasNotified());
+  REQUIRE(!look2.wasNotified());
 }
-

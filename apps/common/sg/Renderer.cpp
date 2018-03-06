@@ -16,8 +16,8 @@
 
 #include "Renderer.h"
 
-#include "sg/common/FrameBuffer.h"
-#include "sg/visitor/MarkAllAsModified.h"
+#include "common/FrameBuffer.h"
+#include "visitor/MarkAllAsModified.h"
 
 namespace ospray {
   namespace sg {
@@ -57,7 +57,6 @@ namespace ospray {
 
       createChild("bgColor", "vec3f", vec3f(0.15f, 0.15f, 0.15f),
                   NodeFlags::required |
-                  NodeFlags::valid_min_max |
                   NodeFlags::gui_color);
 
       createChild("spp", "int", 1,
@@ -68,7 +67,6 @@ namespace ospray {
 
       createChild("minContribution", "float", 0.001f,
                   NodeFlags::required |
-                  NodeFlags::valid_min_max |
                   NodeFlags::gui_slider,
                   "sample contributions below this value will be neglected"
                   " to speed-up rendering.");
@@ -76,7 +74,6 @@ namespace ospray {
 
       createChild("maxContribution", "float", 5.f,
                   NodeFlags::required |
-                  NodeFlags::valid_min_max |
                   NodeFlags::gui_slider,
                   "sample contributions above this value will be ignored."
                   "  This reduces bright dots appearing in images");
@@ -84,7 +81,6 @@ namespace ospray {
 
       createChild("varianceThreshold", "float", 0.f,
                   NodeFlags::required |
-                  NodeFlags::valid_min_max |
                   NodeFlags::gui_slider,
                   "the percent (%) threshold of pixel difference to enable"
                   " tile rendering early termination.");
@@ -97,12 +93,11 @@ namespace ospray {
                   "maximum number of ray bounces").setMinMax(0,999);
       createChild("aoSamples", "int", 1,
                   NodeFlags::required |
-                  NodeFlags::valid_min_max |
                   NodeFlags::gui_slider,
                   "AO samples per frame.").setMinMax(0,128);
 
       createChild("aoDistance", "float", 10000.f,
-                  NodeFlags::required | NodeFlags::valid_min_max,
+                  NodeFlags::required,
                   "maximum distance ao rays will trace to."
                   " Useful if you do not want a large interior of a"
                   " building to be completely black from occlusion.");
@@ -118,6 +113,18 @@ namespace ospray {
 
       createChild("oneSidedLighting", "bool", true, NodeFlags::required);
       createChild("aoTransparencyEnabled", "bool", true, NodeFlags::required);
+
+      createChild("backplate", "Texture2D");
+      auto backplate = child("backplate").nodeAs<Texture2D>();
+      backplate->size.x = 1;
+      backplate->size.y = 1;
+      backplate->channels = 3;
+      backplate->preferLinear = true;
+      backplate->depth = 4;
+      const size_t stride = backplate->size.x * backplate->channels * backplate->depth;
+      backplate->data = malloc(sizeof(unsigned char) * backplate->size.y * stride);
+      vec3f bgColor = child("bgColor").valueAs<vec3f>();
+      memcpy(backplate->data, &bgColor.x, backplate->channels*backplate->depth);
     }
 
     Renderer::~Renderer()
@@ -126,9 +133,13 @@ namespace ospray {
         ospRelease(lightsData);
     }
 
-    void Renderer::renderFrame(std::shared_ptr<FrameBuffer> fb, int flags)
+    void Renderer::renderFrame(std::shared_ptr<FrameBuffer> fb, int flags, bool verifyCommit)
     {
       RenderContext ctx;
+      if (verifyCommit) {
+        Node::traverse<sg::Node::VerifyNodes>(sg::Node::VerifyNodes{});
+        traverse(ctx, "commit");
+      }
       traverse(ctx, "render");
       variance = ospRenderFrame(fb->valueAs<OSPFrameBuffer>(), ospRenderer, flags);
     }
@@ -156,6 +167,7 @@ namespace ospray {
     void Renderer::preRender(RenderContext& ctx)
     {
       ctx.ospRenderer = ospRenderer;
+      ctx.ospRendererType = child("rendererType").valueAs<std::string>();
     }
 
     void Renderer::preCommit(RenderContext &ctx)
@@ -190,7 +202,14 @@ namespace ospray {
           child("rendererType").setValue(createdType);
         }
       }
+
+      auto backplate = child("backplate").nodeAs<Texture2D>();
+      vec3f bgColor = child("bgColor").valueAs<vec3f>();
+      memcpy(backplate->data, &bgColor.x, backplate->channels*backplate->depth);
+      backplate->markAsModified();
+
       ctx.ospRenderer = ospRenderer;
+      ctx.ospRendererType = rendererType;
       ctx.world = child("world").nodeAs<sg::Model>();
     }
 
@@ -238,6 +257,8 @@ namespace ospray {
         // complete setup of renderer
         ospSetObject(ospRenderer,"camera", child("camera").valueAs<OSPObject>());
         ospSetObject(ospRenderer, "lights", lightsData);
+        ospSetObject(ospRenderer, "backplate", child("backplate").valueAs<OSPObject>());
+
         if (child("world").childrenLastModified() > frameMTime)
         {
           child("world").traverse(ctx, "render");

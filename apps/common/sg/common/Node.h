@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "TimeStamp.h"
 #include "Serialization.h"
 #include "RenderContext.h"
 #include "RuntimeError.h"
@@ -24,18 +23,18 @@
 // stl
 #include <map>
 #include <memory>
-// xml
-#include "../../../common/xml/XML.h"
+#include <mutex>
 // ospcommon
 #include "ospcommon/utility/Any.h"
+#include "ospcommon/utility/TimeStamp.h"
+#include "ospcommon/xml/XML.h"
 #include "ospcommon/vec.h"
-
-#include <mutex>
 
 namespace ospray {
   namespace sg {
 
-    using Any = ospcommon::utility::Any;
+    using Any       = ospcommon::utility::Any;
+    using TimeStamp = ospcommon::utility::TimeStamp;
 
     /*! forward decl of entity that nodes can write to when writing XML files */
     struct XMLWriter;
@@ -48,8 +47,8 @@ namespace ospray {
       valid_whitelist = 1 << 3, //! validity determined by whitelist
       valid_blacklist = 1 << 4,  //! validity determined by blacklist
       gui_slider = 1 << 5,
-      gui_color = 1<<6,
-      gui_combo = 1<<7
+      gui_color = 1 << 6,
+      gui_combo = 1 << 7
     };
 
     // Base Node class definition /////////////////////////////////////////////
@@ -69,25 +68,6 @@ namespace ospray {
       Node& operator=(Node &&) = delete;
 
       virtual std::string toString() const;
-
-      //! \brief Initialize this node's value from given XML node
-      /*!
-        \detailed This allows a plug-and-play concept where a XML
-        file can specify all kind of nodes wihout needing to know
-        their actual types: The XML parser only needs to be able to
-        create a proper C++ instance of the given node type (the
-        OSP_REGISTER_SG_NODE() macro will allow it to do so), and can
-        tell the node to parse itself from the given XML content and
-        XML children
-
-        \param node The XML node specifying this node's fields
-
-        \param binBasePtr A pointer to an accompanying binary file (if
-        existant) that contains additional binary data that the xml
-        node fields may point into
-      */
-      virtual void setFromXML(const xml::Node &node,
-                              const unsigned char *binBasePtr);
 
       /*! serialize the scene graph - add object to the serialization,
         but don't do anything else to the node(s) */
@@ -115,6 +95,36 @@ namespace ospray {
       void setBlackList(const std::vector<Any> &values);
 
       bool isValid() const;
+
+      //Visitor node used to set nodes to valid
+      struct VerifyNodes : public Visitor
+      {
+        VerifyNodes() = default;
+        VerifyNodes(bool errorOut) : errorOnInvalid(errorOut) {}
+
+        virtual bool operator()(Node &node, TraversalContext &) override
+        {
+          bool traverseChildren = true;
+          if (node.properties.valid && node.childrenLastModified() < node.properties.lastVerified)
+            traverseChildren = false;
+          node.properties.valid = node.computeValid();
+          node.properties.lastVerified = TimeStamp();
+
+          return traverseChildren;
+        }
+
+        virtual void postChildren(Node &node, TraversalContext &) override
+        {
+          for (const auto &child : node.properties.children) {
+            if (child.second->flags() & NodeFlags::required)
+              node.properties.valid &= child.second->isValid();
+          }
+          if (errorOnInvalid && !node.properties.valid)
+            throw std::runtime_error(node.name() + " was marked invalid");
+        }
+
+        bool errorOnInvalid = true;
+      };
 
       virtual bool computeValid();
       virtual bool computeValidMinMax();
@@ -437,6 +447,8 @@ namespace ospray {
       }
 
       ctx.level--;
+
+      visitor.postChildren(*this, ctx);
     }
 
     template <typename VISITOR_T, typename>
@@ -459,7 +471,7 @@ namespace ospray {
     extern "C" OSPSG_INTERFACE ospray::sg::Node*                        \
     ospray_create_sg_node__##Name()                                     \
     {                                                                   \
-      return new ospray::sg::InternalClassName;                         \
+      return new InternalClassName;                                     \
     }                                                                   \
     /* Extra declaration to avoid "extra ;" pedantic warnings */        \
     ospray::sg::Node* ospray_create_sg_node__##Name()

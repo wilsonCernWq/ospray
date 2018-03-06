@@ -16,16 +16,8 @@
 
 #pragma once
 
-// ospray
-#include "ospray/common/OSPCommon.h"
 // ospray::sg
-#include "sg/common/TimeStamp.h"
-#include "sg/common/Serialization.h"
-#include "sg/common/RuntimeError.h"
-// stl
-#include <map>
-// xml
-#include "common/xml/XML.h"
+#include "Node.h"
 
 namespace ospray {
   namespace sg {
@@ -55,7 +47,7 @@ namespace ospray {
       }
 
       template <typename T>
-      T get(index_t idx) const { return ((T*)base())[idx]; }
+      T get(size_t idx) const { return ((T*)base())[idx]; }
 
       virtual void*  base()  const = 0;
       virtual size_t size()  const = 0;
@@ -86,6 +78,12 @@ namespace ospray {
 
       OSPDataType type;
       OSPData     data {nullptr};
+
+    protected:
+
+      // Helper functions //
+
+      std::string arrayTypeAsString() const;
     };
 
     // -------------------------------------------------------
@@ -100,7 +98,7 @@ namespace ospray {
       ~DataArrayT() override { if (mine && base_ptr) delete base_ptr; }
 
       std::string toString() const override
-      { return "DataArray<" + stringForType((OSPDataType)TID) + ">"; }
+      { return "DataArray<" + arrayTypeAsString() + ">"; }
 
       void   *base() const override { return (void*)base_ptr; }
       size_t  size() const override { return numElements; }
@@ -141,7 +139,7 @@ namespace ospray {
       DataVectorT() : DataBuffer((OSPDataType)TID) {}
 
       std::string toString() const override
-      { return "DataVector<" + stringForType((OSPDataType)TID) + ">"; }
+      { return "DataVector<" + arrayTypeAsString() + ">"; }
 
       void   *base() const override { return (void*)v.data(); }
       size_t  size() const override { return v.size(); }

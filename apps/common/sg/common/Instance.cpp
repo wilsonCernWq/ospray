@@ -14,8 +14,8 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include "sg/common/Instance.h"
-#include "sg/common/Model.h"
+#include "Instance.h"
+#include "Model.h"
 
 namespace ospray {
   namespace sg {
@@ -27,7 +27,6 @@ namespace ospray {
       createChild("position", "vec3f");
       createChild("rotation", "vec3f", vec3f(0),
                   NodeFlags::required |
-                  NodeFlags::valid_min_max |
                   NodeFlags::gui_slider).setMinMax(-vec3f(2*3.15f),
                                                     vec3f(2*3.15f));
       createChild("rotationOrder", "string", std::string("zyx"),

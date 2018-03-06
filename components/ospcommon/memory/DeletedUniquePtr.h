@@ -14,34 +14,24 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include "OSPCommon.ih"
+#pragma once
 
-//embree
-#include "embree2/rtcore.isph"
+#include <functional>
+#include <memory>
+#include <utility>
 
-//extern "C" void abort ();
-//extern "C" void exit(uniform int);
-//extern "C" uniform int puts ( const uniform int8* uniform str );
-//extern "C" uniform int putchar ( uniform int character );
+namespace ospcommon {
+  namespace memory {
 
-void error_handler(const RTCError code, const int8* str)
-{
-  print("Embree: ");
-  switch (code) {
-  case RTC_UNKNOWN_ERROR    : print("RTC_UNKNOWN_ERROR"); break;
-  case RTC_INVALID_ARGUMENT : print("RTC_INVALID_ARGUMENT"); break;
-  case RTC_INVALID_OPERATION: print("RTC_INVALID_OPERATION"); break;
-  case RTC_OUT_OF_MEMORY    : print("RTC_OUT_OF_MEMORY"); break;
-  case RTC_UNSUPPORTED_CPU  : print("RTC_UNSUPPORTED_CPU"); break;
-  default                   : print("invalid error code"); break;
-  }
-  if (str) { 
-    print("(%)", str);
-  }
-  assert(0);
-}
+    template <typename T>
+    using DeletedUniquePtr = std::unique_ptr<T, std::function<void(T*)>>;
 
-export void delete_uniform(void *uniform uptr)
-{
-  delete uptr;
-}
+    template <typename T, typename DELETE_FCN, typename ...Args>
+    inline DeletedUniquePtr<T> make_deleted_unique(DELETE_FCN&& deleter,
+                                                   Args&& ...args)
+    {
+      return DeletedUniquePtr<T>(new T(std::forward<Args>(args)...), deleter);
+    }
+
+  } // ::ospcommon::utility
+} // ::ospcommon
