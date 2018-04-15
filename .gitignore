@@ -23,3 +23,4 @@ modules/*
 imgui.ini
 premake.local.*
 .idea/
+.DS_Store
