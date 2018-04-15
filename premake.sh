@@ -22,7 +22,7 @@ GXX_PATH=$(which g++)
 CUSTOMIZED_PROJSUFFIX=""
 PROJSUFFIX=""
 PROJPREFIX="./"
-CMAKEARGS=" -DOSPRAY_MODULE_VISIT=ON" # enable visit module by default XD
+CMAKEARGS=""
 CMAKEPATH="cmake"
 
 #-------------------------------------------------------------------------------
