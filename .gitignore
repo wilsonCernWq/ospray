@@ -28,3 +28,4 @@ readme.pdf
 imgui.ini
 premake.local.*
 .idea/
+.DS_Store
