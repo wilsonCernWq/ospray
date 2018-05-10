@@ -220,15 +220,6 @@ namespace ospray {
     return (Data*)getParamObject(name,(ManagedObject*)valIfNotFound);
   }
 
-#define OSP_REGISTER_OBJECT(Object, object_name, InternalClass, external_name) \
-  extern "C" OSPRAY_DLLEXPORT                                                  \
-      Object *ospray_create_##object_name##__##external_name()                 \
-  {                                                                            \
-    return new InternalClass;                                                  \
-  } \
-  /* additional declaration to avoid "extra ;" -Wpedantic warnings */          \
-  Object *ospray_create_##object_name##__##external_name()
-
 } // ::ospray
 
 // Specializations for ISPCDevice /////////////////////////////////////////////
@@ -236,18 +227,20 @@ namespace ospray {
 namespace ospcommon {
   namespace utility {
 
-    // OSPRay's parameters cannot be bool, explicitely use int instead
-    template <>
-    inline void ParameterizedObject::Param::set(const bool &v)
-    {
-      set<int>(v);
-    }
-
     template <>
     inline void
     ParameterizedObject::Param::set(const ospray::ManagedObject::OSP_PTR &object)
     {
+      using OSP_PTR = ospray::ManagedObject::OSP_PTR;
+
       if (object) object->refInc();
+
+      if (data.is<OSP_PTR>()) {
+        auto *existingObj = data.get<OSP_PTR>();
+        if (existingObj != nullptr)
+          existingObj->refDec();
+      }
+
       data = object;
     }
 

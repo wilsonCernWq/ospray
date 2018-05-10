@@ -16,8 +16,44 @@
 
 #include "UnstructuredVolume.ih"
 
+static inline uniform vec3f tetNormal(UnstructuredVolume *uniform self,
+                                      uniform uint64 id,
+                                      uniform int planeID)
+{
+  if (self->faceNormals)
+    return self->faceNormals[(id * 6) + planeID];
+
+  const int *uniform idx = (const int *uniform)&self->indices[2 * id + 1];
+  const vec3f *uniform vtx = self->vertices;
+
+  const uniform int planes[4][3] = {{1, 2, 3}, {2, 0, 3}, {3, 0, 1}, {0, 2, 1}};
+  const int *uniform plane = planes[planeID];
+
+  return normalize(cross(vtx[idx[plane[1]]] - vtx[idx[plane[0]]],
+                         vtx[idx[plane[2]]] - vtx[idx[plane[0]]]));
+}
+
+static inline uniform vec3f hexNormal(UnstructuredVolume *uniform self,
+                                      uniform uint64 id,
+                                      uniform int planeID)
+{
+  if (self->faceNormals)
+    return self->faceNormals[(id * 6) + planeID];
+
+  const int *uniform idx = (const int *uniform)&self->indices[2 * id];
+  const vec3f *uniform vtx = self->vertices;
+
+  const uniform int planes[6][3] = {{0, 2, 1}, {0, 5, 4}, {0, 7, 3},
+                                    {6, 5, 1}, {6, 7, 4}, {6, 2, 3}};
+  const int *uniform plane = planes[planeID];
+
+  return normalize(cross(vtx[idx[plane[1]]] - vtx[idx[plane[0]]],
+                         vtx[idx[plane[2]]] - vtx[idx[plane[0]]]));
+}
+
 bool intersectAndSampleTet(void *uniform userData,
                            uniform uint64 id,
+                           uniform bool assumeInside,
                            float &result,
                            vec3f samplePos,
                            float range_lo,
@@ -32,10 +68,10 @@ bool intersectAndSampleTet(void *uniform userData,
   uniform vec3f p2 = self->vertices[t.z];
   uniform vec3f p3 = self->vertices[t.w];
 
-  uniform vec3f norm0 = self->faceNormals[(id * 6) + 0];
-  uniform vec3f norm1 = self->faceNormals[(id * 6) + 1];
-  uniform vec3f norm2 = self->faceNormals[(id * 6) + 2];
-  uniform vec3f norm3 = self->faceNormals[(id * 6) + 3];
+  uniform vec3f norm0 = tetNormal(self, id, 0);
+  uniform vec3f norm1 = tetNormal(self, id, 1);
+  uniform vec3f norm2 = tetNormal(self, id, 2);
+  uniform vec3f norm3 = tetNormal(self, id, 3);
 
   // Distance from the world point to the faces.
   float d0 = dot(norm0, p1 - samplePos);
@@ -43,8 +79,13 @@ bool intersectAndSampleTet(void *uniform userData,
   float d2 = dot(norm2, p3 - samplePos);
   float d3 = dot(norm3, p0 - samplePos);
 
-  if (!(d0 > 0 && d1 > 0 && d2 > 0 && d3 > 0))
+  if (!assumeInside && !(d0 > 0 && d1 > 0 && d2 > 0 && d3 > 0))
     return false;
+
+  if (self->cellField) {
+    result = self->cellField[id];
+    return true;
+  }
 
   // Distance of tetrahedron corners to their opposite faces.
   uniform float h0 = dot(norm0, p1 - p0);
@@ -231,11 +272,15 @@ bool intersectAndSampleHexNonplanar(void *uniform userData,
       pcoords[1] >= lowerlimit && pcoords[1] <= upperlimit &&
       pcoords[2] >= lowerlimit && pcoords[2] <= upperlimit) {
     // evaluation
-    result = 0.f;
-    HexInterpolationFunctions(pcoords, weights);
-    for (int i = 0; i < 8; i++) {
-      int idx = i < 4 ? (&lower.x)[i] : (&upper.x)[i - 4];
-      result += weights[i] * self->field[idx];
+    if (self->cellField) {
+      result = self->cellField[id];
+    } else {
+      result = 0.f;
+      HexInterpolationFunctions(pcoords, weights);
+      for (int i = 0; i < 8; i++) {
+        int idx = i < 4 ? (&lower.x)[i] : (&upper.x)[i - 4];
+        result += weights[i] * self->field[idx];
+      }
     }
 
     return true;
@@ -246,6 +291,7 @@ bool intersectAndSampleHexNonplanar(void *uniform userData,
 
 bool intersectAndSampleHexPlanar(void *uniform userData,
                                  uniform uint64 id,
+                                 uniform bool assumeInside,
                                  float &result,
                                  vec3f samplePos,
                                  float range_lo,
@@ -260,9 +306,14 @@ bool intersectAndSampleHexPlanar(void *uniform userData,
   for (uniform int planeID = 0; planeID < 6; planeID++) {
     dist[planeID] =
       dot(samplePos - self->vertices[planeID < 3 ? lower.x : upper.z],
-          self->faceNormals[(id * 6) + planeID]);
-    if (dist[planeID] >= 0.f)
+          hexNormal(self, id, planeID));
+    if (!assumeInside && dist[planeID] >= 0.f)
       return false;
+  }
+
+  if (self->cellField) {
+    result = self->cellField[id];
+    return true;
   }
 
   float u0 = dist[4] / (dist[0] + dist[4]);
@@ -294,10 +345,10 @@ bool intersectAndSampleCell(void *uniform userData,
   UnstructuredVolume *uniform self = (UnstructuredVolume * uniform) userData;
 
   if (self->indices[2 * id].x == -1) {
-    intersectAndSampleTet(userData, id, result, samplePos, range_lo, range_hi);
+    intersectAndSampleTet(userData, id, false, result, samplePos, range_lo, range_hi);
   } else {
     if (self->hexMethod == PLANAR)
-      intersectAndSampleHexPlanar(userData, id, result, samplePos, range_lo, range_hi);
+      intersectAndSampleHexPlanar(userData, id, false, result, samplePos, range_lo, range_hi);
     else if (self->hexMethod == NONPLANAR)
       intersectAndSampleHexNonplanar(userData, id, result, samplePos, range_lo, range_hi);
   }
@@ -309,7 +360,7 @@ inline varying float UnstructuredVolume_sample(
   // Cast to the actual Volume subtype.
   UnstructuredVolume *uniform self = (UnstructuredVolume * uniform) _self;
 
-  float results = 0;
+  float results = floatbits(0xffffffff);  /* NaN */
 
   traverse(self->bvh, _self, intersectAndSampleCell, results, worldCoordinates);
 
@@ -373,23 +424,147 @@ inline void UnstructuredVolume_stepRay(
   ray.instID = 1;
 }
 
+inline bool sameSign(float a, float b)
+{
+  return a * b >= 0.f;
+}
+
+void UnstructuredVolume_intersectIsoRay(void *uniform userData,
+                                        uniform float *uniform isovalues,
+                                        uniform int numIsovalues,
+                                        uniform size_t geomID,
+                                        uniform uint64 id,
+                                        varying Ray &ray)
+{
+  //  print("intersectIsoRay\n");
+  UnstructuredVolume *uniform self = (UnstructuredVolume * uniform) userData;
+
+  if (self->indices[2 * id].x == -1) {
+    // tetrahedron
+
+    uniform vec4i t = self->indices[2 * id + 1];  // The 4 corner indices of the tetrahedron.
+
+    float t_nr = ray.t0;
+    float t_fr = ray.t;
+    for (uniform int plane = 0; plane < 4; plane ++) {
+      const uniform vec3f p0 = self->vertices[(&t.x)[(plane + 1) & 0x3]];
+      const uniform vec3f norm = tetNormal(self, id, plane);
+
+      const float side_dot = dot(ray.dir, norm);
+      const float side_t = rcp(side_dot) * dot(p0 - ray.org, norm);
+
+      if (side_dot < 0.f) {
+        t_nr = max(t_nr, side_t);
+      } else {
+        t_fr = min(t_fr, side_t);
+      }
+    }
+
+    if (t_nr > t_fr)
+      return;
+
+    float t0 = t_nr; float t1 = t_fr;
+    float p0, p1;
+    intersectAndSampleTet(userData, id, true, p0, ray.org + ray.dir * t0, 0.f, 0.f);
+    intersectAndSampleTet(userData, id, true, p1, ray.org + ray.dir * t1, 0.f, 0.f);
+
+    for (uniform int i = 0; i < numIsovalues; i++) {
+      const uniform float piso = isovalues[i];
+      if (sameSign(p0 - piso, p1 - piso))
+        return;
+
+      const float t_hit = t0 + (t1 - t0) * ((piso - p0) / (p1 - p0));
+      if (t_hit < ray.t) {
+        ray.t = t_hit;
+        ray.geomID = geomID;
+        ray.primID = i;
+        return;
+      }
+    }
+
+    return;
+  } else {
+    // hexahedron
+
+    uniform vec4i lower = self->indices[2 * id];
+    uniform vec4i upper = self->indices[2 * id + 1];
+
+    float t_nr = ray.t0;
+    float t_fr = ray.t;
+    for (uniform int plane = 0; plane < 6; plane ++) {
+      const uniform vec3f p0 = self->vertices[plane < 3 ? lower.x : upper.z];
+      const uniform vec3f norm = hexNormal(self, id, plane);
+
+      const float side_dot = dot(ray.dir, norm);
+      const float side_t = rcp(side_dot) * dot(p0 - ray.org, norm);
+
+      if (side_dot < 0.f) {
+        t_nr = max(t_nr, side_t);
+      } else {
+        t_fr = min(t_fr, side_t);
+      }
+    }
+
+    if (t_nr > t_fr)
+      return;
+
+    //Neubauer method
+#define NUM_ITERATIONS 4
+
+    for (uniform iso = 0; iso < numIsovalues; iso++) {
+      float t0 = t_nr; float t1 = t_fr;
+      float p0, p1;
+      intersectAndSampleHexPlanar(userData, id, true, p0, ray.org + ray.dir * t0, 0.f, 0.f);
+      intersectAndSampleHexPlanar(userData, id, true, p1, ray.org + ray.dir * t1, 0.f, 0.f);
+
+      const uniform float piso = isovalues[iso];
+      if (sameSign(p0 - piso, p1 - piso))
+        return;
+
+      for(uniform int i = 0; i < NUM_ITERATIONS; i++) {
+        const float t = t0 + (t1 - t0) * ((piso - p0) / (p1 - p0));
+        float pt;
+        intersectAndSampleHexPlanar(userData, id, true, pt, ray.org + ray.dir * t, 0.f, 0.f);
+
+        if (sameSign(pt - piso, p0 - piso)) {
+          t0 = t;
+          p0 = pt;
+        } else {
+          t1 = t;
+          p1 = pt;
+        }
+      }
+      const float t_hit = t0 + (t1 - t0) * ((piso - p0) / (p1 - p0));
+      if (t_hit < ray.t) {
+        ray.t = t_hit;
+        ray.geomID = geomID;
+        ray.primID = iso;
+        return;
+      }
+    }
+  }
+}
+
 inline void UnstructuredVolume_intersectIsosurface(void *uniform _self,
-                                                  uniform float *uniform
-                                                      isovalues,
-                                                  uniform int numIsovalues,
-                                                  varying Ray &ray)
+                                                   uniform float *uniform isovalues,
+                                                   uniform int numIsovalues,
+                                                   uniform size_t geomID,
+                                                   varying Ray &ray)
 {
   // Cast to the actual Volume subtype.
   UnstructuredVolume *uniform self = (UnstructuredVolume * uniform) _self;
 
-  // The nominal step size for ray casting based volume renderers, not
-  // considering the sampling rate.
-  const uniform float step = self->super.samplingStep;
+  uniform vec2f isoRange = make_vec2f(isovalues[0], isovalues[0]);
 
-  // Tentatively advance the ray.
-  ray.t0 += step;
-  if (ray.t0 >= ray.t)
-    return;
+  for (uniform int i = 1; i < numIsovalues; i++) {
+    isoRange.x = min(isoRange.x, isovalues[i]);
+    isoRange.y = max(isoRange.y, isovalues[i]);
+  }
+
+  traverseRay(self->bvh, _self, isoRange,
+              UnstructuredVolume_intersectIsoRay,
+              isovalues, numIsovalues, geomID,
+              ray);
 }
 
 void UnstructuredVolume_Constructor(UnstructuredVolume *uniform self,
@@ -428,14 +603,32 @@ UnstructuredVolume_method_nonplanar(void *uniform _self)
   self->hexMethod = NONPLANAR;
 }
 
+export void
+UnstructuredVolume_disableCellGradient(void *uniform _self)
+{
+  UnstructuredVolume *uniform self = (UnstructuredVolume * uniform) _self;
+
+  if (self->cellField)
+    self->super.gradientShadingEnabled = false;
+}
+
+export void
+UnstructuredVolume_setFaceNormals(void *uniform _self,
+                                  const vec3f *uniform _faceNormals)
+{
+  UnstructuredVolume *uniform self = (UnstructuredVolume * uniform) _self;
+
+  self->faceNormals = _faceNormals;
+}
+
 export void UnstructuredVolume_set(void *uniform _self,
                                   const uniform int &_nVertices,
                                   const uniform int &_nCells,
                                   const uniform box3f &_bbox,
                                   const vec3f *uniform _vertices,
-                                  const vec3f *uniform _faceNormals,
                                   const vec4i *uniform _indices,
                                   const float *uniform _field,
+                                  const float *uniform _cellField,
                                   uniform int64 rootRef,
                                   const void *uniform _bvhNode,
                                   const int64 *uniform _bvhPrimID,
@@ -450,13 +643,14 @@ export void UnstructuredVolume_set(void *uniform _self,
   self->vertices    = _vertices;
   self->indices     = _indices;
   self->field       = _field;
+  self->cellField   = _cellField;
 
   // Set inherited member variables.
   self->super.boundingBox  = _bbox;
   self->super.samplingRate = samplingRate;
   self->super.samplingStep = samplingStep;
 
-  self->faceNormals = _faceNormals;
+  self->faceNormals = NULL;
 
   self->bvh.rootRef = rootRef;
   self->bvh.node    = (MinMaxBVH2Node * uniform) _bvhNode;

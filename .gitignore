@@ -18,8 +18,13 @@ deps
 tbb
 embree
 ispc
-ospray-doc
-modules/*
+./ospray-doc
+readme.pdf
+!/modules
+/modules/*
+!/modules/mpi
+!/modules/pluggableGeometryExample
+!/modules/simdGeometryExample
 imgui.ini
 premake.local.*
 .idea/
