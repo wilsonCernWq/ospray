@@ -569,14 +569,15 @@ like the structured volume equivalent, but they only modify the root
 
 ### Unstructured Volumes
 
-Unstructured volumes can contain tetrahedral or hexahedral cell types,
-and are defined by three arrays: vertices, corresponding field values,
-and eight indices per cell (first four are -1 for tetrahedral
-cells). An unstructred volume type is created by passing the type
-string "`unstructured_volume`" to `ospNewVolume`.
+Unstructured volumes can contain tetrahedral, wedge, or hexahedral
+cell types, and are defined by three arrays: vertices, corresponding
+field values, and eight indices per cell (first four are -1 for
+tetrahedral cells, first two are -2 for wedge cells). An unstructured
+volume type is created by passing the type string
+"`unstructured_volume`" to `ospNewVolume`.
 
-Field values can be specified per-vertex ('field') or per-cell
-('cellField').  If both values are set, cellField takes precedence.
+Field values can be specified per-vertex (`field`) or per-cell
+(`cellField`). If both values are set, `cellField` takes precedence.
 
 Similar to [triangle mesh], each tetrahedron is formed by a group of
 indices into the vertices. For each vertex, the corresponding (by array
@@ -585,10 +586,15 @@ the index order for each tetrahedron does not matter, as OSPRay
 internally calculates vertex normals to ensure proper sampling and
 interpolation.
 
+For wedge cells, each wedge is formed by a group of six indices into
+the vertices and data value.  Vertex ordering is the same as
+`VTK_WEDGE` - three bottom vertices counterclockwise, then top three
+counterclockwise.
+
 For hexahedral cells, each hexahedron is formed by a group of eight
-indices into the vertics and data value.  Vertex ordering is the same
-as VTK_HEXAHEDRON - four bottom vertices counterclockwise, then top
-four counterclockwise.
+indices into the vertics and data value. Vertex ordering is the same as
+`VTK_HEXAHEDRON` -- four bottom vertices counterclockwise, then top four
+counterclockwise.
 
   -------- ------------------  -------  ---------------------------------------
   Type     Name                Default  Description
@@ -601,7 +607,7 @@ four counterclockwise.
   float[]  cellField                    [data] array of cell data values to be
                                         sampled
 
-  vec4i[]  intices                      [data] array of tetrahedra indices
+  vec4i[]  indices                      [data] array of tetrahedra indices
                                         (into vertices and field)
 
   string   hexMethod           planar   "planar" (faster, assumes planar sides)
@@ -679,34 +685,54 @@ representations in the application this geometry allows a flexible way
 of specifying the data of center position and radius within a [data]
 array:
 
-  ---------- ----------------- --------  ---------------------------------------
-  Type       Name               Default  Description
-  ---------- ----------------- --------  ---------------------------------------
-  float      radius                0.01  radius of all spheres
-                                         (if `offset_radius` is not used)
+  ------------ ----------------- ----------------------- ---------------------------------------
+  Type         Name                              Default Description
+  ------------ ----------------- ----------------------- ---------------------------------------
+  float        radius                               0.01  radius of all spheres
+                                                          (if `offset_radius` is not used)
 
-  OSPData    spheres               NULL  memory holding the spatial [data] of
-                                         all spheres
+  OSPData      spheres                              NULL  memory holding the spatial [data] of
+                                                          all spheres
 
-  int        bytes_per_sphere        16  size (in bytes) of each sphere within
-                                         the `spheres` array
+  int          bytes_per_sphere                       16  size (in bytes) of each sphere within
+                                                          the `spheres` array
 
-  int        offset_center            0  offset (in bytes) of each sphere's
-                                         "vec3f center" position (in
-                                         object-space) within the `spheres`
-                                         array
+  int          offset_center                           0  offset (in bytes) of each sphere's
+                                                          "vec3f center" position (in
+                                                          object-space) within the `spheres`
+                                                          array
 
-  int        offset_radius           -1  offset (in bytes) of each sphere's
-                                         "float radius" within the `spheres`
-                                         array (`-1` means disabled and use
-                                         `radius`)
+  int          offset_radius                          -1  offset (in bytes) of each sphere's
+                                                          "float radius" within the `spheres`
+                                                          array (`-1` means disabled and use `radius`)
 
-  vec4f[] /  color                 NULL  [data] array of colors (RGBA/RGB),
-  vec3f(a)[]                             color is constant for each sphere
+  int          offset_colorID                         -1  offset (in bytes) of each sphere's
+                                                          "int colorID" within the `spheres`
+                                                          array (`-1` means disabled and use
+                                                          the shared material color)
 
-  vec2f[]    texcoord              NULL  [data] array of texture coordinates,
-                                         coordinate is constant for each sphere
-  ---------- ----------------- --------  ---------------------------------------
+  vec4f[] /    color                                NULL  [data] array of colors (RGBA/RGB),
+  vec3f(a)[] /                                            color is constant for each sphere
+  vec4uc
+
+  int          color_offset                           0   offset (in bytes) to the start of
+                                                          the color data in `color`
+
+  int          color_format             `color.data_type`  the format of the color data.
+                                                          Can be one of:
+                                                          `OSP_FLOAT4`, `OSP_FLOAT3`,
+                                                          `OSP_FLOAT3A` or `OSP_UCHAR4`. Defaults
+                                                          to the type of data in `color`
+
+  int          color_stride      `sizeof(color_format)`   stride (in bytes) between each color
+                                                          element in the `color` array.
+                                                          Defaults to the size of a single
+                                                          element of type `color_format`
+
+
+  vec2f[]      texcoord                             NULL  [data] array of texture coordinates,
+                                                          coordinate is constant for each sphere
+  ---------- ----------------- -------------------------  ---------------------------------------
   : Parameters defining a spheres geometry.
 
 ### Cylinders
@@ -1635,7 +1661,7 @@ convention shall be used. The following parameters (prefixed with
   Type   Name         Description
   ------ ------------ ------------------------------------------------------
   vec4f  transform    interpreted as 2×2 matrix (linear part), column-major
-  float  rotation     angle in degree, counterclock-wise, around center
+  float  rotation     angle in degree, counterclockwise, around center
   vec2f  scale        enlarge texture, relative to center (0.5, 0.5)
   vec2f  translation  move texture in positive direction (right/up)
   ------ ------------ ------------------------------------------------------
@@ -1852,13 +1878,6 @@ framebuffer that an application will never map. For example, an
 application driving a display wall may well generate an intermediate
 framebuffer and eventually transfer its pixel to the individual displays
 using an `OSPPixelOp` [pixel operation].
-
-A framebuffer can be freed again using
-
-    void ospFreeFrameBuffer(OSPFrameBuffer);
-
-Because OSPRay uses reference counting internally the framebuffer may
-not immediately be deleted at this time.
 
 The application can map the given channel of a framebuffer – and thus
 access the stored pixel information – via
