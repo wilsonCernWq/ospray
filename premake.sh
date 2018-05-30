@@ -25,7 +25,7 @@ PROJPREFIX="./"
 CMAKEARGS=""
 CMAKEPATH="cmake"
 
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # change this block to fit your environment
 OSPROOT=~/software # the directory for all dependencies
 SRCROOT=$(pwd)
@@ -53,9 +53,7 @@ LOAD_EMBREE()
     CMAKEARGS=${CMAKEARGS}" -Dembree_DIR="${EMBREE_ROOT}
 }
 
-# QT path
-QT_PATH=${OSPROOT}/qt-4.8.6/qt-everywhere-opensource-src-4.8.6-install
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 HELP()
 {
@@ -86,8 +84,6 @@ HELP()
     echo "  --mpi               Build with MPI"
     echo "  --icc               Build with intel ICC"
     echo "  --gcc               Build with intel GCC"
-    echo "  --qt                Build with Qt"
-    echo "  --image-magick      Build with image magick"
     echo "  --embree-dir        Customized Embree path"
     echo "  --tbb-dir           Customized TBB path"
     echo "  --ispc-dir          Customized ISPC path"
@@ -162,24 +158,6 @@ until [ -z "$1" ]; do
 	    PROJSUFFIX=${PROJSUFFIX}_mpi
 	    CMAKEARGS=${CMAKEARGS}" -DOSPRAY_MODULE_MPI=ON"
 	    ARGCACHE=${ARGCACHE}" --mpi"
-	    shift 1
-	    ;;
-
-	# --- Setup image magick
-	--image-magick)
-	    PROJSUFFIX=${PROJSUFFIX}_imagemagick
-	    CMAKEARGS=${CMAKEARGS}" -DUSE_IMAGE_MAGICK=ON"
-	    ARGCACHE=${ARGCACHE}" --image-magick"
-	    shift 1
-	    ;;
-
-        # --- Qt component
-	--qt)
-	    export QT_ROOT=${QT_PATH}
-	    export PATH=${QT_ROOT}/bin:${PATH}
-	    export LD_LIBRARY_PATH=${QT_ROOT}/lib:${LD_LIBRARY_PATH}
-	    PROJSUFFIX=${PROJSUFFIX}_qt
-	    ARGCACHE=${ARGCACHE}" --qt"
 	    shift 1
 	    ;;
 
