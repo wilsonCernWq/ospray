@@ -8,6 +8,7 @@ install*
 tags
 .ycm_extra_conf.pyc
 *.autosave
+*DS_Store*
 *.gz
 *.rpm
 *.zip
