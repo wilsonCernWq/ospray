@@ -25,7 +25,6 @@
 #include "common/sg/common/FrameBuffer.h"
 #include "common/sg/visitor/GatherNodesByName.h"
 #include "common/sg/visitor/GatherNodesByPosition.h"
-#include "transferFunction.h"
 
 #include <imgui.h>
 #include <imguifilesystem/imguifilesystem.h>
@@ -213,30 +212,6 @@ namespace ospray {
     }
   }
 
-  static void sgWidget_TransferFunction(
-    const std::string &text,
-    std::shared_ptr<sg::Node> node)
-  {
-    if (!node->hasChild("transferFunctionWidget")) {
-      std::shared_ptr<sg::TransferFunction> tfn =
-        std::dynamic_pointer_cast<sg::TransferFunction>(node);
-
-      node->createChildWithValue("transferFunctionWidget","Node",
-                                 TransferFunction(tfn));
-    }
-
-    auto &tfnWidget =
-      node->child("transferFunctionWidget").valueAs<TransferFunction>();
-
-    static bool show_editor = true;
-    ImGui::Checkbox("show_editor", &show_editor);
-
-    if (show_editor) {
-      tfnWidget.render();
-      tfnWidget.drawUi();
-    }
-  }
-
   using ParameterWidgetBuilder =
       void(*)(const std::string &, std::shared_ptr<sg::Node>);
 
@@ -252,13 +227,11 @@ namespace ospray {
         {"vec4f", sgWidget_vec4f},
         {"box3f", sgWidget_box3f},
         {"string", sgWidget_string},
-        {"bool", sgWidget_bool},
-        {"TransferFunction", sgWidget_TransferFunction}
+        {"bool", sgWidget_bool}
       };
 
 
 // ImGuiViewer definitions ////////////////////////////////////////////////////
-
   ImGuiViewer::ImGuiViewer(const std::shared_ptr<sg::Node> &scenegraph)
     : ImGuiViewer(scenegraph->nodeAs<sg::Renderer>(), nullptr)
   {}
@@ -298,6 +271,9 @@ namespace ospray {
     camera.remove("gaze");
 
     originalView = viewPort;
+
+    transferFunctionWidget.loadColorMapPresets(scenegraph->child("transferFunctionPresets").shared_from_this());
+    transferFunctionWidget.setColorMapByName("Jet");
   }
 
   ImGuiViewer::~ImGuiViewer()
@@ -528,6 +504,7 @@ namespace ospray {
 
     guiRenderStats();
     guiFindNode();
+    guiTransferFunction();
 
     if (ImGui::CollapsingHeader("SceneGraph", "SceneGraph", true, true))
       guiSGTree("root", scenegraph);
@@ -626,6 +603,34 @@ namespace ospray {
       ImGui::Text("  display pixel time: %.1f ms", lastDisplayTime*1000.f);
       ImGui::Text("Variance: %.3f", renderEngine.getLastVariance());
       ImGui::NewLine();
+    }
+  }
+
+  void ImGuiViewer::guiTransferFunction()
+  {
+    if (!scenegraph->hasChild("transferFunctions"))
+      return;
+    auto tfNodes = scenegraph->child("transferFunctions").children();
+    if (tfNodes.empty())
+      return;
+    std::vector<std::shared_ptr<sg::Node> > transferFunctions;
+    std::shared_ptr<sg::Node> transferFunction = nullptr;
+    std::string tfNodeListString;
+    for (auto& tf : tfNodes)
+    {
+      tfNodeListString += tf.second->name() + '\0';
+      transferFunctions.push_back(tf.second);
+    }
+    if (ImGui::CollapsingHeader("TransferFunctions", "TransferFunctions", true, true))
+    {
+      ImGui::Combo("transferFunction", &transferFunctionSelection, tfNodeListString.c_str(), tfNodes.size());
+      if (transferFunctionSelection >= 0 && transferFunctionSelection < transferFunctions.size())
+        transferFunction = transferFunctions[transferFunctionSelection];
+      if (transferFunction) {
+        transferFunctionWidget.setSGTF(transferFunction->nodeAs<sg::TransferFunction>());
+        transferFunctionWidget.render();
+        transferFunctionWidget.drawUi();
+      }
     }
   }
 
@@ -835,6 +840,11 @@ namespace ospray {
 
     if (!renderingPaused)
       renderEngine.start();
+  }
+
+  void ImGuiViewer::setColorMap(std::string name)
+  {
+    transferFunctionWidget.setColorMapByName(name, true);
   }
 
 } // ::ospray

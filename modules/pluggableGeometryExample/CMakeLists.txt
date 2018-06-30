@@ -14,18 +14,25 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
-ospray_create_library(ospray_imgui3d_sg
-  Imgui3dExport.h
-  imgui_impl_glfw_gl3.cpp
-  imgui3D.cpp
-  imguiViewer.cpp
-  transferFunction.cpp
-  cameraManipulator.cpp
-LINK
-  ospray
-  ospray_common
-  ospray_imgui
-  ospray_imgui_util_sg
-  ospray_tfn
-  glfw
-)
+# Define an option to enable/disable this module.
+#
+# Though not actually required we guard each module 'moduleName' with
+# a OSPRAY_MODULE_MODULENAME flag that enables/disables its building.
+#
+OPTION(OSPRAY_MODULE_BILINEAR_PATCH "Build pluggable geometry example module  (a Bilinear Patch)" OFF)
+IF (OSPRAY_MODULE_BILINEAR_PATCH)
+
+  # build the actual new ospray geometry type.  since this plug in
+  # directly into the ospray core, we'll put it into a
+  # '<module>/ospray' subdirectory.
+  #
+  # This subdirectory will eventually build the
+  # libospray_module_<moduleName>.so library that defiens the actual
+  # core geometry type.
+  #
+  ADD_SUBDIRECTORY(ospray)
+
+  # add sg plugin for '.patches' files
+  ADD_SUBDIRECTORY(sg)
+
+ENDIF (OSPRAY_MODULE_BILINEAR_PATCH)
