@@ -16,26 +16,30 @@
 
 #pragma once
 
-#include "Geometry.h"
+#include <ospray/ospray_cpp/ManagedObject.h>
 
 namespace ospray {
-  namespace sg {
+namespace cpp    {
 
-    /*! A Simple Triangle Mesh that stores vertex, normal, texcoord,
-        and vertex color in separate arrays */
-    struct OSPSG_INTERFACE StreamLines : public sg::Geometry
-    {
-      StreamLines();
+class Texture : public ManagedObject_T<OSPTexture>
+{
+public:
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
+  Texture(const Texture &copy);
+  Texture(OSPTexture existing);
+};
 
-      box3f computeBounds() const override;
+// Inlined function definitions ///////////////////////////////////////////////
 
-      void preCommit(RenderContext& ctx) override;
-    };
+inline Texture::Texture(const Texture &copy) :
+  ManagedObject_T<OSPTexture>(copy.handle())
+{
+}
 
-  } // ::ospray::sg
-} // ::ospray
+inline Texture::Texture(OSPTexture existing) :
+  ManagedObject_T<OSPTexture>(existing)
+{
+}
 
-
+}// namespace cpp
+}// namespace ospray

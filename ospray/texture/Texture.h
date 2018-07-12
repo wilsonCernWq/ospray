@@ -16,26 +16,32 @@
 
 #pragma once
 
-#include "Geometry.h"
+#include "common/Managed.h"
+#include "ospray/OSPTexture.h"
 
 namespace ospray {
-  namespace sg {
 
-    /*! A Simple Triangle Mesh that stores vertex, normal, texcoord,
-        and vertex color in separate arrays */
-    struct OSPSG_INTERFACE StreamLines : public sg::Geometry
-    {
-      StreamLines();
+  struct OSPRAY_SDK_INTERFACE Texture : public ManagedObject
+  {
+    virtual ~Texture() override = default;
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
+    virtual std::string toString() const override;
 
-      box3f computeBounds() const override;
+    /*! \brief creates a Texture2D object with the given parameter */
+    static Texture *createInstance(const char *type);
+  };
 
-      void preCommit(RenderContext& ctx) override;
-    };
+  /*! \brief registers a internal ospray::<ClassName> geometry under
+      the externally accessible name "external_name"
 
-  } // ::ospray::sg
+      \internal This currently works by defining a extern "C" function
+      with a given predefined name that creates a new instance of this
+      geometry. By having this symbol in the shared lib ospray can
+      lateron always get a handle to this fct and create an instance
+      of this geometry.
+  */
+#define OSP_REGISTER_TEXTURE(InternalClass, external_name) \
+  OSP_REGISTER_OBJECT(::ospray::Texture, texture, \
+                      InternalClass, external_name)
+
 } // ::ospray
-
-

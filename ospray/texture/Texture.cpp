@@ -14,28 +14,19 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
-
-#include "Geometry.h"
+#include "Texture.h"
+#include "common/Util.h"
 
 namespace ospray {
-  namespace sg {
 
-    /*! A Simple Triangle Mesh that stores vertex, normal, texcoord,
-        and vertex color in separate arrays */
-    struct OSPSG_INTERFACE StreamLines : public sg::Geometry
-    {
-      StreamLines();
+  std::string Texture::toString() const
+  {
+    return "ospray::Texture";
+  }
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
+  Texture *Texture::createInstance(const char *type)
+  {
+    return createInstanceHelper<Texture, OSP_TEXTURE>(type);
+  }
 
-      box3f computeBounds() const override;
-
-      void preCommit(RenderContext& ctx) override;
-    };
-
-  } // ::ospray::sg
 } // ::ospray
-
-

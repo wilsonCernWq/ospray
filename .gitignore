@@ -26,6 +26,7 @@ readme.pdf
 !/modules/mpi
 !/modules/pluggableGeometryExample
 !/modules/simdGeometryExample
+Session.vim
 imgui.ini
 premake.local.*
 .idea/

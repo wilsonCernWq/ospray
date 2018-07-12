@@ -224,11 +224,12 @@ namespace ospray {
                  << "format; creating distributed frame buffer WITHOUT having a "
                  << "mappable copy on the master" << endl);
       } else {
-        localFBonMaster = new LocalFrameBuffer(numPixels,
-                                               colorBufferFormat,
-                                               hasDepthBuffer,
-                                               false,
-                                               false);
+        localFBonMaster
+          = ospcommon::make_unique<LocalFrameBuffer>(numPixels,
+                                                     colorBufferFormat,
+                                                     hasDepthBuffer,
+                                                     false,
+                                                     false);
       }
     }
   }

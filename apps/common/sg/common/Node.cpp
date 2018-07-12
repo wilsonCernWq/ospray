@@ -228,6 +228,12 @@ namespace ospray {
       }
     }
 
+    bool Node::subtreeModifiedButNotCommitted() const
+    {
+      return (lastModified() > lastCommitted()) ||
+             (childrenLastModified() > lastCommitted());
+    }
+
     // Parent-child structual interface ///////////////////////////////////////
 
     bool Node::hasChild(const std::string &name) const

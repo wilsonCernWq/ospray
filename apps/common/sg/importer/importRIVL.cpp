@@ -79,16 +79,6 @@ namespace ospray {
       assert(channels != -1 && "Channel count not properly parsed for Texture2D nodes");
       assert(depth != -1 && "Depth not properly parsed for Texture2D nodes");
 
-      txt->texelType = OSP_TEXTURE_R8;
-      if (channels == 4 && depth == 1)
-        txt->texelType = OSP_TEXTURE_RGBA8;
-      else if (channels == 3 && depth == 1)
-        txt->texelType = OSP_TEXTURE_RGB8;
-      else if (channels == 4)
-        txt->texelType = OSP_TEXTURE_RGBA32F;
-      else if (channels == 3)
-        txt->texelType = OSP_TEXTURE_RGB32F;
-
       txt->size = vec2i(width, height);
       txt->channels = channels;
       txt->depth = depth;
@@ -96,14 +86,14 @@ namespace ospray {
       if (channels == 4) { // RIVL bin stores alpha channel inverted, fix here
         size_t sz = width * height;
         if (depth == 1) { // char
-          vec4uc *texel = new vec4uc[sz];
+          vec4uc *texel = (vec4uc*)memory::alignedMalloc(sz * sizeof(vec4uc));
           memcpy(texel, (char*)binBasePtr+ofs, sz*sizeof(vec4uc));
           for (size_t p = 0; p < sz; p++)
             texel[p].w = 255 - texel[p].w;
           txt->texelData = std::make_shared<DataArray1uc>((unsigned char*)texel,
                                                           width*height*sizeof(vec4uc),true);
         } else { // float
-          vec4f *texel = new vec4f[sz];
+          vec4f *texel = (vec4f*)memory::alignedMalloc(sz * sizeof(vec4f));
           memcpy(texel, (char*)binBasePtr+ofs, sz*sizeof(vec4f));
           for (size_t p = 0; p < sz; p++)
             texel[p].w = 1.0f - texel[p].w;
@@ -392,7 +382,7 @@ namespace ospray {
 
     void parseGroupNode(const xml::Node &node)
     {
-      auto group = std::make_shared<sg::Group>();
+      auto group = std::make_shared<sg::Node>();
       std::stringstream ss_group;
       ss_group << "group_" << nodeList.size();
       group->setName(ss_group.str());
@@ -410,7 +400,6 @@ namespace ospray {
           if(!child.sgNode)
             continue;
 
-          group->children.push_back(child.sgNode);
           std::stringstream ss_child;
           ss_child << "child_" << childID;
           if (child.sgNode->type() == "Model") {

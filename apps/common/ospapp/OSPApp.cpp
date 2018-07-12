@@ -187,8 +187,10 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
 
       parseGeneralCommandLine(argc, argv);
 
-      auto rendererPtr = sg::createNode("renderer", "Renderer");
-      auto &renderer = *rendererPtr;
+      auto rootPtr = sg::createNode("renderer", "Frame")->nodeAs<sg::Frame>();
+
+      auto &root     = *rootPtr;
+      auto &renderer = root["renderer"];
 
       if (!initialRendererType.empty())
         renderer["rendererType"] = initialRendererType;
@@ -263,12 +265,13 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       addPreset("Grayscale", colors, tfPresets.shared_from_this());
       colors.clear();
 
-      for (const auto& tfFile : tfFiles)
-      {
-          auto& tf = *renderer["transferFunctionPresets"].createChild("loadedTF",
-            "TransferFunction").nodeAs<sg::TransferFunction>();
-          tf.loadParaViewTF(tfFile);
+      for (const auto& tfFile : tfFiles) {
+        auto& tf = *renderer["transferFunctionPresets"].createChild("loadedTF",
+          "TransferFunction").nodeAs<sg::TransferFunction>();
+        tf.loadParaViewTF(tfFile);
       }
+
+      auto &framebuffer = root["frameBuffer"];
 
       if (fast) {
         renderer["spp"] = -1;
@@ -276,8 +279,9 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         renderer["aoTransparencyEnabled"] = false;
         renderer["minContribution"] = 0.1f;
         renderer["maxDepth"] = 3;
-        renderer["frameBuffer"]["toneMapping"] = false;
-        renderer["frameBuffer"]["useVarianceBuffer"] = false;
+
+        framebuffer["toneMapping"] = false;
+        framebuffer["useVarianceBuffer"] = false;
         addPlane = false;
       }
 
@@ -286,24 +290,24 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       addGeneratorNodesToWorld(renderer);
       addAnimatedImporterNodesToWorld(renderer);
 
-      renderer["frameBuffer"]["size"] = vec2i(width, height);
-      setupToneMapping(renderer);
-      renderer.traverse(sg::VerifyNodes(true));
-      renderer.commit();
+      framebuffer["size"] = vec2i(width, height);
+      setupToneMapping(framebuffer);
+      root.traverse(sg::VerifyNodes(true));
+      root.commit();
 
       // last, to be able to modify all created SG nodes
-      parseCommandLineSG(argc, argv, renderer);
+      parseCommandLineSG(argc, argv, root);
 
       // after parseCommandLineSG (may have changed world bounding box)
       addPlaneToScene(renderer);
-      setupCamera(renderer);
+      setupCamera(root);
 
       if (debug)
-        renderer.traverse(sg::PrintNodes{});
+        root.traverse(sg::PrintNodes{});
 
-      render(rendererPtr);
+      render(rootPtr);
 
-      rendererPtr.reset();
+      rootPtr.reset();
       ospShutdown();
 
       return 0;
@@ -500,7 +504,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       }
     }
 
-    void OSPApp::parseCommandLineSG(int ac, const char **&av, sg::Node &root)
+    void OSPApp::parseCommandLineSG(int ac, const char **&av, sg::Frame &root)
     {
       for (int i = 1; i < ac; i++) {
         std::string arg(av[i]);
@@ -537,16 +541,23 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
           ss << arg.substr(0, f);
           std::string child;
           std::reference_wrapper<sg::Node> node_ref = root;
-          std::vector<std::shared_ptr<sg::Node> > children;
+          std::vector<std::shared_ptr<sg::Node>> children;
           while (ss >> child) {
-            if (ss.eof())
-              children = node_ref.get().childrenRecursive(child);
+            try {
+              if (ss.eof())
+                children = node_ref.get().childrenRecursive(child);
+              else
+                node_ref = node_ref.get().childRecursive(child);
+            } catch (...) {
+              std::cerr << "Warning: could not find child: " << child << std::endl;
+            }
           }
-          if (children.empty())
-          {
-            std::cerr << "Warning: no children found in sg lookup\n";
+
+          if (children.empty()) {
+            std::cerr << "Warning: no children found in -sg: lookup\n";
             continue;
           }
+
           std::stringstream vals(value);
 
           if (addNode) {
@@ -752,8 +763,9 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       }
     }
 
-    void OSPApp::setupCamera(sg::Node &renderer)
+    void OSPApp::setupCamera(sg::Node &root)
     {
+      auto &renderer = root["renderer"];
       auto &world = renderer["world"];
       auto bbox = bboxWithoutPlane;
       if (bbox.empty())
@@ -769,7 +781,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       if (!up.isOverridden())
         up = vec3f(0.f, 1.f, 0.f);
 
-      auto &camera = renderer["camera"];
+      auto &camera = root["camera"];
       camera["pos"] = pos.getValue();
       camera["dir"] = normalize(gaze.getValue() - pos.getValue());
       camera["up"] = up.getValue();
@@ -778,9 +790,9 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       //       camera moves unless also updated by the app!
       camera.createChild("gaze", "vec3f", gaze.getValue());
 
-      if (camera.hasChild("fovy"))
+      if (camera.hasChild("fovy") && fovy.isOverridden())
         camera["fovy"] = fovy.getValue();
-      if (camera.hasChild("apertureRadius"))
+      if (camera.hasChild("apertureRadius") && apertureRadius.isOverridden())
         camera["apertureRadius"] = apertureRadius.getValue();
       if (camera.hasChild("focusdistance"))
         camera["focusdistance"] = length(pos.getValue() - gaze.getValue());
@@ -792,10 +804,8 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         camera["aspect"] = width / (float)height;
     }
 
-    void OSPApp::setupToneMapping(sg::Node &renderer)
+    void OSPApp::setupToneMapping(sg::Node &frameBuffer)
     {
-      auto &frameBuffer = renderer["frameBuffer"];
-
       if (aces) {
         frameBuffer["toneMapping"] = true;
         frameBuffer["contrast"] = 1.6773f;

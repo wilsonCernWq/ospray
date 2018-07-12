@@ -28,47 +28,55 @@
 
 // sg components
 #include "common/Data.h"
+#include "common/FrameBuffer.h"
 #include "common/Renderable.h"
 #include "common/Transform.h"
 
-#include "camera/PerspectiveCamera.h"
+#include "camera/Camera.h"
 
 #include "geometry/Geometry.h"
-#include "geometry/Spheres.h"
 
 #include "importer/Importer.h"
 
 #include "volume/Volume.h"
 
-// ospcommon
-#include "ospcommon/FileName.h"
+#include "Renderer.h"
 
 namespace ospray {
   namespace sg {
 
-    using ospcommon::FileName;
-
-    /*! \brief allows for adding semantical info to a model/scene
-     graph.  \note will not do anything by itself. */
-    struct OSPSG_INTERFACE Info : public sg::Node
+    /* This "ties" 3 major components together: framebuffer, renderer, and
+       camera
+     */
+    struct OSPSG_INTERFACE Frame : public Node
     {
-      /*! \brief returns a std::string with the c++ name of this class */
+      Frame();
+      ~Frame() override = default;
+
+      // Node interface //
+
       std::string toString() const override;
 
-      std::string permissions;
-      std::string acks;
-      std::string description;
+      void preCommit(RenderContext &ctx) override;
+      void postCommit(RenderContext &ctx) override;
+
+      // Frame interface //
+
+      void renderFrame(bool verifyCommit = true);
+
+      OSPPickResult pick(const vec2f &pickPos);
+      float getLastVariance() const;
+
+    private:
+
+      // Data members //
+
+      OSPCamera currentCamera {nullptr};
+      OSPRenderer currentRenderer {nullptr};
+      OSPFrameBuffer currentFB {nullptr};
+
+      bool clearFB {true};
     };
-
-    struct OSPSG_INTERFACE Group : public sg::Renderable
-    {
-      /*! \brief returns a std::string with the c++ name of this class */
-      std::string toString() const override;
-
-      std::vector<std::shared_ptr<sg::Node>> children;
-    };
-
-    /*! @} */
 
   } // ::ospray::sg
 } // ::ospray

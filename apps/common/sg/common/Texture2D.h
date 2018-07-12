@@ -30,7 +30,7 @@ namespace ospray {
     {
       /*! constructor */
       Texture2D();
-      ~Texture2D() override;
+      ~Texture2D() override = default;
 
       virtual void preCommit(RenderContext &ctx) override;
 
@@ -52,11 +52,10 @@ namespace ospray {
       bool preferLinear{false};
       bool nearestFilter{false};
 
-      //! format of each texel
-      OSPTextureFormat texelType {OSP_TEXTURE_FORMAT_INVALID};
-
-      std::shared_ptr<sg::DataArray1uc> texelData;
+      std::shared_ptr<sg::DataBuffer> texelData;
       void* data{nullptr};
+
+      std::string ospTextureType {"texture2d"};
     };
 
   } // ::ospray::sg

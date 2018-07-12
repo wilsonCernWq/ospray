@@ -76,7 +76,10 @@ namespace ospray {
       virtual void serialize(sg::Serialization::State &state);
 
       template <typename T>
-      std::shared_ptr<T> nodeAs();
+      std::shared_ptr<T> nodeAs(); // static cast (faster, but not safe!)
+
+      template <typename T>
+      std::shared_ptr<T> tryNodeAs(); // dynamic cast (slower, but can check)
 
       // Properties ///////////////////////////////////////////////////////////
 
@@ -148,6 +151,9 @@ namespace ospray {
       void markAsCommitted();
       virtual void markAsModified();
       virtual void setChildrenModified(TimeStamp t);
+
+      //! Did this Node (or decendants) get modified and not (yet) committed?
+      bool subtreeModifiedButNotCommitted() const;
 
       // Parent-child structual interface /////////////////////////////////////
 
@@ -296,6 +302,15 @@ namespace ospray {
       return std::static_pointer_cast<T>(shared_from_this());
     }
 
+    template <typename T>
+    inline std::shared_ptr<T> Node::tryNodeAs()
+    {
+      static_assert(std::is_base_of<Node, T>::value,
+                    "Can only use tryNodeAs<T> to cast to an ospray::sg::Node"
+                    " type! 'T' must be a child of ospray::sg::Node!");
+      return std::dynamic_pointer_cast<T>(shared_from_this());
+    }
+
     //! just for convenience; add a typed 'setParam' function
     template <typename T>
     inline Node &Node::createChildWithValue(const std::string &name,
@@ -418,7 +433,7 @@ namespace ospray {
     DECLARE_VALUEAS_SPECIALIZATION(OSPLight)
     DECLARE_VALUEAS_SPECIALIZATION(OSPVolume)
     DECLARE_VALUEAS_SPECIALIZATION(OSPTransferFunction)
-    DECLARE_VALUEAS_SPECIALIZATION(OSPTexture2D)
+    DECLARE_VALUEAS_SPECIALIZATION(OSPTexture)
     DECLARE_VALUEAS_SPECIALIZATION(OSPPixelOp)
 
 #undef DECLARE_VALUEAS_SPECIALIZATION

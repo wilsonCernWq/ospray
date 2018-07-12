@@ -16,21 +16,101 @@
 
 #include "SceneGraph.h"
 
+#include "visitor/VerifyNodes.h"
+
 namespace ospray {
   namespace sg {
 
-    /*! 'render' the nodes */
-    std::string Group::toString() const
+    Frame::Frame()
     {
-      return "ospray::sg::Group";
+      createChild("frameBuffer", "FrameBuffer");
+      createChild("camera", "PerspectiveCamera");
+      createChild("renderer", "Renderer");
     }
 
-    std::string Info::toString() const
+    std::string Frame::toString() const
     {
-      return "ospray::sg::Info";
+      return "ospray::sg::Frame";
     }
 
-    OSP_REGISTER_SG_NODE(Group);
+    void Frame::preCommit(RenderContext &)
+    {
+      if (child("camera").hasChild("aspect") &&
+          child("frameBuffer")["size"].lastModified() >
+          child("camera")["aspect"].lastCommitted()) {
+        auto fbSize = child("frameBuffer")["size"].valueAs<vec2i>();
+        child("camera")["aspect"] = fbSize.x / float(fbSize.y);
+      }
+
+      auto rendererNode = child("renderer").nodeAs<Renderer>();
+      rendererNode->updateRenderer();
+
+      auto rHandle = rendererNode->valueAs<OSPRenderer>();
+      auto cHandle = child("camera").valueAs<OSPCamera>();
+      auto fHandle = child("frameBuffer").valueAs<OSPFrameBuffer>();
+
+      bool newRenderer = currentRenderer != rHandle;
+      bool newCamera = currentCamera != cHandle;
+      bool newFB = currentFB != fHandle;
+
+      if (newRenderer)
+        currentRenderer = rHandle;
+
+      if (newCamera)
+        currentCamera = cHandle;
+
+      if (newFB)
+        currentFB = fHandle;
+
+      if (newRenderer || newCamera)
+        ospSetObject(rHandle, "camera", cHandle);
+
+      bool rChanged = rendererNode->subtreeModifiedButNotCommitted();
+      bool cChanged = child("camera").subtreeModifiedButNotCommitted();
+
+      clearFB = newFB || newCamera || newRenderer || rChanged || cChanged;
+    }
+
+    void Frame::postCommit(RenderContext &)
+    {
+      if (clearFB) {
+        ospFrameBufferClear(
+          child("frameBuffer").valueAs<OSPFrameBuffer>(),
+          OSP_FB_COLOR | OSP_FB_ACCUM
+        );
+
+        clearFB = false;
+      }
+    }
+
+    void Frame::renderFrame(bool verifyCommit)
+    {
+      auto rendererNode = child("renderer").nodeAs<Renderer>();
+      auto fbNode = child("frameBuffer").nodeAs<FrameBuffer>();
+
+      if (verifyCommit) {
+        Node::traverse(VerifyNodes{});
+        commit();
+      }
+
+      traverse("render");
+
+      rendererNode->renderFrame(fbNode);
+    }
+
+    OSPPickResult Frame::pick(const vec2f &pickPos)
+    {
+      auto rendererNode = child("renderer").nodeAs<Renderer>();
+      return rendererNode->pick(pickPos);
+    }
+
+    float Frame::getLastVariance() const
+    {
+      auto rendererNode = child("renderer").nodeAs<Renderer>();
+      return rendererNode->getLastVariance();
+    }
+
+    OSP_REGISTER_SG_NODE(Frame);
 
   } // ::ospray::sg
 } // ::ospray
