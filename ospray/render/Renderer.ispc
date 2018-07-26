@@ -66,8 +66,6 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
 
     CameraSample cameraSample;
 
-    const uniform float spp_inv = 1.f / spp;
-
     const uniform int begin = taskIndex * RENDERTILE_PIXELS_PER_JOB;
     const uniform int end   = begin     + RENDERTILE_PIXELS_PER_JOB;
     const uniform int startSampleID = max(tile.accumID, 0)*spp;
@@ -96,6 +94,8 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
       }
       vec3f col = make_vec3f(0.f);
       float alpha = 0.f;
+      vec3f normal = make_vec3f(0.f);
+      vec3f albedo = make_vec3f(0.f);
       const uint32 pixel = z_order.xs[index] + (z_order.ys[index] * TILE_SIZE);
       for (uniform uint32 s = 0; s < spp; s++) {
         const float pixel_du = precomputedHalton2(startSampleID+s);
@@ -117,10 +117,15 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
         self->renderSample(self,perFrameData,screenSample);
         col = col + screenSample.rgb;
         alpha += screenSample.alpha;
+        normal = normal + screenSample.normal;
+        albedo = albedo + screenSample.albedo;
       }
-      col = col * (spp_inv);
-      alpha *= spp_inv;
-      setRGBAZ(tile,pixel,col,alpha,screenSample.z);
+      const float rspp = rcpf(spp);
+      screenSample.rgb = col * rspp;
+      screenSample.alpha = alpha * rspp;
+      screenSample.normal = transposed(camera->frame) * (normal * rspp);
+      screenSample.albedo = albedo * rspp;
+      setTile(tile, pixel, screenSample);
     }
   } else {
     const float pixel_du = precomputedHalton2(tile.accumID);
@@ -174,12 +179,13 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
       }
 
       self->renderSample(self,perFrameData,screenSample);
+      screenSample.normal = transposed(camera->frame) * screenSample.normal;
 
       for (uniform int p = 0; p < blocks; p++) {
         const uint32 pixel = z_order.xs[i*blocks+p]
                              + (z_order.ys[i*blocks+p] * TILE_SIZE);
         assert(pixel < TILE_SIZE*TILE_SIZE);
-        setRGBAZ(tile,pixel,screenSample.rgb,screenSample.alpha,screenSample.z);
+        setTile(tile, pixel, screenSample);
       }
     }
   }

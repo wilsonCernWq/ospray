@@ -31,8 +31,6 @@ namespace ospray {
 
     using namespace mpicommon;
 
-#define MAX_TILE_SIZE 128
-
     namespace staticLoadBalancer {
 
       // staticLoadBalancer::Master definitions ///////////////////////////////

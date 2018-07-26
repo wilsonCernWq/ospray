@@ -26,6 +26,8 @@ namespace ospray {
       createChild("frameBuffer", "FrameBuffer");
       createChild("camera", "PerspectiveCamera");
       createChild("renderer", "Renderer");
+
+      createChild("frameAccumulationLimit", "int", -1);
     }
 
     std::string Frame::toString() const
@@ -69,17 +71,17 @@ namespace ospray {
       bool cChanged = child("camera").subtreeModifiedButNotCommitted();
 
       clearFB = newFB || newCamera || newRenderer || rChanged || cChanged;
+
+      frameAccumulationLimit = child("frameAccumulationLimit").valueAs<int>();
     }
 
     void Frame::postCommit(RenderContext &)
     {
       if (clearFB) {
-        ospFrameBufferClear(
-          child("frameBuffer").valueAs<OSPFrameBuffer>(),
-          OSP_FB_COLOR | OSP_FB_ACCUM
-        );
+        child("frameBuffer").nodeAs<FrameBuffer>()->clear();
 
         clearFB = false;
+        numAccumulatedFrames = 0;
       }
     }
 
@@ -95,19 +97,20 @@ namespace ospray {
 
       traverse("render");
 
-      rendererNode->renderFrame(fbNode);
+      const bool limitAccumulation  = frameAccumulationLimit >= 0;
+      const bool accumBudgetReached =
+          frameAccumulationLimit <= numAccumulatedFrames;
+
+      if (!limitAccumulation || !accumBudgetReached) {
+        rendererNode->renderFrame(fbNode);
+        numAccumulatedFrames++;
+      }
     }
 
     OSPPickResult Frame::pick(const vec2f &pickPos)
     {
       auto rendererNode = child("renderer").nodeAs<Renderer>();
       return rendererNode->pick(pickPos);
-    }
-
-    float Frame::getLastVariance() const
-    {
-      auto rendererNode = child("renderer").nodeAs<Renderer>();
-      return rendererNode->getLastVariance();
     }
 
     OSP_REGISTER_SG_NODE(Frame);

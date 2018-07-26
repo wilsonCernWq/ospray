@@ -187,7 +187,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
 
       parseGeneralCommandLine(argc, argv);
 
-      auto rootPtr = sg::createNode("renderer", "Frame")->nodeAs<sg::Frame>();
+      auto rootPtr = sg::createNode("frame0", "Frame")->nodeAs<sg::Frame>();
 
       auto &root     = *rootPtr;
       auto &renderer = root["renderer"];
@@ -286,7 +286,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       }
 
       addLightsToScene(renderer);
-      addImporterNodesToWorld(renderer);
+      addImporterNodesToWorld(root);
       addGeneratorNodesToWorld(renderer);
       addAnimatedImporterNodesToWorld(renderer);
 
@@ -294,6 +294,13 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       setupToneMapping(framebuffer);
       root.traverse(sg::VerifyNodes(true));
       root.commit();
+
+      // sensible default for orthographic camera, before command line parsing
+      auto &camera = root["camera"];
+      if (camera.hasChild("height")) {
+        auto bbox = renderer["world"].bounds();
+        camera["height"] = bbox.empty() ? 1.f : 0.5f * length(bbox.size());
+      }
 
       // last, to be able to modify all created SG nodes
       parseCommandLineSG(argc, argv, root);
@@ -554,7 +561,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
           }
 
           if (children.empty()) {
-            std::cerr << "Warning: no children found in -sg: lookup\n";
+            std::cerr << "Warning: no children found for " << av[i] << " lookup\n";
             continue;
           }
 
@@ -662,11 +669,13 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         auto &hdri = lights.createChild("hdri", "HDRILight");
         hdri.add(tex);
         renderer.verify(); //TODO: this should not be necessary
+        sg::Texture2D::clearTextureCache();
       }
     }
 
-    void OSPApp::addImporterNodesToWorld(sg::Node &renderer)
+    void OSPApp::addImporterNodesToWorld(sg::Node &root)
     {
+      auto &renderer = root["renderer"];
       auto &world = renderer["world"];
       auto &animation = renderer["animationcontroller"];
 
@@ -674,7 +683,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         FileName fn = file.file;
         if (fn.ext() == "ospsg")
         {
-          auto& cam = renderer["camera"];
+          auto& cam = root["camera"];
           auto dirTS = cam["dir"].lastModified();
           auto posTS = cam["pos"].lastModified();
           auto upTS = cam["up"].lastModified();
@@ -786,8 +795,7 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
       camera["dir"] = normalize(gaze.getValue() - pos.getValue());
       camera["up"] = up.getValue();
 
-      // NOTE: Stash computed gaze point in the camera for apps, invalid once
-      //       camera moves unless also updated by the app!
+      // XXX hack: consumed and removed in constructor of ImGuiViewer
       camera.createChild("gaze", "vec3f", gaze.getValue());
 
       if (camera.hasChild("fovy") && fovy.isOverridden())
@@ -796,10 +804,6 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
         camera["apertureRadius"] = apertureRadius.getValue();
       if (camera.hasChild("focusdistance"))
         camera["focusdistance"] = length(pos.getValue() - gaze.getValue());
-
-      // orthographic camera adjustments
-      if (camera.hasChild("height"))
-        camera["height"] = (float)height;
       if (camera.hasChild("aspect"))
         camera["aspect"] = width / (float)height;
     }
@@ -878,10 +882,10 @@ usage --> "--generate:type[:parameter1=value,parameter2=value,...]"
 
     void OSPApp::addPlaneToScene(sg::Node &renderer)
     {
-      auto &world = renderer["world"];
       if (addPlane == false) {
         return;
       }
+      auto &world = renderer["world"];
       auto bbox = world.bounds();
       if (bbox.empty()) {
         bbox.lower = vec3f(-5, 0, -5);

@@ -65,7 +65,6 @@ namespace ospray {
       void renderFrame(bool verifyCommit = true);
 
       OSPPickResult pick(const vec2f &pickPos);
-      float getLastVariance() const;
 
     private:
 
@@ -76,6 +75,9 @@ namespace ospray {
       OSPFrameBuffer currentFB {nullptr};
 
       bool clearFB {true};
+
+      int numAccumulatedFrames{0};
+      int frameAccumulationLimit{-1};
     };
 
   } // ::ospray::sg

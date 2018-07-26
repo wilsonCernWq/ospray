@@ -41,6 +41,13 @@ namespace ospray {
     void setInitialSearchBoxText(const std::string &text);
     void setColorMap(std::string name);
 
+    template <typename CALLBACK_T>
+    void addCustomUICallback(const std::string &name, CALLBACK_T &&f);
+
+    void startAsyncRendering() override;
+
+    void setViewportToSgCamera();
+
   protected:
 
     enum PickMode { PICK_CAMERA, PICK_NODE };
@@ -52,7 +59,6 @@ namespace ospray {
     void resetView();
     void resetDefaultView();
     void printViewport();
-    void saveScreenshot(const std::string &basename);
     void toggleRenderingPaused();
 
     void display() override;
@@ -67,6 +73,7 @@ namespace ospray {
     void guiCarDemo();
 
     void guiRenderStats();
+    void guiRenderCustomWidgets();
     void guiTransferFunction();
     void guiFindNode();
 
@@ -83,7 +90,6 @@ namespace ospray {
 
     // Data //
 
-    double lastFrameFPS;
     double lastGUITime;
     double lastDisplayTime;
     double lastTotalTime;
@@ -91,6 +97,7 @@ namespace ospray {
 
     ospcommon::vec2i windowSize;
     imgui3D::ImGui3DWidget::ViewPort originalView;
+    bool saveScreenshot {false}; // write next mapped framebuffer to disk
 
     std::shared_ptr<sg::Frame> scenegraph;
     std::shared_ptr<sg::Renderer> renderer;
@@ -98,8 +105,12 @@ namespace ospray {
     std::string nodeNameForSearch;
     std::vector<std::shared_ptr<sg::Node>> collectedNodesFromSearch;
 
+    using UICallback = std::function<void(sg::Frame &)>;
+    using NamedUICallback = std::pair<std::string, UICallback>;
+
+    std::vector<NamedUICallback> customPanes;
+
     AsyncRenderEngine renderEngine;
-    std::vector<uint32_t> pixelBuffer;
 
     bool useDynamicLoadBalancer{false};
     int  numPreAllocatedTiles{4};
@@ -109,5 +120,16 @@ namespace ospray {
     imgui3D::TransferFunction transferFunctionWidget;
     int transferFunctionSelection{0};
   };
+
+  // Inlined definitions //////////////////////////////////////////////////////
+
+  template <typename CALLBACK_T>
+  inline void
+  ImGuiViewer::addCustomUICallback(const std::string &name, CALLBACK_T &&f)
+  {
+    // TODO: static_assert the signature of CALLBACK_T::operator()
+
+    customPanes.push_back({name, f});
+  }
 
 }// namespace ospray

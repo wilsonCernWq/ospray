@@ -65,7 +65,7 @@ namespace ospray {
       auto type = osprayTextureFormat(depth, channels, preferLinear);
 
       if (data == nullptr)
-        data = texelData->base();
+        data = texelData.get() != nullptr ? texelData->base() : nullptr;
       else {
         const auto dataSize = size.x * size.y * channels * depth;
         texelData =
@@ -100,13 +100,7 @@ namespace ospray {
     {
       FileName fileName = fileNameAbs;
       std::string fileNameBase = fileNameAbs;
-      /* WARNING: this cache means that every texture ever loaded will
-         forever keep at least one refcount - ie, no texture will ever
-         auto-die!!! (to fix this we'd have to add a dedicated
-         'clearTextureCache', or move this caching fucntionality into
-         a CachedTextureLoader objec that each parser creates and
-         destroys) */
-      static std::map<std::string,std::shared_ptr<Texture2D> > textureCache;
+
       if (textureCache.find(fileName.str()) != textureCache.end())
         return textureCache[fileName.str()];
 
@@ -117,6 +111,7 @@ namespace ospray {
       ImageInput *in = ImageInput::open(fileName.str().c_str());
       if (!in) {
         std::cerr << "#osp:sg: failed to load texture '"+fileName.str()+"'" << std::endl;
+        tex.reset();
       } else {
         const ImageSpec &spec = in->spec();
 
@@ -230,6 +225,7 @@ namespace ospray {
             }
         } catch(const std::runtime_error &e) {
           std::cerr << e.what() << std::endl;
+          tex.reset();
         }
       } else if (ext == "pfm") {
         try {
@@ -303,6 +299,7 @@ namespace ospray {
           }
         } catch(const std::runtime_error &e) {
           std::cerr << e.what() << std::endl;
+          tex.reset();
         }
       }
       else {
@@ -321,6 +318,7 @@ namespace ospray {
         tex->nearestFilter = nearestFilter;
         if (!pixels) {
           std::cerr << "#osp:sg: failed to load texture '"+fileName.str()+"'" << std::endl;
+          tex.reset();
         } else {
           tex->data = alignedMalloc(sizeof(unsigned char) * tex->size.x*tex->size.y*tex->channels*tex->depth);
           // convert pixels and flip image (because OSPRay's textures have the origin at the lower left corner)
@@ -342,11 +340,20 @@ namespace ospray {
         }
       }
 #endif
-      textureCache[fileName.str()] = tex;
+
+      if (tex.get() != nullptr)
+        textureCache[fileName.str()] = tex;
+
       return tex;
+    }
+
+    void Texture2D::clearTextureCache()
+    {
+      textureCache.clear();
     }
 
     OSP_REGISTER_SG_NODE(Texture2D);
 
+    std::map<std::string,std::shared_ptr<Texture2D> > Texture2D::textureCache;
   } // ::ospray::sg
 } // ::ospray

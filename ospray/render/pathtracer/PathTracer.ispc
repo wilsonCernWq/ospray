@@ -102,12 +102,15 @@ ScreenSample PathTraceIntegrator_Li(const uniform PathTracer* uniform self,
 {
   ScreenSample sample;
   sample.alpha = 1.f;
+  sample.normal = make_vec3f(0.0f);
+  sample.albedo = make_vec3f(0.0f);
 
   vec3f L = make_vec3f(0.f); // accumulated radiance
   vec3f Lw = make_vec3f(1.f); // path throughput
   Medium currentMedium = make_Medium_vacuum();
   float lastBsdfPdf = inf; // probability density of previous sampled BSDF, for MIS
   bool straightPath = true; // path from camera did not change direction, for alpha and backplate
+  bool auxFree = true; // normal & albedo buffer were not yet written to
   uniform uint32 depth = 0;
   // geometric configuration of last surface interaction
   DifferentialGeometry lastDg;
@@ -329,9 +332,18 @@ ScreenSample PathTraceIntegrator_Li(const uniform PathTracer* uniform self,
     vec2f s  = LCG_getFloat2(lcg);
     vec2f ss = LCG_getFloat2(lcg); // ss.y used for Russian roulette
     BSDF_SampleRes fs;
+    vec3f Ns = dg.Ns;
     foreach_unique(f in bsdf)
-      if (f != NULL)
+      if (f != NULL) {
         fs = f->sample(f, wo, s, ss.x);
+        if (f->frame != NULL)
+          Ns = getN(f);
+      }
+    if (auxFree && (fs.type & BSDF_SMOOTH)) {
+      sample.normal = Ns;
+      sample.albedo = bsdf->albedo;
+      auxFree = false;
+    }
 
     // terminate path when zero contribution from material
     if (reduce_max(fs.weight) <= 0.0f | fs.pdf <= PDF_CULLING)
@@ -395,6 +407,8 @@ inline ScreenSample PathTracer_renderPixel(uniform PathTracer *uniform self,
   screenSample.rgb = make_vec3f(0.f);
   screenSample.alpha = 0.f;
   screenSample.z = inf;
+  screenSample.normal = make_vec3f(0.f);
+  screenSample.albedo = make_vec3f(0.f);
 
   screenSample.sampleID.x = ix;
   screenSample.sampleID.y = iy;
@@ -421,10 +435,16 @@ inline ScreenSample PathTracer_renderPixel(uniform PathTracer *uniform self,
     screenSample.rgb = screenSample.rgb + min(sample.rgb, make_vec3f(self->maxRadiance));
     screenSample.alpha = screenSample.alpha + sample.alpha;
     screenSample.z = min(screenSample.z, sample.z);
+    screenSample.normal = screenSample.normal + sample.normal;
+    screenSample.albedo = screenSample.albedo + sample.albedo;
   }
 
-  screenSample.rgb = screenSample.rgb * rcpf(spp);
-  screenSample.alpha = screenSample.alpha * rcpf(spp);
+  const float rspp = rcpf(spp);
+  screenSample.rgb = screenSample.rgb * rspp;
+  screenSample.alpha = screenSample.alpha * rspp;
+  screenSample.normal = transposed(camera->frame) * (screenSample.normal*rspp);
+  screenSample.albedo = screenSample.albedo * rspp;
+
   return screenSample;
 }
 
@@ -454,7 +474,7 @@ void PathTracer_renderTileJob(uniform PathTracer *uniform self,
 
     for (uniform int p = 0; p < blocks; p++) {
       const uint32 pixel = z_order.xs[i*blocks+p] + (z_order.ys[i*blocks+p] * TILE_SIZE);
-      setRGBAZ(tile, pixel, screenSample.rgb, screenSample.alpha, screenSample.z);
+      setTile(tile, pixel, screenSample);
     }
   }
 }

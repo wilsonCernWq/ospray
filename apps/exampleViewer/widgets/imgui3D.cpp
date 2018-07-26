@@ -74,8 +74,6 @@ namespace ospray {
     ImGui3DWidget *ImGui3DWidget::activeWindow = nullptr;
     bool ImGui3DWidget::animating = false;
 
-    // InspectCenter Glut3DWidget::INSPECT_CENTER;
-
     // ------------------------------------------------------------------
     // implementation of glut3d::viewPorts
     // ------------------------------------------------------------------
@@ -157,7 +155,7 @@ namespace ospray {
       currButton[0] = currButton[1] = currButton[2] = GLFW_RELEASE;
 
       displayTime=-1.f;
-      renderTime=-1.f;
+      renderFPS=0.f;
       guiTime=-1.f;
       totalTime=-1.f;
     }
@@ -182,7 +180,9 @@ namespace ospray {
     void ImGui3DWidget::reshape(const vec2i &newSize)
     {
       windowSize = newSize;
+      glViewport(0, 0, newSize.x, newSize.y);
       viewPort.aspect = newSize.x/float(newSize.y);
+      viewPort.modified = true;
     }
 
     void ImGui3DWidget::display()
@@ -193,27 +193,10 @@ namespace ospray {
         hack->rotate(-.01f * ImGui3DWidget::activeWindow->motionSpeed, 0);
       }
 
-
       if (frameBufferMode == ImGui3DWidget::FRAMEBUFFER_UCHAR && ucharFB) {
-        glDrawPixels(windowSize.x, windowSize.y,
-                     GL_RGBA, GL_UNSIGNED_BYTE, ucharFB);
-#ifndef _WIN32
-        if (ImGui3DWidget::animating && dumpScreensDuringAnimation) {
-          char tmpFileName[] = "/tmp/ospray_scene_dump_file.XXXXXXXXXX";
-          static const char *dumpFileRoot;
-          if (!dumpFileRoot) {
-            auto rc = mkstemp(tmpFileName);
-            (void)rc;
-            dumpFileRoot = tmpFileName;
-          }
-
-          char fileName[100000];
-          snprintf(fileName,sizeof(fileName),"%s_%08ld.ppm",dumpFileRoot,times(nullptr));
-          saveFrameBufferToFile(fileName,ucharFB,windowSize.x,windowSize.y);
-        }
-#endif
+        glDrawPixels(fbSize.x, fbSize.y, GL_RGBA, GL_UNSIGNED_BYTE, ucharFB);
       } else if (frameBufferMode == ImGui3DWidget::FRAMEBUFFER_FLOAT && floatFB) {
-        glDrawPixels(windowSize.x, windowSize.y, GL_RGBA, GL_FLOAT, floatFB);
+        glDrawPixels(fbSize.x, fbSize.y, GL_RGBA, GL_FLOAT, floatFB);
       } else {
         glClearColor(0.f,0.f,0.f,1.f);
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
@@ -309,6 +292,13 @@ namespace ospray {
       // NOTE(jda) - move key handler registration into this class
       ImGui_ImplGlfwGL3_Init(window, true);
 
+      glfwSetFramebufferSizeCallback(
+        window,
+        [](GLFWwindow*, int neww, int newh) {
+          ImGui3DWidget::activeWindow->reshape(vec2i(neww, newh));
+        }
+      );
+
       glfwSetCursorPosCallback(
         window,
         [](GLFWwindow*, double xpos, double ypos) {
@@ -348,8 +338,6 @@ namespace ospray {
 
       auto *window = currentWidget->window;
 
-      int display_w = 0, display_h = 0;
-
       ImFontConfig config;
       config.MergeMode = false;
 
@@ -363,6 +351,13 @@ namespace ospray {
         currentWidget->fontScale = 1.f;
       }
       #endif
+
+      // make sure the widget matches the initial size of the window
+      vec2i displaySize;
+      glfwGetFramebufferSize(window, &displaySize.x, &displaySize.y);
+      currentWidget->reshape(displaySize);
+
+      currentWidget->startAsyncRendering();
 
       // Main loop
       while (!glfwWindowShouldClose(window) &&
@@ -400,7 +395,7 @@ namespace ospray {
           ImGui::PopStyleColor(1);
 
           std::stringstream ss;
-          ss << 1.f/currentWidget->renderTime;
+          ss << currentWidget->renderFPS;
           ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(.2f, .2f, 1.f, 1.f));
           ImGui::Text("%s", ("fps: " + ss.str()).c_str());
           ImGui::Text("press \'g\' for menu");
@@ -408,19 +403,6 @@ namespace ospray {
 
           ImGui::End();
         }
-
-        timer.start();
-        int new_w = 0, new_h = 0;
-        glfwGetFramebufferSize(window, &new_w, &new_h);
-
-        if (new_w != display_w || new_h != display_h) {
-          display_w = new_w;
-          display_h = new_h;
-          currentWidget->reshape(vec2i(display_w, display_h));
-        }
-
-        glViewport(0, 0, new_w, new_h);
-        timer.stop();
 
         timer.start();
         // Render OSPRay frame

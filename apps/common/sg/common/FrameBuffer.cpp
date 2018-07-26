@@ -52,7 +52,15 @@ namespace ospray {
 
       createChild("acesColor", "bool", true);
 
-      createChild("useSRGB", "bool", true);
+      std::vector<Any> whiteList;
+      for(auto const& el : colorFormats)
+        whiteList.push_back(el.first);
+      createChild("colorFormat", "string", whiteList[0],
+                  NodeFlags::required |
+                  NodeFlags::gui_combo,
+                  "format of the color buffer");
+      child("colorFormat").setWhiteList(whiteList);
+
       createChild("useAccumBuffer", "bool", true);
       createChild("useVarianceBuffer", "bool", true);
 
@@ -61,29 +69,34 @@ namespace ospray {
 
     void FrameBuffer::postCommit(RenderContext &)
     {
-      // Avoid clearing the framebuffer when only tonemapping parameters have been changed
-      if (lastModified() >= lastCommitted()
-          || child("size").lastModified() >= lastCommitted()
-          || child("displayWall").lastModified() >= lastCommitted()
-          || child("useAccumBuffer").lastModified() >= lastCommitted()
-          || child("useVarianceBuffer").lastModified() >= lastCommitted()
-          || child("useSRGB").lastModified() >= lastCommitted()
-          || child("toneMapping").lastModified() >= lastCommitted())
-      {
-        std::string displayWall = child("displayWall").valueAs<std::string>();
-        this->displayWallStream = displayWall;
-
-        destroyFB();
-        createFB();
-
+      bool removeToneMapper = false;
+      if (child("toneMapping").lastModified() >= lastCommitted()) {
         bool toneMapping = child("toneMapping").valueAs<bool>();
         if (toneMapping) {
           toneMapper = ospNewPixelOp("tonemapper");
           ospCommit(toneMapper);
           ospSetPixelOp(ospFrameBuffer, toneMapper);
         } else {
+          ospRelease(toneMapper);
           toneMapper = nullptr;
+          removeToneMapper = true;
         }
+      }
+
+      // Avoid clearing the framebuffer when only tonemapping parameters have been changed
+      if (lastModified() >= lastCommitted()
+          || child("size").lastModified() >= lastCommitted()
+          || child("displayWall").lastModified() >= lastCommitted()
+          || child("useAccumBuffer").lastModified() >= lastCommitted()
+          || child("useVarianceBuffer").lastModified() >= lastCommitted()
+          || child("colorFormat").lastModified() >= lastCommitted()
+          || removeToneMapper)
+      {
+        std::string displayWall = child("displayWall").valueAs<std::string>();
+        this->displayWallStream = displayWall;
+
+        destroyFB();
+        createFB();
 
         if (displayWall != "") {
           ospLoadModule("displayWald");
@@ -120,10 +133,9 @@ namespace ospray {
       }
     }
 
-    const unsigned char *FrameBuffer::map()
+    const void *FrameBuffer::map()
     {
-      return (const unsigned char *)ospMapFrameBuffer(ospFrameBuffer,
-                                                      OSP_FB_COLOR);
+      return ospMapFrameBuffer(ospFrameBuffer, OSP_FB_COLOR);
     }
 
     void FrameBuffer::unmap(const void *mem)
@@ -143,8 +155,13 @@ namespace ospray {
 
     vec2i FrameBuffer::size() const
     {
-      return child("size").valueAs<vec2i>();
-    }
+      return committed_size;
+    };
+
+    OSPFrameBufferFormat FrameBuffer::format() const
+    {
+      return committed_format;
+    };
 
     /*! \brief returns a std::string with the c++ name of this class */
     std::string FrameBuffer::toString() const
@@ -155,24 +172,28 @@ namespace ospray {
     OSPFrameBuffer FrameBuffer::handle() const
     {
       return ospFrameBuffer;
-    }
+    };
 
     void ospray::sg::FrameBuffer::createFB()
     {
-      auto fbsize = size();
-      auto useSRGB = child("useSRGB").valueAs<bool>();
+      committed_size = child("size").valueAs<vec2i>();
 
-      auto format = useSRGB ? OSP_FB_SRGBA : OSP_FB_RGBA8;
+      committed_format = OSP_FB_NONE;
+      auto key = child("colorFormat").valueAs<std::string>();
+      for(auto const& el : colorFormats)
+        if (el.first == key) {
+          committed_format = el.second;
+          break;
+        }
 
       auto useAccum    = child("useAccumBuffer").valueAs<bool>();
       auto useVariance = child("useVarianceBuffer").valueAs<bool>();
-      ospFrameBuffer = ospNewFrameBuffer((osp::vec2i&)fbsize,
-                                         (displayWallStream=="")
-                                         ? format
-                                         : OSP_FB_NONE,
+      ospFrameBuffer = ospNewFrameBuffer((osp::vec2i&)committed_size, committed_format,
                                          OSP_FB_COLOR |
                                          (useAccum ? OSP_FB_ACCUM : 0) |
                                          (useVariance ? OSP_FB_VARIANCE : 0));
+      if (toneMapper)
+        ospSetPixelOp(ospFrameBuffer, toneMapper);
       setValue(ospFrameBuffer);
     }
 

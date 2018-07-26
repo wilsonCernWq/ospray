@@ -25,18 +25,18 @@ namespace ospray {
     struct OSPSG_INTERFACE FrameBuffer : public sg::Node
     {
       /*! constructor allocates an OSP frame buffer object */
-      FrameBuffer(vec2i size = vec2i(300,300));
+      FrameBuffer(vec2i size = vec2i(1024, 768));
 
       // no destructor since we release the framebuffer object in Node::~Node()
 
-      const unsigned char *map();
+      const void *map();
       void unmap(const void *mem);
 
       void clear();
-
       void clearAccum();
 
       vec2i size() const;
+      OSPFrameBufferFormat format() const;
 
       virtual void postCommit(RenderContext &ctx) override;
 
@@ -45,6 +45,7 @@ namespace ospray {
 
       OSPFrameBuffer handle() const;
 
+     private:
       // create the ospray framebuffer for this class
       void createFB();
 
@@ -52,6 +53,14 @@ namespace ospray {
       void destroyFB();
 
       OSPFrameBuffer ospFrameBuffer {nullptr};
+      vec2i committed_size {0};
+      OSPFrameBufferFormat committed_format {OSP_FB_NONE};
+      std::vector<std::pair<std::string, OSPFrameBufferFormat>> colorFormats {
+        {"sRGB",  OSP_FB_SRGBA},
+        {"RGBA8", OSP_FB_RGBA8},
+        {"float", OSP_FB_RGBA32F},
+        {"none",  OSP_FB_NONE}
+      };
       OSPPixelOp toneMapper {nullptr};
       std::string displayWallStream;
     };
