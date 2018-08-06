@@ -228,14 +228,15 @@ Modules are searched in OS-dependent paths. `ospLoadModule` returns
 
 ### Shutting Down OSPRay
 
-When the application is finished using OSPRay (typically on application exit),
-the OSPRay API should be finalized with
+When the application is finished using OSPRay (typically on application
+exit), the OSPRay API should be finalized with
 
     void ospShutdown();
 
-This API call ensures that the current device is cleaned up appropriately. Due
-to static object allocation having non-deterministic ordering, it is recommended
-that applications call `ospShutdown()` before the calling application process
+This API call ensures that the current device is cleaned up
+appropriately. Due to static object allocation having non-deterministic
+ordering, it is recommended that applications call `ospShutdown()`
+before the calling application process
 terminates.
 
 Objects
@@ -401,41 +402,43 @@ or else an `OSPVolume` handle.
 The common parameters understood by all volume variants are summarized
 in the table below.
 
-  ------ ------------------------ ---------  -----------------------------------
-  Type   Name                       Default  Description
-  ------ ------------------------ ---------  -----------------------------------
-  vec2f  voxelRange                          minimum and maximum of the scalar
-                                             values
+  ------------------- ------------------------ ---------  -----------------------------------
+  Type                Name                       Default  Description
+  ------------------- ------------------------ ---------  -----------------------------------
+  OSPTransferFunction transferFunction                    [transfer function] to use
 
-  bool   gradientShadingEnabled       false  volume is rendered with surface
-                                             shading wrt. to normalized gradient
+  vec2f               voxelRange                          minimum and maximum of the scalar
+                                                          values
 
-  bool   preIntegration               false  use pre-integration for
-                                             [transfer function] lookups
+  bool                gradientShadingEnabled       false  volume is rendered with surface
+                                                          shading wrt. to normalized gradient
 
-  bool   singleShade                   true  shade only at the point of maximum
-                                             intensity
+  bool                preIntegration               false  use pre-integration for
+                                                          [transfer function] lookups
 
-  bool   adaptiveSampling              true  adapt ray step size based on
-                                             opacity
+  bool                singleShade                   true  shade only at the point of maximum
+                                                          intensity
 
-  float  adaptiveScalar                  15  modifier for adaptive step size
+  bool                adaptiveSampling              true  adapt ray step size based on
+                                                          opacity
 
-  float  adaptiveMaxSamplingRate          2  maximum sampling rate for adaptive
-                                             sampling
+  float               adaptiveScalar                  15  modifier for adaptive step size
 
-  float  samplingRate                 0.125  sampling rate of the volume (this
-                                             is the minimum step size for
-                                             adaptive sampling)
+  float               adaptiveMaxSamplingRate          2  maximum sampling rate for adaptive
+                                                          sampling
 
-  vec3f  specular                  gray 0.3  specular color for shading
+  float               samplingRate                 0.125  sampling rate of the volume (this
+                                                          is the minimum step size for
+                                                          adaptive sampling)
 
-  vec3f  volumeClippingBoxLower    disabled  lower coordinate (in object-space)
-                                             to clip the volume values
+  vec3f               specular                  gray 0.3  specular color for shading
 
-  vec3f  volumeClippingBoxUpper    disabled  upper coordinate (in object-space)
-                                             to clip the volume values
-  ------ ------------------------ ---------  -----------------------------------
+  vec3f               volumeClippingBoxLower    disabled  lower coordinate (in object-space)
+                                                          to clip the volume values
+
+  vec3f               volumeClippingBoxUpper    disabled  upper coordinate (in object-space)
+                                                          to clip the volume values
+  ------------------- ------------------------ ---------  -----------------------------------
   : Configuration parameters shared by all volume types.
 
 Note that if `voxelRange` is not provided for a volume then OSPRay will
@@ -860,6 +863,36 @@ For example, two streamlines of vertices `(A-B-C-D)` and `(E-F-G)`,
 respectively, would internally correspond to five links (`A-B`, `B-C`,
 `C-D`, `E-F`, and `F-G`), and would be specified via an array of
 vertices `[A,B,C,D,E,F,G]`, plus an array of link indices `[0,1,2,4,5]`.
+
+### Curves
+
+A geometry consisting of multiple curves is created by calling
+`ospNewGeometry` with type string "`curves`".  The parameters defining
+this geometry are listed in the table below.
+
+  ------------------ --------------- -------------------------------------------
+  Type               Name            Description
+  ------------------ --------------- -------------------------------------------
+  string             curveType       "flat" (ray oriented),
+                                     "round" (circular cross section),
+                                     "ribbon" (normal oriented flat curve)
+
+  string             curveBasis      "linear", "bezier", "bspline", "hermite"
+
+  vec4f[]            vertex          [data] array of vertex position and radius
+
+  int32[]            index           [data] array of indices to the first vertex
+                                     or tangent of a curve segment
+
+  vec3f[]            vertex.normal   [data] array of curve normals (only for
+                                     "ribbon" curves)
+
+  vec3f[]            vertex.tangent  [data] array of curve tangents (only for
+                                     "hermite" curves)
+  ------------------ --------------- -------------------------------------------
+  : Parameters defining a curves geometry.
+
+See Embree documentation for discussion of curve types and data formatting.
 
 ### Isosurfaces
 
@@ -1632,17 +1665,17 @@ thus individual flakes are not visible.
 The [path tracer] supports the Luminous material which emits light
 uniformly in all directions and which can thus be used to turn any
 geometric object into a light source. It is created by passing the type
-string "`Luminous`" to `ospNewMaterial2`. The amount of constant radiance
-that is emitted is determined by combining the general parameters of
-lights: [`color` and `intensity`](#lights).
+string "`Luminous`" to `ospNewMaterial2`. The amount of constant
+radiance that is emitted is determined by combining the general
+parameters of lights: [`color` and `intensity`](#lights).
 
 ![Rendering of a yellow Luminous material.][imgMaterialLuminous]
 
 ### Texture
 
-OSPRay currently implements only one texture type (`texture2d`), but is open
-for extension to other types by applications. More types may be added in future
-releases.
+OSPRay currently implements only one texture type (`texture2d`), but is
+open for extension to other types by applications. More types may be
+added in future releases.
 
 To create a new texture use
 
@@ -1681,10 +1714,10 @@ The supported texture formats for `texture2d` are:
   of type `OSPTextureFormat`.
 
 The texel data addressed by `source` starts with the texels in the lower
-left corner of the texture image, like in OpenGL. Per default a texture fetch is
-filtered by performing bi-linear interpolation of the nearest 2×2
-texels; if instead fetching only the nearest texel is desired (i.e. no
-filtering) then pass the `OSP_TEXTURE_FILTER_NEAREST` flag.
+left corner of the texture image, like in OpenGL. Per default a texture
+fetch is filtered by performing bi-linear interpolation of the nearest
+2×2 texels; if instead fetching only the nearest texel is desired (i.e.
+no filtering) then pass the `OSP_TEXTURE_FILTER_NEAREST` flag.
 
 ### Texture Transformations
 
@@ -2021,3 +2054,27 @@ channel then `ospRenderFrame` returns an estimate of the current
 variance of the rendered image, otherwise `inf` is returned. The
 estimated variance can be used by the application as a quality indicator
 and thus to decide whether to stop or to continue progressive rendering.
+
+### Progress and Cancel {-}
+
+To be informed about the progress of rendering the current frame the
+application can register a callback function of type
+
+    typedef int (*OSPProgressFunc)(void* userPtr, const float progress);
+
+via
+
+    void ospSetProgressFunc(OSPProgressFunc, void* userPtr);
+
+The provided user pointer `userPtr` is passed as first argument to the
+callback function^[That way applications can also register a member
+function of a C++ class together with the `this` pointer as `userPtr`.]
+and the reported progress is in (0–1]. If the callback function returns
+zero than the application requests to cancel rendering, i.e. the current
+`ospRenderFrame` will return at the first opportunity and the content of
+the frambuffer will be undefined. Therefore, better clear the
+framebuffer with `ospFrameBufferClear` then before a subsequent call of
+`ospRenderFrame`.
+
+Passing `NULL` as `OSPProgressFunc` function pointer disables the
+progress callback.

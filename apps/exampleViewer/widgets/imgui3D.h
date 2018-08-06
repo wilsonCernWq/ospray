@@ -103,6 +103,8 @@ namespace ospray {
        ImGui3DWidget(FrameBufferMode frameBufferMode,
                      ManipulatorMode initialManipulator=INSPECT_CENTER_MODE);
 
+      virtual ~ImGui3DWidget() = default;
+
        /*! set a default camera position that views given bounds from the
          top left front */
        virtual void setWorldBounds(const box3f &worldBounds);
@@ -156,7 +158,11 @@ namespace ospray {
        ViewPort viewPort;
        box3f  worldBounds; /*!< world bounds, to automatically set viewPort
                              lookat, mouse speed, etc */
+       bool fullScreen;
        vec2i windowSize;
+       // position and size when not in fullscreen
+       vec2i windowedPos;
+       vec2i windowedSize;
        /*! camera speed modifier - affects how many units the camera
           _moves_ with each unit on the screen */
        float motionSpeed {-1.f};
@@ -174,6 +180,7 @@ namespace ospray {
        static bool showGui;
        double displayTime;
        double renderFPS;
+       double renderFPSsmoothed;
        double guiTime;
        double totalTime;
        float  fontScale;

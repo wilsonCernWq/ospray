@@ -254,6 +254,8 @@ namespace ospray {
     }
     setWorldBounds(bbox);
 
+    ospSetProgressFunc(&ospray::ImGuiViewer::progressCallbackWrapper, this);
+
     auto &camera = scenegraph->child("camera");
     auto pos  = camera["pos"].valueAs<vec3f>();
     auto gaze = camera["gaze"].valueAs<vec3f>();
@@ -265,14 +267,17 @@ namespace ospray {
 
     originalView = viewPort;
 
-    transferFunctionWidget.loadColorMapPresets(renderer->child("transferFunctionPresets").shared_from_this());
-    transferFunctionWidget.setColorMapByName("Jet");
+    transferFunctionWidget.loadColorMapPresets(
+      renderer->child("transferFunctionPresets").shared_from_this()
+    );
 
+    transferFunctionWidget.setColorMapByName("Jet");
   }
 
   ImGuiViewer::~ImGuiViewer()
   {
     renderEngine.stop();
+    ospSetProgressFunc(nullptr, nullptr);
   }
 
   void ImGuiViewer::startAsyncRendering()
@@ -292,6 +297,13 @@ namespace ospray {
     viewPort.from = from;
     viewPort.at   = from + (normalize(dir) * dist);
     viewPort.up   = up;
+
+    computeFrame();
+  }
+
+  void ImGuiViewer::setDefaultViewportToCurrent()
+  {
+    originalView = viewPort;
   }
 
   void ImGuiViewer::setInitialSearchBoxText(const std::string &text)
@@ -380,6 +392,7 @@ namespace ospray {
     auto oldAspect = viewPort.aspect;
     viewPort = originalView;
     viewPort.aspect = oldAspect;
+    viewPort.modified = true;
   }
 
   void ImGuiViewer::resetDefaultView()
@@ -447,10 +460,15 @@ namespace ospray {
       camera["up"]  = viewPort.up;
       camera.markAsModified();
 
+      // don't cancel the first frame, otherwise it is hard to navigate
+      if (scenegraph->frameId() > 0 && cancelFrameOnInteraction)
+        cancelRendering = true;
+
       viewPort.modified = false;
     }
 
     renderFPS = renderEngine.lastFrameFps();
+    renderFPSsmoothed = renderEngine.lastFrameFpsSmoothed();
 
     auto &mappedFB = renderEngine.mapFramebuffer();
     switch (mappedFB.format()) {
@@ -539,6 +557,9 @@ namespace ospray {
       if (ImGui::Checkbox("Pause Rendering", &paused))
         toggleRenderingPaused();
 
+      if (ImGui::Checkbox("Interaction Cancels Frame",
+                          &cancelFrameOnInteraction));
+
       if (ImGui::MenuItem("Take Screenshot"))
           saveScreenshot = true;
 
@@ -565,8 +586,10 @@ namespace ospray {
       if (ImGui::Checkbox("Fly Camera Mode", &flyMode))
         manipulator = moveModeManipulator.get();
 
-      if (ImGui::MenuItem("Reset View")) resetView();
+      if (ImGui::MenuItem("Reset View to Default")) resetView();
+      if (ImGui::MenuItem("Set View as Default")) setDefaultViewportToCurrent();
       if (ImGui::MenuItem("Create Default View")) resetDefaultView();
+      ImGui::Separator();
       if (ImGui::MenuItem("Reset Accumulation")) viewPort.modified = true;
       if (ImGui::MenuItem("Print View")) printViewport();
 
@@ -602,12 +625,36 @@ namespace ospray {
     if (ImGui::CollapsingHeader("Rendering Statistics", "Rendering Statistics",
                                 true, false)) {
       ImGui::NewLine();
-      ImGui::Text("OSPRay render rate: %.1f fps", renderFPS);
+      if (renderFPS > 1.f) {
+        ImGui::Text("OSPRay render rate: %.1f fps", renderFPS);
+      } else {
+        ImGui::Text("OSPRay render time: %.1f sec. Frame progress: ", 1.f/renderFPS);
+        ImGui::SameLine();
+        ImGui::ProgressBar(frameProgress);
+      }
       ImGui::Text("  Total GUI frame rate: %.1f fps", ImGui::GetIO().Framerate);
       ImGui::Text("  Total 3dwidget time: %.1f ms", lastTotalTime*1000.f);
       ImGui::Text("  GUI time: %.1f ms", lastGUITime*1000.f);
       ImGui::Text("  display pixel time: %.1f ms", lastDisplayTime*1000.f);
-      ImGui::Text("Variance: %.3f", renderer->getLastVariance());
+      auto variance = renderer->getLastVariance();
+      ImGui::Text("Variance: %.3f", variance);
+
+      auto eta = scenegraph->estimatedSeconds();
+      if (std::isfinite(eta)) {
+        auto sec = scenegraph->elapsedSeconds();
+        ImGui::SameLine();
+        ImGui::Text(" Total progress: ");
+
+        char str[100];
+        if (sec < eta)
+          snprintf(str, sizeof(str), "%.1f s / %.1f s", sec, eta);
+        else
+          snprintf(str, sizeof(str), "%.1f s", sec);
+
+        ImGui::SameLine();
+        ImGui::ProgressBar(sec/eta, ImVec2(-1,0), str);
+      }
+
       ImGui::NewLine();
     }
   }
@@ -861,6 +908,19 @@ namespace ospray {
   void ImGuiViewer::setColorMap(std::string name)
   {
     transferFunctionWidget.setColorMapByName(name, true);
+  }
+
+  int ImGuiViewer::progressCallback(const float progress)
+  {
+    frameProgress = progress;
+
+    // one-shot cancel
+    return !cancelRendering.exchange(false);
+  }
+
+  int ImGuiViewer::progressCallbackWrapper(void * ptr, const float progress)
+  {
+    return ((ImGuiViewer*)ptr)->progressCallback(progress);
   }
 
 } // ::ospray
