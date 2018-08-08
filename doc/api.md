@@ -1423,6 +1423,8 @@ listed in the table below.
 
   vec3f  sheenColor             white  sheen color tint
 
+  float  sheenTint                  0  how much sheen is tinted from sheenColor towards baseColor
+
   float  sheenRoughness           0.2  sheen roughness in [0–1], 0 is perfectly smooth
 
   float  opacity                    1  cut-out opacity/transparency, 1 is fully opaque

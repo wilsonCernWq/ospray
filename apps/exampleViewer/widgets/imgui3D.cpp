@@ -44,9 +44,73 @@
 #include <stdexcept>
 #include <string>
 
-extern "C" void glDrawPixels( GLsizei width, GLsizei height,
-                              GLenum format, GLenum type,
-                              const GLvoid *pixels );
+#include <atomic>
+GLuint tex;
+
+std::atomic<bool> init {false};
+
+static void create_textures()
+{
+  if(!init) glGenTextures(1, &tex);
+  init = true;
+}
+
+static void transfertexture(GLsizei width, GLsizei height,
+                            GLenum format, GLenum type,
+                            const GLvoid *pixels)
+{
+  glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+               type, pixels);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+}
+
+static void drawquad(GLsizei width, GLsizei height)
+{
+  glMatrixMode(GL_PROJECTION);
+  glPushMatrix();
+  glLoadIdentity();
+  glOrtho(0.0, width, 0.0, height, -1.0, 1.0);
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
+
+  glLoadIdentity();
+  glDisable(GL_LIGHTING);
+
+  glColor3f(1,1,1);
+  glEnable(GL_TEXTURE_2D);
+  glBindTexture(GL_TEXTURE_2D, tex);
+  glEnable(GL_TEXTURE_2D);
+
+  // Draw a textured quad
+  glBegin(GL_QUADS);
+  glTexCoord2f(0, 0); glVertex3f(0, 0, 0);
+  glTexCoord2f(0, 1); glVertex3f(0, height, 0);
+  glTexCoord2f(1, 1); glVertex3f(width, height, 0);
+  glTexCoord2f(1, 0); glVertex3f(width, 0, 0);
+  glEnd();
+
+  glDisable(GL_TEXTURE_2D);
+  glBindTexture(GL_TEXTURE_2D, tex);
+
+  glPopMatrix();
+
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+
+  glMatrixMode(GL_MODELVIEW);
+}
+
+void drawPixels(ospcommon::vec2i windowSize,
+                ospcommon::vec2i renderSize,
+                GLenum pixelFormat,
+                GLenum type,
+                const GLvoid *pixels)
+{
+  create_textures();
+  transfertexture(renderSize.x,renderSize.y,pixelFormat,type,pixels);
+  drawquad(windowSize.x,windowSize.y);
+}
 
 using ospcommon::utility::getEnvVar;
 
@@ -182,6 +246,7 @@ namespace ospray {
     void ImGui3DWidget::reshape(const vec2i &newSize)
     {
       windowSize = newSize;
+      renderSize = windowSize * renderResolutionScale;
       glViewport(0, 0, newSize.x, newSize.y);
       viewPort.aspect = newSize.x/float(newSize.y);
       viewPort.modified = true;
@@ -196,9 +261,9 @@ namespace ospray {
       }
 
       if (frameBufferMode == ImGui3DWidget::FRAMEBUFFER_UCHAR && ucharFB) {
-        glDrawPixels(fbSize.x, fbSize.y, GL_RGBA, GL_UNSIGNED_BYTE, ucharFB);
+        drawPixels(windowSize, renderSize, GL_RGBA, GL_UNSIGNED_BYTE, ucharFB);
       } else if (frameBufferMode == ImGui3DWidget::FRAMEBUFFER_FLOAT && floatFB) {
-        glDrawPixels(fbSize.x, fbSize.y, GL_RGBA, GL_FLOAT, floatFB);
+        drawPixels(windowSize, renderSize, GL_RGBA, GL_FLOAT, floatFB);
       } else {
         glClearColor(0.f,0.f,0.f,1.f);
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
@@ -246,7 +311,9 @@ namespace ospray {
       glfwSetWindowTitle(window, title.c_str());
     }
 
-    void ImGui3DWidget::create(const char *title, const bool fullScreen_, const vec2i windowSize)
+    void ImGui3DWidget::create(const char *title,
+                               const bool fullScreen_,
+                               const vec2i windowSize)
     {
       fullScreen = fullScreen_;
       // Setup window
@@ -520,8 +587,10 @@ namespace ospray {
       case '-':
         motionSpeed /= 1.5f;
         break;
-      case 27 /*ESC*/:
       case 'q':
+        std::cout << "'q' to quit is disabled, use 'Q' to quit instead"
+                  << std::endl;
+        break;
       case 'Q':
         exitRequestedByUser = true;
         break;

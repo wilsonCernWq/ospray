@@ -325,7 +325,7 @@ namespace ospray {
   void ImGuiViewer::reshape(const vec2i &newSize)
   {
     ImGui3DWidget::reshape(newSize);
-    scenegraph->child("frameBuffer")["size"].setValue(newSize);
+    scenegraph->child("frameBuffer")["size"].setValue(renderSize);
   }
 
   void ImGuiViewer::keypress(char key)
@@ -484,10 +484,13 @@ namespace ospray {
         frameBufferMode = ImGui3DWidget::FRAMEBUFFER_FLOAT;
         break;
     }
-    fbSize = mappedFB.size();
-    ucharFB = (uint32_t *)mappedFB.data();
 
-    ImGui3DWidget::display();
+    fbSize = mappedFB.size();
+
+    if (fbSize == renderSize) {
+      ucharFB = (uint32_t *)mappedFB.data();
+      ImGui3DWidget::display();
+    }
 
     if (saveScreenshot) {
       std::string filename("ospexampleviewer");
@@ -560,8 +563,43 @@ namespace ospray {
       if (ImGui::Checkbox("Interaction Cancels Frame",
                           &cancelFrameOnInteraction));
 
+      ImGui::Separator();
+
+      if (ImGui::BeginMenu("Scale Resolution")) {
+        float scale = renderResolutionScale;
+        if (ImGui::MenuItem("0.25x")) renderResolutionScale = 0.25f;
+        if (ImGui::MenuItem("0.50x")) renderResolutionScale = 0.5f;
+        if (ImGui::MenuItem("0.75x")) renderResolutionScale = 0.75f;
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("1.00x")) renderResolutionScale = 1.f;
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("1.25x")) renderResolutionScale = 1.25f;
+        if (ImGui::MenuItem("2.00x")) renderResolutionScale = 2.0f;
+        if (ImGui::MenuItem("4.00x")) renderResolutionScale = 4.0f;
+
+        ImGui::Separator();
+
+        if (ImGui::BeginMenu("custom")) {
+          ImGui::InputFloat("x##fb_scaling", &renderResolutionScale);
+          ImGui::EndMenu();
+        }
+
+        if (scale != renderResolutionScale)
+          reshape(windowSize);
+
+        ImGui::EndMenu();
+      }
+
+      ImGui::Separator();
+
       if (ImGui::MenuItem("Take Screenshot"))
           saveScreenshot = true;
+
+      ImGui::Separator();
 
       if (ImGui::MenuItem("Quit")) {
         renderEngine.stop();

@@ -112,6 +112,10 @@ struct Principled
   vec3f sheenColor;
   TextureParam sheenColorMap;
 
+  // sheen tint in [0, 1]
+  float sheenTint;
+  TextureParam sheenTintMap;
+
   float sheenRoughness;
   TextureParam sheenRoughnessMap;
 
@@ -334,7 +338,9 @@ const varying BSDF* varying Principled_getBSDF(const uniform PathTraceMaterial* 
     const float sheen = clamp(self->sheen * get1f(self->sheenMap, dg, 1.f));
     if (sheen > EPS)
     {
-      const vec3f sheenColor = clamp(self->sheenColor * get3f(self->sheenColorMap, dg, make_vec3f(1.f)));
+      vec3f sheenColor = clamp(self->sheenColor * get3f(self->sheenColorMap, dg, make_vec3f(1.f)));
+      const float sheenTint = clamp(self->sheenTint * get1f(self->sheenTintMap, dg, 1.f));
+      sheenColor = lerp(sheenTint, sheenColor, baseColor);
       const float sheenRoughness = clamp(self->sheenRoughness * get1f(self->sheenRoughnessMap, dg, 1.f));
 
       bsdf = MicrofacetSheenLayer_create(ctx, coatFrame, bsdf, sheenColor, sheenRoughness, sheen);
@@ -529,6 +535,7 @@ export void* uniform PathTracer_Principled_set(void* uniform _self,
     uniform float coatNormal, void* uniform coatNormalMap, const uniform affine2f& coatNormalXform, const uniform linear2f& coatNormalRot,
     uniform float sheen, void* uniform sheenMap, const uniform affine2f& sheenXform,
     const uniform vec3f& sheenColor, void* uniform sheenColorMap, const uniform affine2f& sheenColorXform,
+    uniform float sheenTint, void* uniform sheenTintMap, const uniform affine2f& sheenTintXform,
     uniform float sheenRoughness, void* uniform sheenRoughnessMap, const uniform affine2f& sheenRoughnessXform,
     uniform float opacity, void* uniform opacityMap, const uniform affine2f& opacityXform,
     uniform bool thin,
@@ -605,6 +612,9 @@ export void* uniform PathTracer_Principled_set(void* uniform _self,
   self->sheenColor = sheenColor;
   self->sheenColorMap = make_TextureParam((uniform Texture2D*)sheenColorMap, sheenColorXform);
 
+  self->sheenTint = sheenTint;
+  self->sheenTintMap = make_TextureParam((uniform Texture2D*)sheenTintMap, sheenTintXform);
+
   self->sheenRoughness = sheenRoughness;
   self->sheenRoughnessMap = make_TextureParam((uniform Texture2D*)sheenRoughnessMap, sheenRoughnessXform);
 
@@ -655,6 +665,7 @@ export void* uniform PathTracer_Principled_create()
     1.f, NULL, xform, make_LinearSpace2f_identity(), // coatNormal
     0.f, NULL, xform, // sheen
     make_vec3f(1.f), NULL, xform, // sheenColor
+    0.f, NULL, xform, // sheenTint
     0.2f, NULL, xform, // sheenRoughness
     1.f, NULL, xform, // opacity
     false, // thin
