@@ -1395,7 +1395,9 @@ listed in the table below.
   float  rotation                   0  rotation of the direction of anisotropy in [0–1], 1 is
                                        going full circle
 
-  float  normal                     1  normal map/scale
+  float  normal                     1  default normal map/scale for all layers
+
+  float  baseNormal                 1  base normal map/scale (overrides default normal)
 
   bool   thin                   false  flag specifying whether the material is thin or solid
 
@@ -1417,11 +1419,13 @@ listed in the table below.
 
   float  coatRoughness              0  clear coat roughness in [0–1], 0 is perfectly smooth
 
-  float  coatNormal                 1  clear coat normal map/scale
+  float  coatNormal                 1  clear coat normal map/scale (overrides default normal)
 
   float  sheen                      0  sheen layer weight in [0–1]
 
   vec3f  sheenColor             white  sheen color tint
+
+  float  sheenTint                  0  how much sheen is tinted from sheenColor towards baseColor
 
   float  sheenRoughness           0.2  sheen roughness in [0–1], 0 is perfectly smooth
 

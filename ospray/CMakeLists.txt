@@ -141,6 +141,8 @@ SET(OSPRAY_ISPC_DEVICE_SOURCES
   math/box.ispc
   math/Distribution1D.ispc
   math/Distribution2D.ispc
+  math/sobol.ih
+  math/sobol.ispc
   math/spectrum.h
   math/spectrum.ih
   math/spectrum.ispc
@@ -270,7 +272,6 @@ OSPRAY_INSTALL_SDK_HEADERS(
   common/ObjectHandle.h
   common/OSPCommon.h
   common/OSPCommon.ih
-  common/Ray.h
   common/Ray.ih
   common/Texture.h
   common/Util.h

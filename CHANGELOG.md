@@ -11,6 +11,9 @@ Version History
 -   Applications can get information about the progress of rendering the
     current frame, and optionally cancel it, by registering a callback
     function via `ospSetProgressFunc()`
+-   Added sheenTint parameter to Principled material
+-   Added baseNormal parameter to Principled material
+-   Added low-discrepancy sampling to path tracer
 
 ### Changes in v1.6.1:
 
