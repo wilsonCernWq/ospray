@@ -10,6 +10,7 @@
     --gcc-exec gcc-7 g++-7 \
     --gcc-dir /usr/bin \
     --cmake-dir cmake \
+    -a " -D Snappy_DIR=/home/sci/qwu/software/Lagodelcielo/snappy/install/lib64/cmake/Snappy " \
     -a " -D OSPRAY_BUILD_ISA=ALL" \
     -a " -D OSPRAY_MODULE_MPI=ON" \
     -a " -D OSPRAY_MODULE_MPI_APPS=OFF" \
