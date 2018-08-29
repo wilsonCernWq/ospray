@@ -104,7 +104,6 @@ ospray_create_library(ospray_sg SHARED
   common/Renderable.cpp
   common/RenderContext.h
   common/Serialization.cpp
-  common/Texture2D.cpp
   common/Transform.cpp
   common/Model.cpp
   common/Instance.cpp
@@ -148,6 +147,10 @@ ospray_create_library(ospray_sg SHARED
   importer/importXYZ.cpp
 
   importer/detail_xyz/Model.cpp
+
+  texture/Texture.cpp
+  texture/Texture2D.cpp
+  texture/TextureVolume.cpp
 
   ${SG_VTK_SRCS}
   ${CHOMBO_SRCS}
@@ -202,7 +205,6 @@ ospray_install_sdk_headers(
   common/RuntimeError.h
   common/Selector.h
   common/Serialization.h
-  common/Texture2D.h
   common/Transform.h
 
   DESTINATION ${OSPRAY_SG_SDK_INSTALL_LOC}/common
@@ -236,6 +238,14 @@ ospray_install_sdk_headers(
   module/Module.h
 
   DESTINATION ${OSPRAY_SG_SDK_INSTALL_LOC}/module
+)
+
+ospray_install_sdk_headers(
+  texture/Texture.h
+  texture/Texture2D.h
+  texture/TextureVolume.h
+
+  DESTINATION ${OSPRAY_SG_SDK_INSTALL_LOC}/texture
 )
 
 ospray_install_sdk_headers(

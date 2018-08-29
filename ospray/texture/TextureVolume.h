@@ -16,37 +16,21 @@
 
 #pragma once
 
-#include "NodeList.h"
-#include "../texture/Texture.h"
+#include "Texture.h"
+#include "../volume/Volume.h"
 
 namespace ospray {
-  namespace sg {
 
-    /*! \brief Base class for all Material Types */
-    struct OSPSG_INTERFACE Material : public Node
-    {
-      Material();
+  /*! \brief A Texture defined through a 2D Image. */
+  struct OSPRAY_SDK_INTERFACE TextureVolume : public Texture
+  {
+    virtual ~TextureVolume() override = default;
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      virtual std::string toString() const override;
+    virtual std::string toString() const override;
 
-      virtual void preCommit(RenderContext &ctx) override;
-      virtual void postCommit(RenderContext &ctx) override;
+    virtual void commit() override;
 
-      //! a logical name, of no other useful meaning whatsoever
-      std::string name;
-      //! indicates the type of material/shader the renderer should use for
-      //  these parameters
-      std::string type;
-      //! vector of textures used by the material
-      // Carson: what is this?  seems to be used by RIVL.  Is this supposed to be map_Kd?
-      // how do I use a vector of textures?
-      std::vector<std::shared_ptr<Texture>> textures;
+    Ref<Volume> volume;
+  };
 
-      OSPRenderer ospRenderer {nullptr};
-    };
-
-    using MaterialList = NodeList<Material>;
-
-  } // ::ospray::sg
 } // ::ospray

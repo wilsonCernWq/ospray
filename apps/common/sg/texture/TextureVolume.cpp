@@ -14,39 +14,39 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
-
-#include "NodeList.h"
-#include "../texture/Texture.h"
+#include "TextureVolume.h"
 
 namespace ospray {
   namespace sg {
 
-    /*! \brief Base class for all Material Types */
-    struct OSPSG_INTERFACE Material : public Node
+    // TextureVolume definitions //////////////////////////////////////////////////
+
+    TextureVolume::TextureVolume() : Texture("volume") {}
+
+    std::string TextureVolume::toString() const
     {
-      Material();
+      return "ospray::sg::TextureVolume";
+    }
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      virtual std::string toString() const override;
+    void TextureVolume::postCommit(RenderContext &ctx)
+    {
+      auto ospTexture = valueAs<OSPTexture>();
 
-      virtual void preCommit(RenderContext &ctx) override;
-      virtual void postCommit(RenderContext &ctx) override;
+      auto &volume = child("volume");
+      ospSetObject(ospTexture, "volume", volume.valueAs<OSPVolume>());
 
-      //! a logical name, of no other useful meaning whatsoever
-      std::string name;
-      //! indicates the type of material/shader the renderer should use for
-      //  these parameters
-      std::string type;
-      //! vector of textures used by the material
-      // Carson: what is this?  seems to be used by RIVL.  Is this supposed to be map_Kd?
-      // how do I use a vector of textures?
-      std::vector<std::shared_ptr<Texture>> textures;
+      Texture::postCommit(ctx);
+    }
 
-      OSPRenderer ospRenderer {nullptr};
-    };
+    void TextureVolume::preTraverse(RenderContext &ctx,
+                                    const std::string& operation,
+                                    bool& traverseChildren)
+    {
+      traverseChildren = (operation != "render");
+      Node::preTraverse(ctx, operation, traverseChildren);
+    }
 
-    using MaterialList = NodeList<Material>;
+    OSP_REGISTER_SG_NODE(TextureVolume);
 
   } // ::ospray::sg
 } // ::ospray

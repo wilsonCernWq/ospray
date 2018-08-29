@@ -14,39 +14,39 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
-
-#include "NodeList.h"
-#include "../texture/Texture.h"
+#include "Texture.h"
 
 namespace ospray {
   namespace sg {
 
-    /*! \brief Base class for all Material Types */
-    struct OSPSG_INTERFACE Material : public Node
+    // Texture definitions ////////////////////////////////////////////////////
+
+    Texture::Texture(const std::string &type)
     {
-      Material();
+      setValue((OSPTexture)nullptr);
+      ospTextureType = type;
+    }
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      virtual std::string toString() const override;
+    std::string Texture::toString() const
+    {
+      return "ospray::sg::Texture";
+    }
 
-      virtual void preCommit(RenderContext &ctx) override;
-      virtual void postCommit(RenderContext &ctx) override;
+    void Texture::preCommit(RenderContext &)
+    {
+      auto ospTexture = valueAs<OSPTexture>();
+      if (ospTexture != nullptr)
+        return; // already created
 
-      //! a logical name, of no other useful meaning whatsoever
-      std::string name;
-      //! indicates the type of material/shader the renderer should use for
-      //  these parameters
-      std::string type;
-      //! vector of textures used by the material
-      // Carson: what is this?  seems to be used by RIVL.  Is this supposed to be map_Kd?
-      // how do I use a vector of textures?
-      std::vector<std::shared_ptr<Texture>> textures;
+      ospTexture = ospNewTexture(ospTextureType.c_str());
+      setValue(ospTexture);
+    }
 
-      OSPRenderer ospRenderer {nullptr};
-    };
-
-    using MaterialList = NodeList<Material>;
+    void Texture::postCommit(RenderContext &)
+    {
+      auto ospTexture = valueAs<OSPTexture>();
+      ospCommit(ospTexture);
+    }
 
   } // ::ospray::sg
 } // ::ospray

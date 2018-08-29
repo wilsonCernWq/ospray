@@ -14,39 +14,33 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
+#include "TextureVolume.h"
+#include "TextureVolume_ispc.h"
 
-#include "NodeList.h"
-#include "../texture/Texture.h"
+#include "../common/Data.h"
 
 namespace ospray {
-  namespace sg {
 
-    /*! \brief Base class for all Material Types */
-    struct OSPSG_INTERFACE Material : public Node
-    {
-      Material();
+  std::string TextureVolume::toString() const
+  {
+    return "ospray::TextureVolume";
+  }
 
-      /*! \brief returns a std::string with the c++ name of this class */
-      virtual std::string toString() const override;
+  void TextureVolume::commit()
+  {
+    if (this->ispcEquivalent)
+      ispc::delete_uniform(ispcEquivalent);
 
-      virtual void preCommit(RenderContext &ctx) override;
-      virtual void postCommit(RenderContext &ctx) override;
+    auto v = dynamic_cast<Volume*>(getParamObject("volume"));
 
-      //! a logical name, of no other useful meaning whatsoever
-      std::string name;
-      //! indicates the type of material/shader the renderer should use for
-      //  these parameters
-      std::string type;
-      //! vector of textures used by the material
-      // Carson: what is this?  seems to be used by RIVL.  Is this supposed to be map_Kd?
-      // how do I use a vector of textures?
-      std::vector<std::shared_ptr<Texture>> textures;
+    if (v == nullptr)
+      throw std::runtime_error("no volume specified on 'volume' texture!");
 
-      OSPRenderer ospRenderer {nullptr};
-    };
+    volume = v;
 
-    using MaterialList = NodeList<Material>;
+    this->ispcEquivalent = ispc::TextureVolume_create(v->getIE());
+  }
 
-  } // ::ospray::sg
+  OSP_REGISTER_TEXTURE(TextureVolume, volume);
+
 } // ::ospray

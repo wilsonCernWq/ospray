@@ -16,37 +16,51 @@
 
 #pragma once
 
-#include "NodeList.h"
-#include "../texture/Texture.h"
+// sg
+#include "Texture.h"
+#include "../common/Data.h"
+// ospcommon
+#include "ospcommon/FileName.h"
 
 namespace ospray {
   namespace sg {
 
-    /*! \brief Base class for all Material Types */
-    struct OSPSG_INTERFACE Material : public Node
+    /*! \brief C++ wrapper for a 2D Texture */
+    struct OSPSG_INTERFACE Texture2D : public Texture
     {
-      Material();
-
-      /*! \brief returns a std::string with the c++ name of this class */
-      virtual std::string toString() const override;
+      /*! constructor */
+      Texture2D();
+      virtual ~Texture2D() override = default;
 
       virtual void preCommit(RenderContext &ctx) override;
       virtual void postCommit(RenderContext &ctx) override;
 
-      //! a logical name, of no other useful meaning whatsoever
-      std::string name;
-      //! indicates the type of material/shader the renderer should use for
-      //  these parameters
-      std::string type;
-      //! vector of textures used by the material
-      // Carson: what is this?  seems to be used by RIVL.  Is this supposed to be map_Kd?
-      // how do I use a vector of textures?
-      std::vector<std::shared_ptr<Texture>> textures;
+      /*! \brief returns a std::string with the c++ name of this class */
+      std::string toString() const override;
 
-      OSPRenderer ospRenderer {nullptr};
+      //! \brief load texture from given file.
+      /*! \detailed if file does not exist, or cannot be loaded for
+          some reason, return NULL. Multiple loads from the same file
+          will return the *same* texture object */
+      static std::shared_ptr<Texture2D> load(const FileName &fileName,
+                                             const bool preferLinear = false,
+                                             const bool nearestFilter = false);
+      static void clearTextureCache();
+
+      //! texture size, in pixels
+      vec2i size {-1};
+      int channels{0};
+      int depth{0};
+      bool preferLinear{false};
+      bool nearestFilter{false};
+
+      std::shared_ptr<sg::DataBuffer> texelData;
+      void* data{nullptr};
+
+      bool committed{false};
+
+      static std::map<std::string,std::shared_ptr<Texture2D> > textureCache;
     };
-
-    using MaterialList = NodeList<Material>;
 
   } // ::ospray::sg
 } // ::ospray
