@@ -26,8 +26,8 @@ readme.pdf
 !/modules/mpi
 !/modules/pluggableGeometryExample
 !/modules/simdGeometryExample
-Session.vim
-imgui.ini
-premake.local.*
+*.vim
 .idea/
-.DS_Store
+premake.local.*
+cmake-build*/
+
