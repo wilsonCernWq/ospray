@@ -41,6 +41,11 @@ namespace ospray {
     void setInitialSearchBoxText(const std::string &text);
     void setColorMap(std::string name);
 
+    void setMaxNumFrame(const size_t n) { maximumNumOfFrames = n; }
+    void setMinVariance(const double v) { minimumVariance = v; }
+    void addCheckPoint(double v) { checkpoints.emplace_back(v); }
+    void addCheckPoint(size_t f) { checkpoints.emplace_back(f); }
+
     template <typename CALLBACK_T>
     void addCustomUICallback(const std::string &name, CALLBACK_T &&f);
 
@@ -85,6 +90,30 @@ namespace ospray {
     double lastGUITime;
     double lastDisplayTime;
     double lastTotalTime;
+
+    struct CheckPoint {
+      bool used = false;
+      bool useVariance;
+      union {
+        double variance;
+        size_t frame;
+      };
+      CheckPoint(double v) : useVariance(true), variance(v) {}
+      CheckPoint(size_t f) : useVariance(false), frame(f) {}
+      bool check(double v, size_t f) {
+        if (!used) {
+          if (useVariance ? (v <= variance) : (f >= frame)) {
+            used = true;
+            return true;
+          }
+        }
+        return false;
+      }
+    };
+    std::vector<CheckPoint> checkpoints; // = { CheckPoint(size_t(10)), CheckPoint(2.0) };
+    double minimumVariance {-1.f};
+    size_t maximumNumOfFrames {0};
+    size_t currentNumOfFrames {0};
 
     imgui3D::ImGui3DWidget::ViewPort originalView;
     bool saveScreenshot {false}; // write next mapped framebuffer to disk

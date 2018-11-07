@@ -437,6 +437,8 @@ namespace ospray {
 
   void ImGuiViewer::display()
   {
+    bool exitOnReturn = false;
+
     if (renderEngine.hasNewPickResult()) {
       auto picked = renderEngine.getPickResult();
       if (picked.hit) {
@@ -478,11 +480,33 @@ namespace ospray {
     renderFPSsmoothed = renderEngine.lastFrameFpsSmoothed();
 
     if (renderEngine.hasNewFrame()) {
+
+      std::string filename("ospexampleviewer");
+
+      const double variance = renderer->getLastVariance();
+      currentNumOfFrames++;
+
+      if ((maximumNumOfFrames > 0 && currentNumOfFrames >= maximumNumOfFrames) ||
+          (minimumVariance > 0.f && variance <= minimumVariance)) {
+        exitOnReturn = true;
+        saveScreenshot = true;
+      }
+
+      for (auto& c : checkpoints) {
+        if (c.check(variance, currentNumOfFrames)) { saveScreenshot = true; break; }
+      }
+
+      if (saveScreenshot) {
+        std::stringstream stream;
+        stream << "_f" << currentNumOfFrames
+               << "_v" << std::fixed << std::setprecision(2) << variance;
+        filename += stream.str();
+      }
+
       auto &mappedFB = renderEngine.mapFramebuffer();
       auto fbSize = mappedFB.size();
       auto fbData = mappedFB.data();
       GLenum texelType;
-      std::string filename("ospexampleviewer");
       switch (mappedFB.format()) {
         default: /* fallthrough */
         case OSP_FB_NONE:
@@ -537,6 +561,13 @@ namespace ospray {
     lastTotalTime = ImGui3DWidget::totalTime;
     lastGUITime = ImGui3DWidget::guiTime;
     lastDisplayTime = ImGui3DWidget::displayTime;
+
+    // quit automatically
+    if (exitOnReturn) {
+      renderEngine.stop();
+      std::cout << "automatically exit" << std::endl;
+      std::exit(0);
+    }
   }
 
   void ImGuiViewer::buildGui()
@@ -737,6 +768,7 @@ namespace ospray {
     if (ImGui::CollapsingHeader("Rendering Statistics", "Rendering Statistics",
                                 true, false)) {
       ImGui::NewLine();
+      ImGui::Text("number of frames: %I64u", currentNumOfFrames);
       if (renderFPS > 1.f) {
         ImGui::Text("OSPRay render rate: %.1f fps", renderFPS);
       } else {

@@ -23,6 +23,11 @@
 namespace ospray {
   namespace app {
 
+    std::vector<std::string> checkpointsF;
+    std::vector<std::string> checkpointsV;
+    int maxFrame = 0;
+    double minVariance = -1.f;
+
     class OSPExampleViewer : public OSPApp
     {
       void render(const std::shared_ptr<sg::Frame> &) override;
@@ -36,6 +41,11 @@ namespace ospray {
     void OSPExampleViewer::render(const std::shared_ptr<sg::Frame> &root)
     {
       ospray::ImGuiViewer window(root);
+
+      window.setMaxNumFrame(size_t(maxFrame));
+      window.setMinVariance(minVariance);
+      for (auto& s : checkpointsF) { window.addCheckPoint(size_t(stoi(s))); }
+      for (auto& s : checkpointsV) { window.addCheckPoint(stod(s)); }
 
       window.create("OSPRay Example Viewer App",
                     fullscreen, vec2i(width, height));
@@ -73,6 +83,22 @@ namespace ospray {
           --i;
         } else if (arg == "--searchText") {
           initialTextForNodeSearch = av[i + 1];
+          removeArgs(ac, av, i, 2);
+          --i;
+        } else if (arg == "--maxFrame") {
+          maxFrame = atoi(av[i + 1]);
+          removeArgs(ac, av, i, 2);
+          --i;
+        } else if (arg == "--minVariance") {
+          minVariance = atof(av[i + 1]);
+          removeArgs(ac, av, i, 2);
+          --i;
+        } else if (arg == "--checkpoint-frame") {
+          checkpointsF.emplace_back(av[i + 1]);
+          removeArgs(ac, av, i, 2);
+          --i;
+        } else if (arg == "--checkpoint-variance") {
+          checkpointsV.emplace_back(av[i + 1]);
           removeArgs(ac, av, i, 2);
           --i;
         }
