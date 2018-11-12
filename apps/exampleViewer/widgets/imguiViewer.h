@@ -45,6 +45,7 @@ namespace ospray {
     void setMinVariance(const double v) { minimumVariance = v; }
     void addCheckPoint(double v) { checkpoints.emplace_back(v); }
     void addCheckPoint(size_t f) { checkpoints.emplace_back(f); }
+    void setScreenShotFileName(std::string str) { screenShotBaseName = str; }
 
     template <typename CALLBACK_T>
     void addCustomUICallback(const std::string &name, CALLBACK_T &&f);
@@ -114,6 +115,7 @@ namespace ospray {
     double minimumVariance {-1.f};
     size_t maximumNumOfFrames {0};
     size_t currentNumOfFrames {0};
+    std::string screenShotBaseName {"ospexampleviewer"};
 
     imgui3D::ImGui3DWidget::ViewPort originalView;
     bool saveScreenshot {false}; // write next mapped framebuffer to disk

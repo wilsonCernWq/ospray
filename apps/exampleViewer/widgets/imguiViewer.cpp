@@ -481,7 +481,7 @@ namespace ospray {
 
     if (renderEngine.hasNewFrame()) {
 
-      std::string filename("ospexampleviewer");
+      std::string filename = screenShotBaseName;
 
       const double variance = renderer->getLastVariance();
       currentNumOfFrames++;

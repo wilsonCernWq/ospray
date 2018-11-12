@@ -27,6 +27,7 @@ namespace ospray {
     std::vector<std::string> checkpointsV;
     int maxFrame = 0;
     double minVariance = -1.f;
+    std::string basename = "ospexampleviewer";
 
     class OSPExampleViewer : public OSPApp
     {
@@ -46,6 +47,7 @@ namespace ospray {
       window.setMinVariance(minVariance);
       for (auto& s : checkpointsF) { window.addCheckPoint(size_t(stoi(s))); }
       for (auto& s : checkpointsV) { window.addCheckPoint(stod(s)); }
+      window.setScreenShotFileName(basename);
 
       window.create("OSPRay Example Viewer App",
                     fullscreen, vec2i(width, height));
@@ -99,6 +101,10 @@ namespace ospray {
           --i;
         } else if (arg == "--checkpoint-variance") {
           checkpointsV.emplace_back(av[i + 1]);
+          removeArgs(ac, av, i, 2);
+          --i;
+        } else if (arg == "--fname") {
+          basename = av[i + 1];
           removeArgs(ac, av, i, 2);
           --i;
         }
