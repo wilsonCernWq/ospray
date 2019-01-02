@@ -1,6 +1,22 @@
 Version History
 ---------------
 
+### Changes in v1.8.0:
+
+-   Automatic epsilon handling
+-   Fixed artifacts for scaled instances of spheres, cylinders and
+    streamlines
+-   Improvements to precision of intersections with cylinders and
+    streamlines
+-   Fix Quadlight: the emitting side is now indeed in direction
+    `edge1`×`edge2`
+
+### Changes in v1.7.3:
+
+-   Make sure a "`default`" device can always be created
+-   Fix `ospNewTexture2D` (completely implementing old behaviour)
+-   Cleanup any shared object handles from the OS created from `ospLoadModule()`
+
 ### Changes in v1.7.2:
 
 -   Fix issue in `mpi_offload` device where `ospRelease` would sometimes not

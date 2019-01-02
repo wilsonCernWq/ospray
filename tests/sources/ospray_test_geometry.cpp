@@ -20,6 +20,7 @@
 
 using OSPRayTestScenes::Base;
 using OSPRayTestScenes::SingleObject;
+using OSPRayTestScenes::SpherePrecision;
 using OSPRayTestScenes::Box;
 using OSPRayTestScenes::Sierpinski;
 using OSPRayTestScenes::Pipes;
@@ -289,6 +290,17 @@ TEST_P(SingleObject, simpleStreamlines) {
 
 INSTANTIATE_TEST_CASE_P(Scivis, SingleObject, ::testing::Combine(::testing::Values("scivis"), ::testing::Values("OBJMaterial")));
 INSTANTIATE_TEST_CASE_P(Pathtracer, SingleObject, ::testing::Combine(::testing::Values("pathtracer"), ::testing::Values("OBJMaterial", "Glass", "Luminous")));
+
+
+TEST_P(SpherePrecision, sphere) {
+  PerformRenderTest();
+}
+INSTANTIATE_TEST_CASE_P(Intersection, SpherePrecision, ::testing::Combine(
+      ::testing::Values(0.001f, 3.e5f),
+      ::testing::Values(3.f, 8000.0f, 2.e5f),
+      ::testing::Values(true, false),
+      ::testing::Values("scivis", "pathtracer")
+      ));
 
 TEST_P(Box, basicScene) {
   PerformRenderTest();

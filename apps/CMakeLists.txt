@@ -29,6 +29,8 @@ OPTION(OSPRAY_APPS_BENCHMARK "Build ospBenchmark application." ON)
 OPTION(OSPRAY_APPS_EXAMPLEVIEWER "Build example viewer apps" ON)
 OPTION(OSPRAY_APPS_UTILITIES "Build utility apps" ON)
 
+ADD_SUBDIRECTORY(common/ospray_testing)
+
 # common utilities
 IF(OSPRAY_APPS_BENCHMARK OR OSPRAY_APPS_EXAMPLEVIEWER)
   ADD_SUBDIRECTORY(common/ospapp)

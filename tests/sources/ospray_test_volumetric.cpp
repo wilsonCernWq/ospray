@@ -19,6 +19,7 @@
 using OSPRayTestScenes::Sierpinski;
 using OSPRayTestScenes::Torus;
 using OSPRayTestScenes::TextureVolume;
+using OSPRayTestScenes::DepthCompositeVolume;
 
 TEST_P(Sierpinski, simple) {
   PerformRenderTest();
@@ -43,3 +44,9 @@ TEST_P(TextureVolume, simple) {
 }
 
 INSTANTIATE_TEST_CASE_P(Renderers, TextureVolume, ::testing::Values("scivis"));
+
+TEST_P(DepthCompositeVolume, simple) {
+ PerformRenderTest();
+}
+
+INSTANTIATE_TEST_CASE_P(Renderers, DepthCompositeVolume, ::testing::Values("scivis"));

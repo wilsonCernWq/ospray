@@ -90,6 +90,7 @@ void Isosurfaces_intersect_kernel(const RTCIntersectFunctionNArguments *uniform 
       ray->primID = tmpRay.primID;
       ray->t =  tmpRay.t;
       ray->Ng = tmpRay.Ng;
+      ray->u = tmpRay.u; // transport epsilon to postIntersect
     }
   }
 }
@@ -119,6 +120,10 @@ static void Isosurfaces_postIntersect(uniform Geometry *uniform geometry,
   }
 
   dg.Ng = dg.Ns;
+  // convert ray-space epsilon (in ray.u) to object-/world-space using max(dir)
+  // instead of costly length; the error is at most sqrt(3)~1.7, quite
+  // acceptable for eps
+  dg.epsilon = reduce_max(ray.dir) * ray.u;
 
   if (flags & DG_COLOR) {
    TransferFunction *uniform xf = self->volume->transferFunction;

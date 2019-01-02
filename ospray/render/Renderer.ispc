@@ -78,7 +78,7 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
         (screenSample.sampleID.y >= fb->size.y))
       continue;
 
-    float tMax = infinity;
+    float tMax = inf;
     // set ray t value for early ray termination if we have a maximum depth
     // texture
     if (self->maxDepthTexture) {
@@ -89,7 +89,7 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
 
       DifferentialGeometry lookup;
       initDgFromTexCoord(lookup, depthTexCoord);
-      tMax = min(get1f(self->maxDepthTexture, lookup), infinity);
+      tMax = min(get1f(self->maxDepthTexture, lookup), inf);
     }
     vec3f col = make_vec3f(0.f);
     float alpha = 0.f;
@@ -131,8 +131,6 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
 export void Renderer_set(void *uniform _self
     , void *uniform _model
     , void *uniform _camera
-    , const uniform bool autoEpsilon
-    , const uniform float epsilon
     , const uniform int32 spp
     , const uniform int32 maxDepth
     , const uniform float minContribution
@@ -149,7 +147,7 @@ void Renderer_Constructor(uniform Renderer *uniform self,
   self->beginFrame   = Renderer_default_beginFrame;
   self->endFrame     = Renderer_default_endFrame;
   self->fb = NULL;
-  Renderer_set(self, NULL, NULL, true, 1e-6f, 1, 20, 0.001f, make_vec4f(0.f), NULL);
+  Renderer_set(self, NULL, NULL, 1, 20, 0.001f, make_vec4f(0.f), NULL);
   precomputedHalton_create();
 }
 
@@ -195,8 +193,6 @@ export void Renderer_endFrame(void *uniform _self, void *uniform perFrameData)
 export void Renderer_set(void *uniform _self
     , void *uniform _model
     , void *uniform _camera
-    , const uniform bool autoEpsilon
-    , const uniform float epsilon
     , const uniform int32 spp
     , const uniform int32 maxDepth
     , const uniform float minContribution
@@ -207,8 +203,6 @@ export void Renderer_set(void *uniform _self
   uniform Renderer *uniform self = (uniform Renderer *uniform)_self;
   self->model  = (uniform Model *uniform)_model;
   self->camera = (uniform Camera *uniform)_camera;
-  self->autoEpsilon = autoEpsilon;
-  self->epsilon = epsilon;
   self->spp = spp;
   self->maxDepth = maxDepth;
   self->minContribution = minContribution;
