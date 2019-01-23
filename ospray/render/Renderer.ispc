@@ -1,5 +1,5 @@
 // ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
+// Copyright 2009-2019 Intel Corporation                                    //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -122,7 +122,7 @@ unmasked void Renderer_default_renderTile(uniform Renderer *uniform self,
     const float rspp = rcpf(spp);
     screenSample.rgb = col * rspp;
     screenSample.alpha = alpha * rspp;
-    screenSample.normal = transposed(camera->frame) * (normal * rspp);
+    screenSample.normal = normal * rspp;
     screenSample.albedo = albedo * rspp;
     setTile(tile, pixel, screenSample);
   }

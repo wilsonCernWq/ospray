@@ -1,5 +1,5 @@
 ## ======================================================================== ##
-## Copyright 2009-2018 Intel Corporation                                    ##
+## Copyright 2009-2019 Intel Corporation                                    ##
 ##                                                                          ##
 ## Licensed under the Apache License, Version 2.0 (the "License");          ##
 ## you may not use this file except in compliance with the License.         ##
@@ -142,6 +142,15 @@ mark_as_advanced(OSPRAY_ENABLE_APPS)
 option(OSPRAY_ENABLE_TESTING "Enable building, installing, and packaging of test tools.")
 option(OSPRAY_AUTO_DOWNLOAD_TEST_IMAGES "Automatically download test images during build." ON)
 
+# needs to be here at top-level dir, so that modules/apps see the define
+option(OSPRAY_APPS_ENABLE_DENOISER "Use image denoiser in example viewer")
+if (OSPRAY_APPS_ENABLE_DENOISER)
+  find_package(OpenImageDenoise)
+  add_definitions(-DOSPRAY_APPS_ENABLE_DENOISER)
+  set(OPENIMAGEDENOISE OpenImageDenoise)
+  get_target_property(OPENIMAGEDENOISE_LIBRARY OpenImageDenoise IMPORTED_LOCATION_RELEASE)
+endif()
+
 if (OSPRAY_ENABLE_TESTING)
   enable_testing()
 endif()
@@ -234,6 +243,20 @@ if (OSPRAY_INSTALL_DEPENDENCIES)
     if (NOT APPLE)
       get_filename_component(EMBREE_LIBNAME ${EMBREE_LIBRARY} NAME)
       ospray_install_namelink(embree ${EMBREE_LIBNAME})
+    endif()
+  endif()
+
+  if (OSPRAY_APPS_ENABLE_DENOISER)
+    if (WIN32)
+      install(PROGRAMS ${OPENIMAGEDENOISE_LIBRARY}
+              DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT redist)
+    else()
+      install(PROGRAMS ${OPENIMAGEDENOISE_LIBRARY}
+              DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT redist)
+      if (NOT APPLE)
+        get_filename_component(OIDN_LIBNAME ${OPENIMAGEDENOISE_LIBRARY} NAME)
+        ospray_install_namelink(OpenImageDenoise ${OIDN_LIBNAME})
+      endif()
     endif()
   endif()
 endif()

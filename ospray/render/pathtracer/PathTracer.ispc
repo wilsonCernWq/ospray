@@ -1,5 +1,5 @@
 // ======================================================================== //
-// Copyright 2009-2018 Intel Corporation                                    //
+// Copyright 2009-2019 Intel Corporation                                    //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -445,7 +445,7 @@ inline ScreenSample PathTracer_renderPixel(uniform PathTracer *uniform self,
   const float rspp = rcpf(spp);
   screenSample.rgb = screenSample.rgb * rspp;
   screenSample.alpha = screenSample.alpha * rspp;
-  screenSample.normal = transposed(camera->frame) * (screenSample.normal*rspp);
+  screenSample.normal = screenSample.normal * rspp;
   screenSample.albedo = screenSample.albedo * rspp;
 
   return screenSample;

@@ -1,6 +1,7 @@
 
 [Embree]: https://embree.github.io/
 [Intel Embree]: https://embree.github.io/
+[Open Image Denoise]: http://www.openimagedenoise.org/
 [news/updates]: https://www.ospray.org/news.html
 [getting OSPRay]: https://www.ospray.org/downloads.html
 [OSPRay Demos and Examples]: https://www.ospray.org/demos.html
@@ -16,5 +17,5 @@
 [path tracer]: #path-tracer
 [point light]: #point-light-sphere-light
 [Compiling OSPRay]: #compiling-ospray
-[scenegraph]: #scenegraph
+[scene graph]: #scene-graph
 [Parallel Rendering with MPI]: #parallel-rendering-with-mpi
