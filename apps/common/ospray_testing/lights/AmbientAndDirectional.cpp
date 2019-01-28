@@ -14,49 +14,45 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
-
-// ospray
-#include "volume/Volume.h"
-// amr base
-#include "AMRAccel.h"
+#include <vector>
+#include "Lights.h"
 
 namespace ospray {
+  namespace testing {
 
-    /*! the actual ospray volume object */
-    struct AMRVolume : public ospray::Volume
+    struct AmbientAndDirectional : public Lights
     {
-      AMRVolume();
-      ~AMRVolume() override = default;
+      ~AmbientAndDirectional() override = default;
 
-      std::string toString() const override;
-
-      void commit() override;
-
-      int setRegion(const void *source,
-                    const vec3i &index,
-                    const vec3i &count) override;
-
-      //! Get the OSPDataType enum corresponding to the voxel type string.
-      OSPDataType getVoxelType();
-
-      std::unique_ptr<amr::AMRData>  data;
-      std::unique_ptr<amr::AMRAccel> accel;
-
-      Ref<Data> brickInfoData;
-      Ref<Data> brickDataData;
-
-      //! Voxel type.
-      std::string voxelType;
-
-      //! Voxel value range (will be computed if not provided as a parameter).
-      vec2f voxelRange {FLT_MAX, -FLT_MAX};
-
-      /*! Scale factor for the volume, mostly for internal use or data scaling
-        benchmarking. Note that this must be set **before** calling
-        'ospSetRegion' on the volume as the scaling is applied in that function.
-      */
-      vec3f scaleFactor {1};
+      OSPData createLights() const override;
     };
 
-} // ::ospray
+    OSPData AmbientAndDirectional::createLights() const
+    {
+      std::vector<OSPLight> lights;
+
+      auto ambientLight = ospNewLight3("ambient");
+      ospSet1f(ambientLight, "intensity", 0.2f);
+      ospSet3f(ambientLight, "color", 1.f, 1.f, 1.f);
+      ospCommit(ambientLight);
+      lights.push_back(ambientLight);
+
+      auto directionalLight = ospNewLight3("distant");
+      ospSet1f(directionalLight, "intensity", 0.9f);
+      ospSet3f(directionalLight, "color", 1.f, 1.f, 1.f);
+      ospSet3f(directionalLight, "direction", 0.f, -1.f, 0.f);
+      ospCommit(directionalLight);
+      lights.push_back(directionalLight);
+
+      auto lightsData = ospNewData(lights.size(), OSP_OBJECT, lights.data());
+
+      ospRelease(ambientLight);
+      ospRelease(directionalLight);
+
+      return lightsData;
+    }
+
+    OSP_REGISTER_TESTING_LIGHTS(AmbientAndDirectional, ambient_and_directional);
+
+  }  // namespace testing
+}  // namespace ospray

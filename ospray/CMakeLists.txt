@@ -14,32 +14,13 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
-option(EXP_NEW_BB_VOLUME_KERNELS "Experimental new block/bricked volume layout" ON)
+option(EXP_NEW_BB_VOLUME_KERNELS
+       "Experimental new block/bricked volume layout" ON)
 mark_as_advanced(EXP_NEW_BB_VOLUME_KERNELS)
-
-# NOTE(jda) - PThread hint used by both Embree and OSPRay
-set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
-set(THREADS_PREFER_PTHREAD_FLAG TRUE) # for gcc6
-find_package(Threads REQUIRED)
 
 # -------------------------------------------------------
 # Setup ospray include directories and source files
 # -------------------------------------------------------
-
-include_directories(
-  ${CMAKE_SOURCE_DIR}/ospray/include
-  ${CMAKE_SOURCE_DIR}/ospray
-  ${CMAKE_SOURCE_DIR}
-  ${PROJECT_BINARY_DIR}
-  ${EMBREE_INCLUDE_DIRS}
-)
-include_directories_ispc(
-  ${CMAKE_SOURCE_DIR}/ospray/include
-  ${CMAKE_SOURCE_DIR}/ospray
-  ${CMAKE_SOURCE_DIR}
-  ${PROJECT_BINARY_DIR}
-  ${EMBREE_INCLUDE_DIRS}
-)
 
 set(OSPRAY_SOURCES
   api/API.cpp
@@ -240,211 +221,27 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   volume/amr/method_octant.ispc
 )
 
-
 # -------------------------------------------------------
-# Install API headers
+# Install SDK headers
 # -------------------------------------------------------
 
-ospray_install_sdk_headers(
-  api/Device.h
-  api/ISPCDevice.h
-  api/objectFactory.h
-  DESTINATION api
-)
+get_subdirectories(SUBDIRS ${CMAKE_CURRENT_LIST_DIR})
 
-ospray_install_sdk_headers(
-  camera/Camera.h
-  camera/Camera.ih
-  camera/OrthographicCamera.h
-  camera/OrthographicCamera.ih
-  camera/PanoramicCamera.h
-  camera/PerspectiveCamera.h
-  camera/PerspectiveCamera.ih
-  DESTINATION camera
-)
-
-ospray_install_sdk_headers(
-  common/Data.h
-  common/DifferentialGeometry.ih
-  common/Library.h
-  common/Managed.h
-  common/Material.h
-  common/Material.ih
-  common/Model.h
-  common/Model.ih
-  common/ObjectHandle.h
-  common/OSPCommon.h
-  common/OSPCommon.ih
-  common/Ray.ih
-  common/Texture.h
-  common/Util.h
-  DESTINATION common
-)
-
-ospray_install_sdk_headers(
-  fb/FrameBuffer.h
-  fb/FrameBuffer.ih
-  fb/LocalFB.h
-  fb/LocalFB.ih
-  fb/PixelOp.h
-  fb/Tile.h
-  fb/Tile.ih
-  fb/TileError.h
-  DESTINATION fb
-)
-
-ospray_install_sdk_headers(
-  geometry/Curves.h
-  geometry/Cylinders.h
-  geometry/Geometry.h
-  geometry/Geometry.ih
-  geometry/Instance.h
-  geometry/Instance.ih
-  geometry/Isosurfaces.h
-  geometry/Slices.h
-  geometry/Spheres.h
-  geometry/StreamLines.h
-  geometry/TriangleMesh.h
-  geometry/TriangleMesh.ih
-  geometry/QuadMesh.h
-  geometry/QuadMesh.ih
-  DESTINATION geometry
-)
-
-ospray_install_sdk_headers(
-  lights/AmbientLight.h
-  lights/DirectionalLight.h
-  lights/HDRILight.h
-  lights/Light.h
-  lights/Light.ih
-  lights/PointLight.h
-  lights/QuadLight.h
-  lights/SpotLight.h
-  DESTINATION lights
-)
-
-ospray_install_sdk_headers(
-  #FIXME: check if all of these are used...
-  math/AffineSpace.ih
-  math/box.ih
-  math/Distribution1D.ih
-  math/Distribution2D.ih
-  math/LinearSpace.ih
-  math/math.ih
-  math/random.ih
-  math/sobol.ih
-  math/sampling.ih
-  math/vec.ih
-  math/spectrum.h
-  math/spectrum.ih
-  DESTINATION math
-)
-
-ospray_install_sdk_headers(
-  render/LoadBalancer.h
-  render/Renderer.h
-  render/Renderer.ih
-  render/util.h
-  render/util.ih
-  DESTINATION render
-)
-
-#TODO: all the specific renderer headers...
-
-ospray_install_sdk_headers(
-  texture/Texture.h
-  texture/Texture2D.h
-  texture/Texture2D.ih
-  texture/TextureParam.ih
-  texture/TextureVolume.h
-  DESTINATION texture
-)
-
-ospray_install_sdk_headers(
-  transferFunction/LinearTransferFunction.h
-  transferFunction/LinearTransferFunction.ih
-  transferFunction/TransferFunction.h
-  transferFunction/TransferFunction.ih
-  DESTINATION transferFunction
-)
-
-ospray_install_sdk_headers(
-  volume/Volume.h
-  volume/Volume.ih
-  DESTINATION volume
-)
-
-ospray_install_sdk_headers(
-  volume/amr/AMR.ih
-  volume/amr/AMRAccel.h
-  volume/amr/AMRData.h
-  volume/amr/AMRVolume.h
-  volume/amr/AMRVolume.ih
-  volume/amr/CellRef.ih
-  volume/amr/DualCell.ih
-  volume/amr/FindStack.ih
-  volume/amr/KDTree.ih
-  volume/amr/range.ih
-  DESTINATION volume/amr
-)
-
-ospray_install_sdk_headers(
-  volume/structured/GridAccelerator.ih
-  volume/structured/StructuredVolume.h
-  volume/structured/StructuredVolume.ih
-  DESTINATION volume/structured
-)
-
-ospray_install_sdk_headers(
-  volume/structured/bricked/BlockBrickedVolume.h
-  volume/structured/bricked/BlockBrickedVolume.ih
-  volume/structured/bricked/GhostBlockBrickedVolume.h
-  volume/structured/bricked/GhostBlockBrickedVolume.ih
-  DESTINATION volume/structured/bricked
-)
-
-ospray_install_sdk_headers(
-  volume/structured/shared/SharedStructuredVolume.h
-  volume/structured/shared/SharedStructuredVolume.ih
-  DESTINATION volume/structured/shared
-)
-
-ospray_install_sdk_headers(
-  volume/unstructured/MinMaxBVH2.h
-  volume/unstructured/MinMaxBVH2.ih
-  volume/unstructured/UnstructuredVolume.h
-  volume/unstructured/UnstructuredVolume.ih
-  DESTINATION volume/unstructured
-)
-
-ospray_install_sdk_headers(
-  include/ospray/ospray_cpp/Camera.h
-  include/ospray/ospray_cpp/Data.h
-  include/ospray/ospray_cpp/FrameBuffer.h
-  include/ospray/ospray_cpp/Geometry.h
-  include/ospray/ospray_cpp/Light.h
-  include/ospray/ospray_cpp/ManagedObject.h
-  include/ospray/ospray_cpp/Material.h
-  include/ospray/ospray_cpp/Model.h
-  include/ospray/ospray_cpp/PixelOp.h
-  include/ospray/ospray_cpp/Renderer.h
-  include/ospray/ospray_cpp/Texture2D.h
-  include/ospray/ospray_cpp/TransferFunction.h
-  include/ospray/ospray_cpp/Volume.h
-  DESTINATION ../ospray_cpp
-)
+foreach(dir ${SUBDIRS})
+  if (NOT "${dir}" STREQUAL include)
+    install(DIRECTORY ${dir}
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK
+      COMPONENT devel
+      FILES_MATCHING
+      PATTERN *.h
+      PATTERN *.ih
+    )
+  endif()
+endforeach()
 
 ##############################################################
-# build the ospray library (using flags and compilers as configured by
-# configureOSPRAY() and/or configureMPI()
+# Build the ospray library
 ##############################################################
-
-
-set(OSPRAY_LIBS
-  ospray_common
-  ${CMAKE_THREAD_LIBS_INIT}
-  ${CMAKE_DL_LIBS}
-)
 
 if (WIN32)
   list(APPEND OSPRAY_LIBS ws2_32)
@@ -473,24 +270,61 @@ endif()
 
 ospray_create_library(ospray
   ${OSPRAY_SOURCES}
-LINK
-  ${OSPRAY_LIBS}
-COMPONENT
-  lib
+COMPONENT lib
 )
+
+target_link_libraries(ospray PUBLIC ospray_common)
+
+target_include_directories(ospray
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ospray/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ospray>
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+##############################################################
+# Build ISPC device
+##############################################################
 
 option(OSPRAY_BUILD_ISPC_DEVICE "Build ISPC Device" ON)
 mark_as_advanced(OSPRAY_BUILD_ISPC_DEVICE)
 
 if(OSPRAY_BUILD_ISPC_DEVICE)
+
+  # NOTE(jda) - PThread hint used by both Embree and OSPRay
+  set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+  set(THREADS_PREFER_PTHREAD_FLAG TRUE) # for gcc6
+  find_package(Threads REQUIRED)
+
+  include_directories_ispc(
+    ${CMAKE_SOURCE_DIR}/ospray/include
+    ${CMAKE_SOURCE_DIR}/ospray
+    ${CMAKE_SOURCE_DIR}
+    ${PROJECT_BINARY_DIR}
+    ${EMBREE_INCLUDE_DIRS}
+  )
+
   ospray_create_library(ospray_module_ispc
     ${OSPRAY_ISPC_DEVICE_SOURCES}
-  LINK
-    ${OSPRAY_LIBS}
+  COMPONENT lib
+  )
+
+  target_link_libraries(ospray_module_ispc
+  PUBLIC
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${CMAKE_DL_LIBS}
     ospray
     ${EMBREE_LIBRARIES}
-  COMPONENT
-    lib
+  )
+
+  target_include_directories(ospray_module_ispc
+    PUBLIC
+      ${EMBREE_INCLUDE_DIRS}
+      $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ospray>
+      $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+      $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK>
+      $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
 endif()
 

@@ -28,6 +28,17 @@ macro(ospray_warn_once IDENTIFIER MESSAGE)
   endif()
 endmacro()
 
+## Get a list of subdirectories (single level) under a given directory
+macro(get_subdirectories result curdir)
+  file(GLOB children RELATIVE ${curdir} ${curdir}/*)
+  set(dirlist "")
+  foreach(child ${children})
+    if(IS_DIRECTORY ${curdir}/${child})
+      list(APPEND dirlist ${child})
+    endif()
+  endforeach()
+  set(${result} ${dirlist})
+endmacro()
 
 # workaround link issues to Embree ISPC exports
 # ISPC only adds the ISA suffix during name mangling (and dynamic dispatch
@@ -176,11 +187,9 @@ macro(ospray_add_library name type)
   add_library(${name} ${type} ${ISPC_OBJECTS} ${OTHER_SOURCES} ${ISPC_SOURCES})
 endmacro()
 
-## Target install macros for OSPRay libraries ##
-include(GNUInstallDirs)
-
 macro(ospray_install_library name component)
   install(TARGETS ${name}
+    EXPORT ospray_Exports
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
       COMPONENT ${component}
       NAMELINK_SKIP
@@ -190,6 +199,12 @@ macro(ospray_install_library name component)
     # ... and the import lib into the devel package
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
       COMPONENT devel
+  )
+
+  install(EXPORT ospray_Exports
+    DESTINATION ${OSPRAY_CMAKECONFIG_DIR}
+    NAMESPACE ospray::
+    COMPONENT devel
   )
 
   # Install the namelink in the devel component. This command also includes the
@@ -329,33 +344,6 @@ macro(ospray_create_test)
   endif()
 endmacro()
 
-## Conveniance macro for installing OSPRay headers ##
-# Usage
-#
-#   ospray_install_sdk_headers(header1 [header2 ...] [DESTINATION destination])
-#
-# will install headers into ${CMAKE_INSTALL_PREFIX}/ospray/SDK/${destination},
-# where destination is optional.
-
-macro(ospray_install_sdk_headers)
-  set(HEADERS "")
-  set(MY_DESTINATION "")
-
-  set(CURRENT_LIST HEADERS)
-  foreach(arg ${ARGN})
-    if ("${arg}" STREQUAL "DESTINATION")
-      set(CURRENT_LIST MY_DESTINATION)
-    else()
-      list(APPEND ${CURRENT_LIST} ${arg})
-    endif ()
-  endforeach()
-
-  install(FILES ${HEADERS}
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK/${MY_DESTINATION}
-    COMPONENT devel
-  )
-endmacro()
-
 ## Compiler configuration macros ##
 
 macro(ospray_configure_compiler)
@@ -373,20 +361,21 @@ macro(ospray_configure_compiler)
   set(OSPRAY_COMPILER_CLANG FALSE)
   set(OSPRAY_COMPILER_MSVC  FALSE)
 
-  if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Intel")
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
     set(OSPRAY_COMPILER_ICC TRUE)
     if(WIN32) # icc on Windows behaves like msvc
       include(msvc)
     else()
       include(icc)
     endif()
-  elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     set(OSPRAY_COMPILER_GCC TRUE)
     include(gcc)
-  elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR
+          "${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
     set(OSPRAY_COMPILER_CLANG TRUE)
     include(clang)
-  elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     set(OSPRAY_COMPILER_MSVC TRUE)
     include(msvc)
   else()
@@ -404,7 +393,6 @@ endmacro()
 macro(ospray_disable_compiler_warnings)
   if (NOT OSPRAY_COMPILER_MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
-  #elseif (${CMAKE_CXX_COMPILER_ID} STREQUAL "MSVC")
   endif()
 endmacro()
 
@@ -456,8 +444,8 @@ macro(ospray_configure_tasking_system)
 
   if(OSPRAY_TASKING_TBB)
     find_package(TBB REQUIRED)
-    add_definitions(-DOSPRAY_TASKING_TBB)
-    include_directories(${TBB_INCLUDE_DIRS})
+    set(TASKING_SYSTEM_DEFINITIONS -DOSPRAY_TASKING_TBB)
+    set(TASKING_SYSTEM_INCLUDES ${TBB_INCLUDE_DIRS})
     set(TASKING_SYSTEM_LIBS ${TBB_LIBRARIES})
   else(OSPRAY_TASKING_TBB)
     unset(TBB_INCLUDE_DIR          CACHE)
@@ -473,10 +461,10 @@ macro(ospray_configure_tasking_system)
         if(OSPRAY_COMPILER_ICC) # workaround linker issue #115
           set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -liomp5")
         endif()
-        add_definitions(-DOSPRAY_TASKING_OMP)
+        set(TASKING_SYSTEM_DEFINITIONS -DOSPRAY_TASKING_OMP)
       endif()
     elseif(OSPRAY_TASKING_CILK)
-      add_definitions(-DOSPRAY_TASKING_CILK)
+      set(TASKING_SYSTEM_DEFINITIONS -DOSPRAY_TASKING_CILK)
       if (OSPRAY_COMPILER_GCC OR OSPRAY_COMPILER_CLANG)
         ospray_warn_once(UNSAFE_USE_OF_CILK
             "You are using Cilk with GCC or Clang...use at your own risk!")
@@ -484,12 +472,12 @@ macro(ospray_configure_tasking_system)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcilkplus")
       endif()
     elseif(OSPRAY_TASKING_INTERNAL)
-      add_definitions(-DOSPRAY_TASKING_INTERNAL)
+      set(TASKING_SYSTEM_DEFINITIONS -DOSPRAY_TASKING_INTERNAL)
     elseif(OSPRAY_TASKING_LIBDISPATCH)
       find_package(libdispatch REQUIRED)
-      include_directories(${LIBDISPATCH_INCLUDE_DIRS})
+      set(TASKING_SYSTEM_INCLUDES ${LIBDISPATCH_INCLUDE_DIRS})
       set(TASKING_SYSTEM_LIBS ${LIBDISPATCH_LIBRARIES})
-      add_definitions(-DOSPRAY_TASKING_LIBDISPATCH)
+      set(TASKING_SYSTEM_DEFINITIONS -DOSPRAY_TASKING_LIBDISPATCH)
     else()#Debug
       # Do nothing, will fall back to scalar code (useful for debugging)
     endif()
@@ -498,7 +486,7 @@ endmacro()
 
 ## MPI configuration macro ##
 
-macro(OSPRAY_CONFIGURE_MPI)
+macro(ospray_configure_mpi)
   if (WIN32) # FindMPI does not find Intel MPI on Windows, we need to help here
     find_package(MPI)
 
@@ -532,7 +520,7 @@ macro(OSPRAY_CONFIGURE_MPI)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MPI_CXX_COMPILE_FLAGS}")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MPI_CXX_LINK_FLAGS}")
 
-  include_directories(SYSTEM ${MPI_CXX_INCLUDE_PATH})
+  set(OSPRAY_MPI_INCLUDES ${MPI_CXX_INCLUDE_PATH})
 endmacro()
 
 # Keep backwards compatible configure_mpi() macro, but warn of deprecation

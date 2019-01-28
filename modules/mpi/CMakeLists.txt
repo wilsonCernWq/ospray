@@ -26,14 +26,10 @@ if (OSPRAY_MODULE_MPI)
 
   set(OSPRAY_DEFAULT_COMPONENT mpi)
 
-  ospray_configure_mpi()
-
   ospray_build_component(mpiCommon)
   ospray_build_component(mpiMessageLayer)
   ospray_build_component(snappy EXCLUDE_FROM_ALL)
 
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/..)
-  include_directories(${CMAKE_CURRENT_BINARY_DIR})
   include_directories_ispc(${CMAKE_CURRENT_BINARY_DIR})
 
   ospray_create_library(ospray_module_mpi
@@ -56,14 +52,24 @@ if (OSPRAY_MODULE_MPI)
     render/MPILoadBalancer.cpp
     render/distributed/DistributedRaycast.cpp
     render/distributed/DistributedRaycast.ispc
-
-  LINK
-
-    ospray_module_ispc
-    ospray_mpi_common
-    ospray_mpi_maml
-    snappy
   )
+
+  target_link_libraries(ospray_module_mpi
+    PRIVATE
+      snappy
+    PUBLIC
+      ospray_module_ispc
+      ospray_mpi_common
+      ospray_mpi_maml
+  )
+
+  target_include_directories(ospray_module_mpi
+    PUBLIC
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+    PRIVATE
+      ${CMAKE_CURRENT_BINARY_DIR}
+  )
+
   target_compile_definitions(ospray_module_mpi PUBLIC
     -DOSP_MPI_COMPRESSION_THRESHOLD=${OSP_MPI_COMPRESSION_THRESHOLD})
 
@@ -71,11 +77,8 @@ if (OSPRAY_MODULE_MPI)
   # MPI DEVICE - mpi worker
   ##############################################################
 
-  ospray_create_application(ospray_mpi_worker
-    mpi_offload_worker_main.cpp
-  LINK
-    ospray_module_ispc
-  )
+  ospray_create_application(ospray_mpi_worker mpi_offload_worker_main.cpp)
+  target_link_libraries(ospray_mpi_worker PRIVATE ospray_module_ispc)
 
   ##############################################################
   # Test apps

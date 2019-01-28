@@ -13,4 +13,3 @@ version](http://www.sdvis.org/ospray/download/talks/IEEEVis2016_OSPRay_paper_sma
 1.8MB). The [slides of the
 talk](http://www.sdvis.org/ospray/download/talks/IEEEVis2016_OSPRay_talk.pdf)
 (5.2MB) are also available.
-

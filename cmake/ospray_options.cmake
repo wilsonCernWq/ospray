@@ -18,40 +18,7 @@
 # Global configuration options
 ##############################################################
 
-set(OSPRAY_VERSION_MAJOR 1)
-set(OSPRAY_VERSION_MINOR 8)
-set(OSPRAY_VERSION_PATCH 0)
-set(OSPRAY_SOVERSION 0)
-set(OSPRAY_VERSION_GITHASH 0)
-set(OSPRAY_VERSION_NOTE "")
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
-  find_package(Git)
-  if (GIT_FOUND)
-    execute_process(
-      COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE "OSPRAY_VERSION_GITHASH"
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    string(SUBSTRING ${OSPRAY_VERSION_GITHASH} 0 8 OSPRAY_VERSION_GITHASH_SHORT)
-    execute_process(
-      COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE "OSPRAY_VERSION_GITBRANCH"
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (NOT OSPRAY_VERSION_GITBRANCH MATCHES "^master$|^release-")
-      if (NOT OSPRAY_VERSION_GITBRANCH STREQUAL "HEAD")
-        set(OSPRAY_VERSION_NOTE "-${OSPRAY_VERSION_GITBRANCH}")
-      endif()
-      set(OSPRAY_VERSION_NOTE "${OSPRAY_VERSION_NOTE} (${OSPRAY_VERSION_GITHASH_SHORT})")
-    endif()
-  endif()
-endif()
-
-set(OSPRAY_VERSION
-  ${OSPRAY_VERSION_MAJOR}.${OSPRAY_VERSION_MINOR}.${OSPRAY_VERSION_PATCH}
-)
+set(OSPRAY_CMAKECONFIG_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/ospray-${OSPRAY_VERSION}")
 
 set(EMBREE_VERSION_REQUIRED 3.2.0)
 
@@ -87,9 +54,6 @@ endif()
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
-
-#include bindir - that's where OSPConfig.h and ospray/version.h will be put
-include_directories(${PROJECT_BINARY_DIR})
 
 if (WIN32)
   # avoid problematic min/max defines of windows.h
@@ -127,10 +91,6 @@ set(OSPRAY_PIXELS_PER_JOB 64 CACHE STRING
     "Must be multiple of largest vector width *and* <= OSPRAY_TILE_SIZE")
 mark_as_advanced(OSPRAY_PIXELS_PER_JOB)
 
-
-# make Embree's INSTALLs happy
-include(GNUInstallDirs)
-
 # Must be before ISA config and package
 include(configure_embree)
 
@@ -141,15 +101,6 @@ mark_as_advanced(OSPRAY_ENABLE_APPS)
 
 option(OSPRAY_ENABLE_TESTING "Enable building, installing, and packaging of test tools.")
 option(OSPRAY_AUTO_DOWNLOAD_TEST_IMAGES "Automatically download test images during build." ON)
-
-# needs to be here at top-level dir, so that modules/apps see the define
-option(OSPRAY_APPS_ENABLE_DENOISER "Use image denoiser in example viewer")
-if (OSPRAY_APPS_ENABLE_DENOISER)
-  find_package(OpenImageDenoise)
-  add_definitions(-DOSPRAY_APPS_ENABLE_DENOISER)
-  set(OPENIMAGEDENOISE OpenImageDenoise)
-  get_target_property(OPENIMAGEDENOISE_LIBRARY OpenImageDenoise IMPORTED_LOCATION_RELEASE)
-endif()
 
 if (OSPRAY_ENABLE_TESTING)
   enable_testing()
@@ -243,20 +194,6 @@ if (OSPRAY_INSTALL_DEPENDENCIES)
     if (NOT APPLE)
       get_filename_component(EMBREE_LIBNAME ${EMBREE_LIBRARY} NAME)
       ospray_install_namelink(embree ${EMBREE_LIBNAME})
-    endif()
-  endif()
-
-  if (OSPRAY_APPS_ENABLE_DENOISER)
-    if (WIN32)
-      install(PROGRAMS ${OPENIMAGEDENOISE_LIBRARY}
-              DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT redist)
-    else()
-      install(PROGRAMS ${OPENIMAGEDENOISE_LIBRARY}
-              DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT redist)
-      if (NOT APPLE)
-        get_filename_component(OIDN_LIBNAME ${OPENIMAGEDENOISE_LIBRARY} NAME)
-        ospray_install_namelink(OpenImageDenoise ${OIDN_LIBNAME})
-      endif()
     endif()
   endif()
 endif()

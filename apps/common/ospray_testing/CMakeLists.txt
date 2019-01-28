@@ -18,8 +18,10 @@ ospray_create_library(ospray_testing
   ospray_testing.cpp
 
   geometry/RandomSpheres.cpp
+  geometry/SubdivisionCube.cpp
 
   lights/AmbientOnly.cpp
+  lights/AmbientAndDirectional.cpp
 
   transferFunction/Grayscale.cpp
   transferFunction/Jet.cpp
@@ -29,40 +31,19 @@ ospray_create_library(ospray_testing
   volume/GravitySpheresVolume.cpp
   volume/SimpleStructuredVolume.cpp
   volume/SimpleUnstructuredVolume.cpp
-LINK
-  ospray
 )
 
-# TODO: export header includes
+target_link_libraries(ospray_testing PUBLIC ospray)
 
-set(OSPTESTING_SDK_INSTALL_LOC ../ospray_testing)
-
-ospray_install_sdk_headers(
-  ospray_testing.h
-  DESTINATION ${OSPTESTING_SDK_INSTALL_LOC}
+target_include_directories(ospray_testing
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ospray/ospray_testing>
 )
 
-ospray_install_sdk_headers(
-  detail/objectFactory.h
-  DESTINATION ${OSPTESTING_SDK_INSTALL_LOC}/detail
-)
-
-ospray_install_sdk_headers(
-  geometry/Geometry.h
-  DESTINATION ${OSPTESTING_SDK_INSTALL_LOC}/geometry
-)
-
-ospray_install_sdk_headers(
-  lights/Lights.h
-  DESTINATION ${OSPTESTING_SDK_INSTALL_LOC}/lights
-)
-
-ospray_install_sdk_headers(
-  transferFunction/TransferFunction.h
-  DESTINATION ${OSPTESTING_SDK_INSTALL_LOC}/transferFunction
-)
-
-ospray_install_sdk_headers(
-  volume/Volume.h
-  DESTINATION ${OSPTESTING_SDK_INSTALL_LOC}/volume
+install(DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray
+  COMPONENT devel
+  FILES_MATCHING
+  PATTERN *.h
 )
