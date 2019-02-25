@@ -93,20 +93,17 @@ namespace ospray {
     return "ospray::LocalFrameBuffer";
   }
 
-  void LocalFrameBuffer::clear(const uint32 fbChannelFlags)
+  void LocalFrameBuffer::clear()
   {
     frameID = -1; // we increment at the start of the frame
-    // TODO XXX either implement clearing of COLOR / DEPTH, or change the spec!
-    if (fbChannelFlags & OSP_FB_ACCUM) {
-      // it is only necessary to reset the accumID,
-      // LocalFrameBuffer_accumulateTile takes care of clearing the
-      // accumulating buffers
-      memset(tileAccumID, 0, getTotalTiles()*sizeof(int32));
+    // it is only necessary to reset the accumID,
+    // LocalFrameBuffer_accumulateTile takes care of clearing the
+    // accumulating buffers
+    memset(tileAccumID, 0, getTotalTiles()*sizeof(int32));
 
-      // always also clear error buffer (if present)
-      if (hasVarianceBuffer) {
-        tileErrorRegion.clear();
-      }
+    // always also clear error buffer (if present)
+    if (hasVarianceBuffer) {
+      tileErrorRegion.clear();
     }
   }
 
@@ -161,11 +158,11 @@ namespace ospray {
       pixelOp->beginFrame();
   }
 
-  float LocalFrameBuffer::endFrame(const float errorThreshold)
+  void LocalFrameBuffer::endFrame(const float errorThreshold)
   {
     if (pixelOp)
       pixelOp->endFrame();
-    return tileErrorRegion.refine(errorThreshold);
+    frameVariance = tileErrorRegion.refine(errorThreshold);
   }
 
   const void *LocalFrameBuffer::mapBuffer(OSPFrameBufferChannel channel)

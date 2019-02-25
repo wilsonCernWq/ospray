@@ -16,36 +16,7 @@
 
 set(OSPRAY_DEFAULT_COMPONENT apps)
 
-include_directories(
-  ${CMAKE_SOURCE_DIR}/ospray/include
-  ${CMAKE_SOURCE_DIR}/ospray
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_CURRENT_LIST_DIR}
-  common
-)
-
-# benchmark application which has no windowing framework dependencies
-option(OSPRAY_APPS_BENCHMARK "Build ospBenchmark application." ON)
-option(OSPRAY_APPS_EXAMPLEVIEWER "Build example viewer apps" ON)
-option(OSPRAY_APPS_UTILITIES "Build utility apps" ON)
-
-add_subdirectory(common/ospray_testing)
-
-# common utilities
-if(OSPRAY_APPS_BENCHMARK OR OSPRAY_APPS_EXAMPLEVIEWER)
-  add_subdirectory(common/ospapp)
-  add_subdirectory(common/sg)
-  add_subdirectory(common/tfn_lib)
-endif()
-
-if(OSPRAY_APPS_BENCHMARK)
-  add_subdirectory(bench)
-endif()
-
-if(OSPRAY_APPS_EXAMPLEVIEWER)
-  add_subdirectory(exampleViewer)
-endif()
-
-if(OSPRAY_APPS_UTILITIES)
-  add_subdirectory(utility)
-endif()
+add_subdirectory(external)
+add_subdirectory(ospray_testing)
+add_subdirectory(tutorials)
+add_subdirectory(utility)

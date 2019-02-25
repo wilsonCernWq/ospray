@@ -68,13 +68,19 @@ namespace ospray {
       std::string toString() const override;
 
     private:
-      // Send my bounding boxes to other nodes, recieve theirs for a
+      // Send my bounding boxes to other nodes, receive theirs for a
       // "full picture" of what geometries live on what nodes
       void exchangeModelBounds();
 
       int numAoSamples;
+      bool oneSidedLighting;
+      bool shadowsEnabled;
       PerspectiveCamera *camera;
       std::unique_ptr<std::ofstream> statsLog;
+
+      vec3f ambientLight;
+      Data *lightData;
+      std::vector<void*> lightIEs;
 
       std::vector<DistributedModel*> regions, ghostRegions;
       std::vector<void*> regionIEs, ghostRegionIEs;

@@ -66,6 +66,7 @@ endif()
 
 ospray_configure_compiler()
 ospray_configure_tasking_system()
+ospray_create_tasking_target()
 
 option(OSPRAY_USE_EMBREE_STREAMS "Enable use of Embree's stream intersection")
 mark_as_advanced(OSPRAY_USE_EMBREE_STREAMS) # feature not implemented yet
@@ -94,11 +95,6 @@ mark_as_advanced(OSPRAY_PIXELS_PER_JOB)
 # Must be before ISA config and package
 include(configure_embree)
 
-option(OSPRAY_ENABLE_TUTORIALS "Enable the 'tutorials' subtree in the build." ON)
-
-option(OSPRAY_ENABLE_APPS "Enable the 'apps' subtree in the build." ON)
-mark_as_advanced(OSPRAY_ENABLE_APPS)
-
 option(OSPRAY_ENABLE_TESTING "Enable building, installing, and packaging of test tools.")
 option(OSPRAY_AUTO_DOWNLOAD_TEST_IMAGES "Automatically download test images during build." ON)
 
@@ -124,20 +120,30 @@ include(package)
 
 if (OSPRAY_INSTALL_DEPENDENCIES)
   macro(OSPRAY_INSTALL_NAMELINK NAME TARGET_NAME)
+    set(BASE_LIB_NAME lib${NAME})
+    set(LIB_SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX})
     execute_process(COMMAND "${CMAKE_COMMAND}" -E create_symlink
-                    ${TARGET_NAME} ${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}.so)
-    install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}.so
+                    ${TARGET_NAME} ${CMAKE_CURRENT_BINARY_DIR}/${BASE_LIB_NAME}${LIB_SUFFIX})
+    install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}${LIB_SUFFIX}
             DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT redist)
 
     # If the shared lib we're copying is named with a specific version, also
     # create a major version suffixed symlink
     string(REGEX MATCH "([0-9]+)[.]([0-9]+)[.]([0-9]+)" VERSION_STRING ${TARGET_NAME})
     if (CMAKE_MATCH_0)
-      execute_process(COMMAND "${CMAKE_COMMAND}" -E create_symlink
-                      ${TARGET_NAME}
-                      ${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}.so.${CMAKE_MATCH_1})
-      install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/lib${NAME}.so.${CMAKE_MATCH_1}
-              DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT redist)
+      if(APPLE)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E create_symlink
+                        ${TARGET_NAME}
+                        ${CMAKE_CURRENT_BINARY_DIR}/${BASE_LIB_NAME}.${CMAKE_MATCH_1}${LIB_SUFFIX})
+        install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${BASE_LIB_NAME}.${CMAKE_MATCH_1}${LIB_SUFFIX}
+                DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT redist)
+      else()
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E create_symlink
+                        ${TARGET_NAME}
+                        ${CMAKE_CURRENT_BINARY_DIR}/${BASE_LIB_NAME}${LIB_SUFFIX}.${CMAKE_MATCH_1})
+        install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/${BASE_LIB_NAME}${LIB_SUFFIX}.${CMAKE_MATCH_1}
+                DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT redist)
+      endif()
     endif()
   endmacro()
 
@@ -170,8 +176,8 @@ if (OSPRAY_INSTALL_DEPENDENCIES)
       if (NOT APPLE)
         get_filename_component(TBB_LIBNAME ${TBB_LIBRARY} NAME)
         get_filename_component(TBB_MALLOC_LIBNAME ${TBB_LIBRARY_MALLOC} NAME)
-        OSPRAY_INSTALL_NAMELINK(tbb ${TBB_LIBNAME})
-        OSPRAY_INSTALL_NAMELINK(tbbmalloc ${TBB_MALLOC_LIBNAME})
+        ospray_install_namelink(tbb ${TBB_LIBNAME})
+        ospray_install_namelink(tbbmalloc ${TBB_MALLOC_LIBNAME})
       endif()
     endif()
   endif()

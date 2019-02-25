@@ -1,9 +1,9 @@
 OSPRay
 ======
 
-This is release v1.8.0 (devel) of OSPRay. For changes and new features
-see the [changelog](CHANGELOG.md). Also visit http://www.ospray.org for
-more information.
+This is release v2.0.0 (devel) of OSPRay. For changes and new features
+see the [changelog](CHANGELOG.md). Visit http://www.ospray.org for more
+information.
 
 OSPRay Overview
 ===============
@@ -40,7 +40,7 @@ via [OSPRay’s GitHub Issue
 Tracker](https://github.com/ospray/OSPRay/issues) (or, if you should
 happen to have a fix for it,you can also send us a pull request); for
 missing features please contact us via email at
-<ospray@googlegroups.com>.
+<a href="mailto:ospray@googlegroups.com" class="email">ospray@googlegroups.com</a>.
 
 For recent news, updates, and announcements, please see our complete
 [news/updates](https://www.ospray.org/news.html) page.
@@ -208,6 +208,33 @@ example, to build in parallel only the OSPRay library without the
 example applications use
 
     cmake --build . --config Release --target ospray -- /m
+
+Finding an OSPRay install with CMake
+====================================
+
+Client applications using OSPRay can find it with CMake’s
+`find_package()` command. For example,
+
+    find_package(ospray 1.8.0 REQUIRED)
+
+finds OSPRay via OSPRay’s configuration file `osprayConfig.cmake`[^2].
+Once found, the following is all that is required to use OSPRay:
+
+    target_link_libraries(${client_target} ospray::ospray)
+
+This will automatically propagate all required include paths, linked
+libraries, and compiler definitions to the client CMake target (either
+an executable or library).
+
+Advanced users may want to link to additional targets which are exported
+in OSPRay’s CMake config, which includes all installed modules. All
+targets built with OSPRay are exported in the `ospray::` namespace,
+therefore all targets locally used in the OSPRay source tree can be
+accessed from an install. For example, `ospray_common` can be consumed
+directly via the `ospray::ospray_common` target. All targets have their
+libraries, includes, and definitions attached to them for public
+consumption (please [report bugs](#ospray-support-and-contact) if this
+is broken!).
 
 Documentation
 =============
@@ -518,6 +545,9 @@ callback which does nothing, so any output desired by an application
 will require that a callback is provided. Note that callbacks for C++
 `std::cout` and `std::cerr` can be alternatively set through `ospInit()`
 or the `OSPRAY_LOG_OUTPUT` environment variable.
+
+Applications can clear either callback by passing `nullptr` instead of
+an actual function pointer.
 
 ### Loading OSPRay Extensions at Runtime
 
@@ -832,7 +862,7 @@ specified.
 The first variant shares the voxel data with the application. Such a
 volume type is created by passing the type string
 “`shared_structured_volume`” to `ospNewVolume`. The voxel data is laid
-out in memory in xyz-order[^2] and provided to the volume via a
+out in memory in xyz-order[^3] and provided to the volume via a
 [data](#data) buffer parameter named “`voxelData`”.
 
 The second regular grid variant is optimized for rendering performance:
@@ -1055,22 +1085,22 @@ like the structured volume equivalent, but they only modify the root
 
 ### Unstructured Volumes
 
-Unstructured volumes can contain tetrahedral, wedge, or hexahedral cell
-types, and are defined by three arrays: vertices, corresponding field
-values, and eight indices per cell (first four are -1 for tetrahedral
-cells, first two are -2 for wedge cells). An unstructured volume type is
-created by passing the type string “`unstructured_volume`” to
-`ospNewVolume`.
+Unstructured volumes can have its topology and geometry freely defined.
+Geometry can be composed of tetrahedral, wedge, or hexahedral cell
+types. Data format optinally matches VTK and consists from multiple
+arrays: vertex positions and values, vertex indices, cell start indices,
+cell types, and cell values. An unstructured volume type is created by
+passing the type string “`unstructured_volume`” to `ospNewVolume`.
 
-Field values can be specified per-vertex (`field`) or per-cell
-(`cellField`). If both values are set, `cellField` takes precedence.
+Sampled cell values can be specified either per-vertex (`vertex.value`)
+or per-cell (`cell.value`). If both arrays are set, `cell.value` takes
+precedence.
 
-Similar to [triangle mesh](#triangle-mesh), each tetrahedron is formed
-by a group of indices into the vertices. For each vertex, the
-corresponding (by array index) data value will be used for sampling when
-rendering. Note that the index order for each tetrahedron does not
-matter, as OSPRay internally calculates vertex normals to ensure proper
-sampling and interpolation.
+Similar to a mesh, each cell is formed by a group of indices into the
+vertices. For each vertex, the corresponding (by array index) data value
+will be used for sampling when rendering, if specified. The index order
+for a tetrahedron is the same as `VTK_TETRA`: bottom triangle
+counterclockwise, then the top vertex.
 
 For wedge cells, each wedge is formed by a group of six indices into the
 vertices and data value. Vertex ordering is the same as `VTK_WEDGE`:
@@ -1081,13 +1111,18 @@ indices into the vertices and data value. Vertex ordering is the same as
 `VTK_HEXAHEDRON`: four bottom vertices counterclockwise, then top four
 counterclockwise.
 
+To maintain VTK data compatibility an index array may be specified via
+`indexPrefixed` array that allow vertex indices to be interleaved with
+cell sizes in the following format:
+$n, id_1, ..., id_n, m, id_1, ..., id_m$.
+
 <table style="width:98%;">
 <caption>Additional configuration parameters for unstructured volumes.</caption>
 <colgroup>
-<col style="width: 14%" />
+<col style="width: 20%" />
 <col style="width: 25%" />
 <col style="width: 12%" />
-<col style="width: 44%" />
+<col style="width: 38%" />
 </colgroup>
 <thead>
 <tr class="header">
@@ -1100,39 +1135,57 @@ counterclockwise.
 <tbody>
 <tr class="odd">
 <td style="text-align: left;">vec3f[]</td>
-<td style="text-align: left;">vertices</td>
+<td style="text-align: left;">vertex</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"><a href="#data">data</a> array of vertex positions</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">float[]</td>
-<td style="text-align: left;">field</td>
+<td style="text-align: left;">vertex.value</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"><a href="#data">data</a> array of vertex data values to be sampled</td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;">uint32[] / uint64[]</td>
+<td style="text-align: left;">index</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"><a href="#data">data</a> array of indices (into the vertex array(s)) that form cells</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">uint32[] / uint64[]</td>
+<td style="text-align: left;">indexPrefixed</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;">alternative <a href="#data">data</a> array of indices compatible to VTK, where the indices of each cell are prefixed with the number of vertices</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">uint32[] / uint64[]</td>
+<td style="text-align: left;">cell</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"><a href="#data">data</a> array of locations (into the index array), specifying the first index of each cell</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">float[]</td>
-<td style="text-align: left;">cellField</td>
+<td style="text-align: left;">cell.value</td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"><a href="#data">data</a> array of cell data values to be sampled</td>
 </tr>
-<tr class="even">
-<td style="text-align: left;">vec4i[]</td>
-<td style="text-align: left;">indices</td>
-<td style="text-align: left;"></td>
-<td style="text-align: left;"><a href="#data">data</a> array of tetrahedra indices (into vertices and field)</td>
-</tr>
 <tr class="odd">
+<td style="text-align: left;">uint8[]</td>
+<td style="text-align: left;">cell.type</td>
+<td style="text-align: left;"></td>
+<td style="text-align: left;"><a href="#data">data</a> array of cell types (VTK compatible)</td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">string</td>
 <td style="text-align: left;">hexMethod</td>
 <td style="text-align: left;">planar</td>
 <td style="text-align: left;">“planar” (faster, assumes planar sides) or “nonplanar”</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td style="text-align: left;">bool</td>
 <td style="text-align: left;">precomputedNormals</td>
 <td style="text-align: left;">true</td>
-<td style="text-align: left;">whether to accelerate by precomputing, at a cost of 72 bytes/cell</td>
+<td style="text-align: left;">whether to accelerate by precomputing, at a cost of 12 bytes/face</td>
 </tr>
 </tbody>
 </table>
@@ -1772,7 +1825,7 @@ special parameters:
 : Special parameters understood by the SciVis renderer.
 
 Note that the intensity (and color) of AO is deduced from an [ambient
-light](#ambient-light) in the `lights` array.[^3] If `aoSamples` is zero
+light](#ambient-light) in the `lights` array.[^4] If `aoSamples` is zero
 (the default) then ambient lights cause ambient illumination (without
 occlusion).
 
@@ -1923,7 +1976,7 @@ OSPLight ospNewLight3(const char *type);
 
 The call returns `NULL` if that type of light is not known by the
 renderer, or else an `OSPLight` handle to the created light source. All
-light sources[^4] accept the following parameters:
+light sources[^5] accept the following parameters:
 
 | Type     | Name      |  Default| Description                            |
 |:---------|:----------|--------:|:---------------------------------------|
@@ -2036,7 +2089,7 @@ tracer](#path-tracer)).
 
 #### Quad Light
 
-The quad[^5] light is a planar, procedural area light source emitting
+The quad[^6] light is a planar, procedural area light source emitting
 uniformly on one side into the half-space. It is created by passing the
 type string “`quad`” to `ospNewLight3`. In addition to the [general
 parameters](#lights) understood by all lights the quad light supports
@@ -2191,7 +2244,7 @@ with `Tf`.
 Normal mapping can simulate small geometric features via the texture
 `map_Bump`. The normals $n$ in the normal map are wrt. the local
 tangential shading coordinate system and are encoded as $½(n+1)$, thus a
-texel $(0.5, 0.5, 1)$[^6] represents the unperturbed shading normal
+texel $(0.5, 0.5, 1)$[^7] represents the unperturbed shading normal
 $(0, 0, 1)$. Because of this encoding an sRGB gamma [texture](#texture)
 format is ignored and normals are always fetched as linear from a normal
 map. Note that the orientation of normal maps is important for a
@@ -2829,6 +2882,9 @@ The supported texture formats for `texture2d` are:
 | OSP\_TEXTURE\_SRGB    | 8 bit sRGB gamma encoded components red, green, blue        |
 | OSP\_TEXTURE\_RGB32F  | 32 bit float components red, green, blue                    |
 | OSP\_TEXTURE\_R8      | 8 bit \[0–255\] linear single component                     |
+| OSP\_TEXTURE\_RA8     | 8 bit \[0–255\] linear two component                        |
+| OSP\_TEXTURE\_L8      | 8 bit \[0–255\] gamma encoded luminance                     |
+| OSP\_TEXTURE\_LA8     | 8 bit \[0–255\] gamma encoded luminance, and linear alpha   |
 | OSP\_TEXTURE\_R32F    | 32 bit float single component                               |
 
 : Supported texture formats by `texture2D`, i.e., valid constants of
@@ -2996,7 +3052,7 @@ images below.
 </figure>
 
 <figure>
-<img src="https://ospray.github.io/images/camera_architectual.jpg" alt="Enabling the architectural flag corrects the perspective projection distortion, resulting in parallel vertical edges." width="60.0%" /><figcaption>Enabling the <code>architectural</code> flag corrects the perspective projection distortion, resulting in parallel vertical edges.</figcaption>
+<img src="https://ospray.github.io/images/camera_architectural.jpg" alt="Enabling the architectural flag corrects the perspective projection distortion, resulting in parallel vertical edges." width="60.0%" /><figcaption>Enabling the <code>architectural</code> flag corrects the perspective projection distortion, resulting in parallel vertical edges.</figcaption>
 </figure>
 
 <figure>
@@ -3108,8 +3164,7 @@ values of `OSPFrameBufferChannel` listed in the table below.
 
 : Framebuffer channels constants (of type `OSPFrameBufferChannel`),
 naming optional information the framebuffer can store. These values can
-be combined by bitwise OR when passed to `ospNewFrameBuffer` or
-`ospFrameBufferClear`.
+be combined by bitwise OR when passed to `ospNewFrameBuffer`.
 
 If a certain channel value is *not* specified, the given buffer channel
 will not be present. Note that OSPRay makes a clear distinction between
@@ -3152,14 +3207,25 @@ void ospUnmapFrameBuffer(const void *mapped, OSPFrameBuffer);
 The individual channels of a framebuffer can be cleared with
 
 ``` {.cpp}
-void ospFrameBufferClear(OSPFrameBuffer, const uint32_t frameBufferChannels);
+void ospResetAccumulation(OSPFrameBuffer);
 ```
 
-When selected, `OSP_FB_COLOR` will clear the color buffer to black
-`(0, 0, 0, 0)`, `OSP_FB_DEPTH` will clear the depth buffer to `inf`.
-`OSP_FB_ACCUM` will clear *all* accumulating buffers (`OSP_FB_VARIANCE`,
+This function will clear *all* accumulating buffers (`OSP_FB_VARIANCE`,
 `OSP_FB_NORMAL`, and `OSP_FB_ALBEDO`, if present) and resets the
-accumulation counter `accumID`.
+accumulation counter `accumID`. It is unspecified if the existing color
+and depth buffers are physically cleared when `ospResetAccumulation` is
+called.
+
+If `OSP_FB_VARIANCE` is specified, an estimate of the variance of the
+last accumulated frame can be queried with
+
+``` {.cpp}
+float ospGetVariance(OSPFrameBuffer);
+```
+
+Note this value is only updated after synchronizing with
+`OSP_FRAME_FINISHED`, as further described in [asynchronous
+rendering](#asynchronous-rendering).
 
 ### Pixel Operation {#pixel-operation .unnumbered}
 
@@ -3266,6 +3332,8 @@ exposure bias to match 18% middle gray.
 Rendering
 ---------
 
+### Synchronous Rendering
+
 To render a frame into the given framebuffer with the given renderer use
 
 ``` {.cpp}
@@ -3274,7 +3342,7 @@ float ospRenderFrame(OSPFrameBuffer, OSPRenderer,
 ```
 
 The third parameter specifies what channel(s) of the framebuffer is
-written to[^7]. What to render and how to render it depends on the
+written to[^8]. What to render and how to render it depends on the
 renderer’s parameters. If the framebuffer supports accumulation (i.e.,
 it was created with `OSP_FB_ACCUM`) then successive calls to
 `ospRenderFrame` will progressively refine the rendered image. If
@@ -3284,31 +3352,65 @@ rendered image, otherwise `inf` is returned. The estimated variance can
 be used by the application as a quality indicator and thus to decide
 whether to stop or to continue progressive rendering.
 
-### Progress and Cancel {#progress-and-cancel .unnumbered}
+### Asynchronous Rendering
 
-To be informed about the progress of rendering the current frame the
-application can register a callback function of type
-
-``` {.cpp}
-typedef int (*OSPProgressFunc)(void* userPtr, const float progress);
-```
-
-via
+Rendering can also be done asynchronously, with a similar interface to
+the above synchronous version. To start an asynchronous render, use
 
 ``` {.cpp}
-void ospSetProgressFunc(OSPProgressFunc, void* userPtr);
+OSPFuture ospRenderFrameAsync(OSPFrameBuffer,
+                              OSPRenderer,
+                              const uint32_t);
 ```
 
-The provided user pointer `userPtr` is passed as first argument to the
-callback function[^8] and the reported progress is in (0–1\]. If the
-callback function returns zero than the application requests to cancel
-rendering, i.e., the current `ospRenderFrame` will return at the first
-opportunity and the content of the frame buffer will be undefined.
-Therefore, better clear the framebuffer with `ospFrameBufferClear` then
-before a subsequent call of `ospRenderFrame`.
+This version returns an `OSPFuture` handle, which can be used to
+synchronize with, cancel, or query for progress of the running task.
+When `ospRenderFrameAsync` is called, there is no guarantee when the
+associated task will begin execution.
 
-Passing `NULL` as `OSPProgressFunc` function pointer disables the
-progress callback.
+Progress of a running frame can be queried with the following API
+function
+
+``` {.cpp}
+float ospGetProgress(OSPFuture);
+```
+
+This returns the progress of the task in \[0-1\].
+
+Applications can wait on the result of an asynchronous operation, or
+choose to only synchronize with a specific event. To synchronize with an
+`OSPFuture` use
+
+``` {.cpp}
+void ospWait(OSPFuture, OSPSyncEvent = OSP_TASK_FINISHED);
+```
+
+The following are values which can be synchronized with the application
+
+| Name                  | Description                                              |
+|:----------------------|:---------------------------------------------------------|
+| OSP\_NONE\_FINISHED   | Don’t wait for anything to be finished (immediately      |
+|                       | return from `ospWait`)                                   |
+| OSP\_WORLD\_COMMITTED | Wait for the world to be committed (not yet implemented) |
+| OSP\_WORLD\_RENDERED  | Wait for the world to be rendered, but not               |
+|                       | post-processing operations (Pixel/Tile/Frame Op)         |
+| OSP\_FRAME\_FINISHED  | Wait for all rendering operations to complete            |
+| OSP\_TASK\_FINISHED   | Wait on full completion of the task associated with      |
+|                       | the future. The underlying task may involve one or       |
+|                       | more of the above synchronization events                 |
+
+: Supported events that can be passed to `ospWait`
+
+Currently only rendering can be invoked asynchronously. However, future
+releases of OSPRay may add more asynchronous versions of API calls (and
+thus return `OSPFuture`).
+
+### Asynchronous Rendering and ospCommit()
+
+The use of either `ospRenderFrame` or `ospRenderFrameAsync` requires
+that all objects in the scene being rendererd have been committed before
+rendering occurs. If a call to `ospCommit()` happens while a frame is
+rendered, the result is undefined behavior and should be avoided.
 
 Parallel Rendering with MPI
 ===========================
@@ -3499,6 +3601,8 @@ aggregate their data to the OSPRay process for rendering.
 The model used by the distributed device takes three additional
 parameters, to allow users to express their data distribution to OSPRay.
 All models should be disjoint to ensure correct sort-last compositing.
+Geometries used in the distributed MPI renderer can make use of the
+[SciVis renderer](#scivis-renderer)’s [OBJ material](#obj-material).
 
 <table style="width:98%;">
 <caption>Parameters for the distributed <code>OSPModel</code>.</caption>
@@ -3540,15 +3644,18 @@ The renderer supported when using the distributed device is the
 currently only supports ambient occlusion (on the local data only, with
 optional ghost data). To compute correct ambient occlusion across the
 distributed data the application is responsible for replicating ghost
-data and specifying the ghost models and models as described above.
+data and specifying the ghost models and models as described above. Note
+that shadows and ambient occlusion are computed on the local geometries,
+in the `model` and the corresponding `ghostModel` in the ghost model
+array, if any where set.
 
 <table style="width:98%;">
 <caption>Parameters for the <code>mpi_raycast</code> renderer.</caption>
 <colgroup>
 <col style="width: 25%" />
-<col style="width: 14%" />
+<col style="width: 28%" />
 <col style="width: 12%" />
-<col style="width: 44%" />
+<col style="width: 30%" />
 </colgroup>
 <thead>
 <tr class="header">
@@ -3572,10 +3679,28 @@ data and specifying the ghost models and models as described above.
 <td style="text-align: left;">the optional <a href="#model">model</a> containing the ghost geometry for ambient occlusion; when setting a <a href="#data">data</a> array for both <code>model</code> and <code>ghostModel</code>, each individual ghost model shadows only its corresponding model</td>
 </tr>
 <tr class="odd">
+<td style="text-align: left;">OSPLight[]</td>
+<td style="text-align: left;">lights</td>
+<td style="text-align: right;"></td>
+<td style="text-align: left;"><a href="#data">data</a> array with handles of the <a href="#lights">lights</a></td>
+</tr>
+<tr class="even">
 <td style="text-align: left;">int</td>
 <td style="text-align: left;">aoSamples</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: left;">number of rays per sample to compute ambient occlusion</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">bool</td>
+<td style="text-align: left;">aoTransparencyEnabled</td>
+<td style="text-align: right;">false</td>
+<td style="text-align: left;">whether object transparency is respected when computing ambient occlusion (slower)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">bool</td>
+<td style="text-align: left;">oneSidedLighting</td>
+<td style="text-align: right;">true</td>
+<td style="text-align: left;">if true, backfacing surfaces (wrt. light source) receive no illumination</td>
 </tr>
 </tbody>
 </table>
@@ -3744,8 +3869,8 @@ thread that is committing and rendering.
 Examples
 ========
 
-Tutorial
---------
+Simple Tutorial
+---------------
 
 A minimal working example demonstrating how to use OSPRay can be found
 at `apps/ospTutorial.c`[^9]. On Linux build it in the build directory
@@ -3770,6 +3895,23 @@ frames in the second image `accumulatedFrames.ppm`.
 
 ![After accumulating ten
 frames.](https://ospray.github.io/images/tutorial_accumulatedframe.png)
+
+Mini-App Tutorials
+------------------
+
+OSPRay also ships various mini-apps to showcase OSPRay features. These
+apps are all prefixed with `ospTutorial` and can be found in the
+`tutorials/` directory of the OSPRay source tree. Current tutorials
+include:
+
+-   structured volumes
+-   unstructured volumes
+-   spheres
+-   animated spheres
+-   subdivision surfaces
+
+More apps will be created in future releases to further demonstrate
+other interesting OSPRay features.
 
 Example Viewer
 --------------
@@ -3845,6 +3987,13 @@ viewer.
     [demos](#demos) page for examples.
 -   Supported file importers currently include: `obj`, `ply`, `x3d`,
     `vtu`, `osp`, `ospsg`, `xml` (rivl), `points`, `xyz`.
+
+### Denoiser
+
+When the example viewer is built with OpenImageDenoise, the denoiser is
+automatically enabled when running the application. It can be toggled
+on/off at runtime via the `useDenoiser` GUI parameter found under the
+framebuffer in the scene graph.
 
 Distributed Viewer
 ------------------
@@ -3926,24 +4075,27 @@ page.
 [^1]: For example, if OSPRay is in `~/Projects/ospray`, ISPC will also
     be searched in `~/Projects/ispc-v1.9.2-linux`
 
-[^2]: For consecutive memory addresses the x-index of the corresponding
+[^2]: This file is usually in
+    `${install_location}/[lib|lib64]/cmake/ospray-${version}/`. If CMake
+    does not find it automatically, then specify its location in
+    variable `ospray_DIR` (either an environment variable or CMake
+    variable).
+
+[^3]: For consecutive memory addresses the x-index of the corresponding
     voxel changes the quickest.
 
-[^3]: If there are multiple ambient lights then their contribution is
+[^4]: If there are multiple ambient lights then their contribution is
     added
 
-[^4]: The [HDRI light](#hdri-light) is an exception, it knows about
+[^5]: The [HDRI light](#hdri-light) is an exception, it knows about
     `intensity`, but not about `color`.
 
-[^5]: actually a parallelogram
+[^6]: actually a parallelogram
 
-[^6]: respectively $(127, 127, 255)$ for 8 bit textures
+[^7]: respectively $(127, 127, 255)$ for 8 bit textures
 
-[^7]: This is currently not implemented, i.e., all channels of the
+[^8]: This is currently not implemented, i.e., all channels of the
     framebuffer are always updated.
-
-[^8]: That way applications can also register a member function of a C++
-    class together with the `this` pointer as `userPtr`.
 
 [^9]: A C++ version that uses the C++ convenience wrappers of OSPRay’s
     C99 API via `include/ospray/ospray_cpp.h` is available at

@@ -43,10 +43,9 @@ namespace ospray {
       // Device Implementation ////////////////////////////////////////////////
 
       /*! create a new frame buffer */
-      OSPFrameBuffer
-      frameBufferCreate(const vec2i &size,
-                        const OSPFrameBufferFormat mode,
-                        const uint32 channels) override;
+      OSPFrameBuffer frameBufferCreate(const vec2i &size,
+                                       const OSPFrameBufferFormat mode,
+                                       const uint32 channels) override;
 
       /*! create a new transfer function object (out of list of
         registered transfer function types) */
@@ -61,27 +60,13 @@ namespace ospray {
       /*! unmap previously mapped frame buffer */
       void frameBufferUnmap(const void *mapped, OSPFrameBuffer fb) override;
 
-
       /*! set a frame buffer's pixel op object */
       void setPixelOp(OSPFrameBuffer _fb, OSPPixelOp _op) override;
 
       /*! create a new pixelOp object (out of list of registered pixelOps) */
       OSPPixelOp newPixelOp(const char *type) override;
 
-      /*! clear the specified channel(s) of the frame buffer specified in
-          'whichChannels'
-
-        if whichChannel&OSP_FB_COLOR!=0, clear the color buffer to
-        '0,0,0,0'.
-
-        if whichChannel&OSP_FB_DEPTH!=0, clear the depth buffer to
-        +inf.
-
-        if whichChannel&OSP_FB_ACCUM!=0, clear the accum buffer to 0,0,0,0,
-        and reset accumID.
-      */
-      void frameBufferClear(OSPFrameBuffer _fb,
-                            const uint32 fbChannelFlags) override;
+      void resetAccumulation(OSPFrameBuffer _fb) override;
 
       /*! create a new model */
       OSPModel newModel() override;
@@ -102,12 +87,16 @@ namespace ospray {
       void removeVolume(OSPModel _model, OSPVolume _volume) override;
 
       /*! create a new data buffer */
-      OSPData newData(size_t nitems, OSPDataType format,
-                      const void *init, int flags) override;
+      OSPData newData(size_t nitems,
+                      OSPDataType format,
+                      const void *init,
+                      int flags) override;
 
       /*! Copy data into the given volume. */
-      int setRegion(OSPVolume object, const void *source,
-                    const vec3i &index, const vec3i &count) override;
+      int setRegion(OSPVolume object,
+                    const void *source,
+                    const vec3i &index,
+                    const vec3i &count) override;
 
       /*! assign (named) string parameter to an object */
       void setString(OSPObject object,
@@ -166,7 +155,7 @@ namespace ospray {
       /*! create a new renderer object (out of list of registered renderers) */
       OSPRenderer newRenderer(const char *type) override;
 
-      /*! create a new geometry object (out of list of registered geometrys) */
+      /*! create a new geometry object (out of list of registered geometries) */
       OSPGeometry newGeometry(const char *type) override;
 
       /*! have given renderer create a new material */
@@ -187,6 +176,20 @@ namespace ospray {
       float renderFrame(OSPFrameBuffer _sc,
                         OSPRenderer _renderer,
                         const uint32 fbChannelFlags) override;
+
+      OSPFuture renderFrameAsync(OSPFrameBuffer,
+                                 OSPRenderer,
+                                 const uint32) override;
+
+      int isReady(OSPFuture) override;
+
+      void wait(OSPFuture, OSPSyncEvent) override;
+
+      void cancel(OSPFuture) override;
+
+      float getProgress(OSPFuture) override;
+
+      float getVariance(OSPFrameBuffer) override;
 
       /*! load module */
       int loadModule(const char *name) override;
@@ -209,11 +212,9 @@ namespace ospray {
       /*! create a new Texture object */
       OSPTexture newTexture(const char *type) override;
 
-      OSPPickResult pick(OSPRenderer renderer,
-                         const vec2f &screenPos) override;
+      OSPPickResult pick(OSPRenderer renderer, const vec2f &screenPos) override;
 
-    private:
-
+     private:
       void initializeDevice();
 
       void processWork(work::Work &work, bool flushWriteStream = false);
@@ -224,17 +225,15 @@ namespace ospray {
       ObjectHandle allocateHandle() const;
 
       /*! @{ read and write stream for the work commands */
-      std::unique_ptr<networking::Fabric>      mpiFabric;
-      std::unique_ptr<networking::ReadStream>  readStream;
+      std::unique_ptr<networking::Fabric> mpiFabric;
+      std::unique_ptr<networking::ReadStream> readStream;
       std::unique_ptr<networking::WriteStream> writeStream;
       /*! @} */
 
       work::WorkTypeRegistry workRegistry;
 
-      bool initialized {false};
+      bool initialized{false};
     };
 
-  } // ::ospray::mpi
-} // ::ospray
-
-
+  }  // namespace mpi
+}  // namespace ospray

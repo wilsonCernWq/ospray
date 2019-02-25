@@ -20,6 +20,7 @@
 ospray_find_embree(${EMBREE_VERSION_REQUIRED})
 ospray_verify_embree_features()
 ospray_determine_embree_isa_support()
+ospray_create_embree_target()
 
 # Configure OSPRay ISA last after we've detected what we got w/ Embree
 ospray_configure_ispc_isa()

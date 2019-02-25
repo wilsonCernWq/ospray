@@ -159,8 +159,8 @@ example applications use
     cmake --build . --config Release --target ospray -- /m
 
 
-Finding OSPRay with CMake
-=========================
+Finding an OSPRay install with CMake
+====================================
 
 Client applications using OSPRay can find it with CMake's
 `find_package()` command. For example,
@@ -176,7 +176,7 @@ found, the following is all that is required to use OSPRay:
 
     target_link_libraries(${client_target} ospray::ospray)
 
-This will automatically propogate all required include paths, linked
+This will automatically propagate all required include paths, linked
 libraries, and compiler definitions to the client CMake target
 (either an executable or library).
 

@@ -18,13 +18,6 @@
 #include <limits>
 #include <map>
 #include <utility>
-#ifndef _WIN32
-#include <sys/times.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/resource.h>
-#include <unistd.h>
-#endif
 #include <fstream>
 // ospcommon
 #include "ospcommon/tasking/parallel_for.h"
@@ -36,6 +29,9 @@
 #include "../../MPIDistributedDevice.h"
 #include "../MPILoadBalancer.h"
 #include "../../fb/DistributedFrameBuffer.h"
+#include "../../common/Profiling.h"
+#include "lights/Light.h"
+#include "lights/AmbientLight.h"
 // ispc exports
 #include "DistributedRaycast_ispc.h"
 
@@ -43,55 +39,9 @@ namespace ospray {
   namespace mpi {
     using namespace std::chrono;
 
-#ifndef _WIN32
-    static rusage createBlank_rusage()
-    {
-      rusage tmp;
-      std::memset(&tmp, 0, sizeof(rusage));
-      return tmp;
-    }
-
-    static rusage prevUsage = createBlank_rusage();
-    static rusage curUsage = createBlank_rusage();
-#endif
-    static high_resolution_clock::time_point prevWall, curWall;
     static size_t frameNumber = 0;
 
     static bool DETAILED_LOGGING = false;
-
-    bool startsWith(const std::string &a, const std::string &prefix) {
-      if (a.size() < prefix.size()) {
-        return false;
-      }
-      return std::equal(prefix.begin(), prefix.end(), a.begin());
-    }
-
-    void logProcessStatistics(std::ostream &os) {
-#ifndef _WIN32
-      const double elapsedCpu = curUsage.ru_utime.tv_sec + curUsage.ru_stime.tv_sec
-                                - (prevUsage.ru_utime.tv_sec + prevUsage.ru_stime.tv_sec)
-                                + 1e-6f * (curUsage.ru_utime.tv_usec + curUsage.ru_stime.tv_usec
-                                           - (prevUsage.ru_utime.tv_usec + prevUsage.ru_stime.tv_usec));
-
-      const double elapsedWall = duration_cast<duration<double>>(curWall - prevWall).count();
-      os << "\tCPU: " << elapsedCpu / elapsedWall * 100.0 << "%\n";
-
-
-      std::ifstream procStatus("/proc/" + std::to_string(getpid()) + "/status");
-      std::string line;
-      const static std::vector<std::string> propPrefixes{
-        "Threads", "Cpus_allowed_list", "VmSize", "VmRSS"
-      };
-      while (std::getline(procStatus, line)) {
-        for (const auto &p : propPrefixes) {
-          if (startsWith(line, p)) {
-            os << "\t" << line << "\n";
-            break;
-          }
-        }
-      }
-#endif
-    }
 
     struct RegionInfo
     {
@@ -149,7 +99,7 @@ namespace ospray {
     // DistributedRaycastRenderer definitions /////////////////////////////////
 
     DistributedRaycastRenderer::DistributedRaycastRenderer()
-      : numAoSamples(0), camera(nullptr)
+      : numAoSamples(0), shadowsEnabled(false), camera(nullptr)
     {
       ispcEquivalent = ispc::DistributedRaycastRenderer_create(this);
 
@@ -182,6 +132,31 @@ namespace ospray {
       ghostRegionIEs.clear();
 
       numAoSamples = getParam1i("aoSamples", 0);
+      oneSidedLighting = getParam1i("oneSidedLighting", 1);
+      shadowsEnabled = getParam1i("shadowsEnabled", 0);
+
+      lightData = (Data*)getParamData("lights");
+      lightIEs.clear();
+      ambientLight = vec3f(0.f);
+
+      if (lightData) {
+        for (size_t i = 0; i < lightData->size(); ++i) {
+          const Light* const light = ((Light**)lightData->data)[i];
+          // Extract color from ambient lights, and don't include them in the
+          // light list
+          const AmbientLight* const ambient =
+            dynamic_cast<const AmbientLight*>(light);
+          if (ambient) {
+            ambientLight += ambient->getRadiance();
+          } else {
+            lightIEs.push_back(light->getIE());
+          }
+        }
+      } else {
+        static WarnOnce warn("No lights provided to the renderer, "
+            "making a default ambient light");
+        ambientLight = vec3f(0.2);
+      }
 
       camera = reinterpret_cast<PerspectiveCamera*>(getParamObject("camera"));
       if (!camera) {
@@ -216,13 +191,18 @@ namespace ospray {
       std::transform(ghostRegions.begin(), ghostRegions.end(), std::back_inserter(ghostRegionIEs),
                      [](const DistributedModel *m) { return m->getIE(); });
 
-
       exchangeModelBounds();
 
+      void **lightsPtr = lightIEs.empty() ? nullptr : lightIEs.data();
       ispc::DistributedRaycastRenderer_set(getIE(),
                                            allRegions.data(),
                                            static_cast<int>(allRegions.size()),
                                            numAoSamples,
+                                           oneSidedLighting,
+                                           shadowsEnabled,
+                                           (ispc::vec3f*)&ambientLight,
+                                           lightIEs.size(),
+                                           lightsPtr,
                                            regionIEs.data(),
                                            ghostRegionIEs.data());
     }
@@ -237,17 +217,13 @@ namespace ospray {
         return renderNonDistrib(fb, channelFlags);
       }
 
-      auto startRender = high_resolution_clock::now();
-
-#ifndef _WIN32
-      getrusage(RUSAGE_SELF, &prevUsage);
-#endif
-      prevWall = high_resolution_clock::now();
+      ProfilingPoint startRender;
 
       auto *dfb = dynamic_cast<DistributedFrameBuffer *>(fb);
       dfb->setFrameMode(DistributedFrameBuffer::ALPHA_BLEND);
       dfb->startNewFrame(errorThreshold);
-      dfb->beginFrame();
+
+      const auto fbSize = dfb->getNumPixels();
 
       beginFrame(dfb);
 
@@ -262,8 +238,8 @@ namespace ospray {
           // Note that these bounds are very conservative, the bounds we compute
           // below are much tighter, and better. We just use the depth from the
           // projection to sort the tiles later
-          projectedRegions[i].bounds.lower *= dfb->size;
-          projectedRegions[i].bounds.upper *= dfb->size;
+          projectedRegions[i].bounds.lower *= fbSize;
+          projectedRegions[i].bounds.upper *= fbSize;
           regionOrdering.insert(std::make_pair(projectedRegions[i].depth, i));
 #if 0
           if (mpicommon::globalRank() == 0) {
@@ -381,13 +357,15 @@ namespace ospray {
         const bool tileOwner = (tileIndex % numGlobalRanks()) == globalRank();
         const int NUM_JOBS = (TILE_SIZE * TILE_SIZE) / RENDERTILE_PIXELS_PER_JOB;
 
+        const auto fbSize = dfb->getNumPixels();
+
 #if !PARTITION_OUT_FINISHED_TILES
         if (dfb->tileError(tileID) <= errorThreshold) {
           return;
         }
 #endif
 
-        Tile __aligned(64) bgtile(tileID, dfb->size, accumID);
+        Tile __aligned(64) bgtile(tileID, fbSize, accumID);
 
         RegionInfo regionInfo;
         // The visibility entries are sorted by the region id, matching
@@ -437,7 +415,7 @@ namespace ospray {
 #if PARALLEL_REGION_RENDERING
         tasking::parallel_for(myVisibleRegions.size(), [&](size_t vid) {
           const size_t i = myVisibleRegions[vid];
-          Tile __aligned(64) tile(tileID, dfb->size, accumID);
+          Tile __aligned(64) tile(tileID, fbSize, accumID);
 #else
         for (const size_t &i : myVisibleRegions) {
           Tile &tile = bgtile;
@@ -478,18 +456,13 @@ namespace ospray {
       dfb->waitUntilFinished();
       endFrame(nullptr, channelFlags);
 
-      auto endComposite = high_resolution_clock::now();
-
-#ifndef _WIN32
-      getrusage(RUSAGE_SELF, &curUsage);
-#endif
-      curWall = high_resolution_clock::now();
+      ProfilingPoint endComposite;
 
       if (DETAILED_LOGGING && frameNumber > 5) {
         const std::array<int, 3> localTimes {
-          duration_cast<milliseconds>(endRender - startRender).count(),
-          duration_cast<milliseconds>(endComposite - endRender).count(),
-          duration_cast<milliseconds>(endComposite - startRender).count()
+          duration_cast<milliseconds>(endRender - startRender.time).count(),
+          duration_cast<milliseconds>(endComposite.time - endRender).count(),
+          duration_cast<milliseconds>(endComposite.time - startRender.time).count()
         };
         std::array<int, 3> maxTimes = {0};
         std::array<int, 3> minTimes = {0};
@@ -521,12 +494,13 @@ namespace ospray {
           << "\tTouched Tiles: " << tilesForFrame.size() << "\n";
 
         dfb->reportTimings(*statsLog);
-        logProcessStatistics(*statsLog);
+        logProfilingData(*statsLog, startRender, endComposite);
         maml::logMessageTimings(*statsLog);
         *statsLog << "-----\n" << std::flush;
       }
       ++frameNumber;
-      return dfb->endFrame(errorThreshold);
+      dfb->endFrame(errorThreshold);
+      return dfb->getVariance();
     }
 
     // TODO WILL: This is only for benchmarking the compositing using
@@ -536,13 +510,9 @@ namespace ospray {
                                                        const uint32 channelFlags)
     {
       using namespace mpicommon;
-      auto startRender = high_resolution_clock::now();
-#ifndef _WIN32
-      getrusage(RUSAGE_SELF, &prevUsage);
-#endif
-      prevWall = high_resolution_clock::now();
+      ProfilingPoint startRender;
 
-      fb->beginFrame();
+      const auto fbSize = fb->getNumPixels();
 
       beginFrame(fb);
 
@@ -557,7 +527,7 @@ namespace ospray {
           return;
         }
 
-        Tile __aligned(64) tile(tileID, fb->size, accumID);
+        Tile __aligned(64) tile(tileID, fbSize, accumID);
 
         // We use the task of rendering the first region to also fill out the block visiblility list
         const int NUM_JOBS = (TILE_SIZE * TILE_SIZE) / RENDERTILE_PIXELS_PER_JOB;
@@ -570,15 +540,11 @@ namespace ospray {
 
       endFrame(nullptr, channelFlags);
 
-      auto endRender = high_resolution_clock::now();
-#ifndef _WIN32
-      getrusage(RUSAGE_SELF, &curUsage);
-#endif
-      curWall = high_resolution_clock::now();
+      ProfilingPoint endRender;
 
       if (DETAILED_LOGGING && frameNumber > 5) {
         const std::array<int, 1> localTimes = {
-          duration_cast<milliseconds>(endRender - startRender).count(),
+          duration_cast<milliseconds>(endRender.time - startRender.time).count(),
         };
         std::array<int, 1> maxTimes = {0};
         std::array<int, 1> minTimes = {0};
@@ -602,11 +568,12 @@ namespace ospray {
         gethostname(hostname, 1023);
         *statsLog << "Rank " << rank << " on " << hostname << " times:\n"
           << "\tRendering: " << localTimes[0] << "ms\n";
-        logProcessStatistics(*statsLog);
+        logProfilingData(*statsLog, startRender, endRender);
       }
 
       ++frameNumber;
-      return fb->endFrame(errorThreshold);
+      fb->endFrame(errorThreshold);
+      return fb->getVariance();
     }
 
     std::string DistributedRaycastRenderer::toString() const
@@ -651,8 +618,8 @@ namespace ospray {
       auto end = std::unique(allRegions.begin(), allRegions.end());
       allRegions.erase(end, allRegions.end());
 
-#if 0
-      if (logLevel() >= 1) {
+#ifndef __APPLE__
+      if (logLevel() >= 3) {
         for (int i = 0; i < mpicommon::numGlobalRanks(); ++i) {
           if (i == mpicommon::globalRank()) {
             postStatusMsg(1) << "Rank " << mpicommon::globalRank()

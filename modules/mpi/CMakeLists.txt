@@ -17,9 +17,6 @@
 option(OSPRAY_MODULE_MPI "MPI parallel device" OFF)
 
 if (OSPRAY_MODULE_MPI)
-  option(OSPRAY_MODULE_MPI_APPS "MPI module viewer application"
-    ${OSPRAY_APPS_EXAMPLEVIEWER})
-
   set(OSP_MPI_COMPRESSION_THRESHOLD 16 CACHE STRING
     "Min. number of ranks to enable message compression at (number)" )
   mark_as_advanced(OSP_MPI_COMPRESSION_THRESHOLD)
@@ -28,6 +25,7 @@ if (OSPRAY_MODULE_MPI)
 
   ospray_build_component(mpiCommon)
   ospray_build_component(mpiMessageLayer)
+  ospray_build_component(pico_bench)
   ospray_build_component(snappy EXCLUDE_FROM_ALL)
 
   include_directories_ispc(${CMAKE_CURRENT_BINARY_DIR})
@@ -41,6 +39,7 @@ if (OSPRAY_MODULE_MPI)
     common/Messaging.cpp
     common/DistributedModel.cpp
     common/DistributedModel.ispc
+    common/Profiling.cpp
 
     fb/DistributedFrameBuffer.cpp
     fb/DistributedFrameBuffer.ispc
@@ -61,6 +60,7 @@ if (OSPRAY_MODULE_MPI)
       ospray_module_ispc
       ospray_mpi_common
       ospray_mpi_maml
+      ospray_pico_bench
   )
 
   target_include_directories(ospray_module_mpi
@@ -81,19 +81,9 @@ if (OSPRAY_MODULE_MPI)
   target_link_libraries(ospray_mpi_worker PRIVATE ospray_module_ispc)
 
   ##############################################################
-  # Test apps
+  # Tutorials
   ##############################################################
-  if (OSPRAY_MODULE_MPI_APPS)
-    # Note: the MPI example viewer depends on tfn lib, so we must make sure that
-    # was built.
-    if (NOT TARGET ospray_tfn OR NOT TARGET ospray_imgui_util_sg
-        OR NOT TARGET ospray_imgui3d_sg)
-      message(FATAL_ERROR "ospray_tfn library is required for the MPI example app,"
-        " please set -DOSPRAY_APPS_EXAMPLEVIEWER=ON as well")
-    endif ()
-
-    add_subdirectory(apps)
-  endif (OSPRAY_MODULE_MPI_APPS)
+  add_subdirectory(tutorials)
 
 endif (OSPRAY_MODULE_MPI)
 

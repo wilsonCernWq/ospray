@@ -148,7 +148,7 @@ namespace ospray {
       /*! create a new renderer object (out of list of registered renderers) */
       OSPRenderer newRenderer(const char *type) override;
 
-      /*! create a new geometry object (out of list of registered geometrys) */
+      /*! create a new geometry object (out of list of registered geometries) */
       OSPGeometry newGeometry(const char *type) override;
 
       /*! have given renderer create a new material */
@@ -174,27 +174,26 @@ namespace ospray {
       /*! create a new Texture object */
       OSPTexture newTexture(const char *type) override;
 
-      /*! clear the specified channel(s) of the frame buffer specified in 'whichChannels'
-
-        if whichChannel&OSP_FB_COLOR!=0, clear the color buffer to
-        '0,0,0,0'.
-
-        if whichChannel&OSP_FB_DEPTH!=0, clear the depth buffer to
-        +inf.
-
-        if whichChannel&OSP_FB_ACCUM!=0, clear the accum buffer to 0,0,0,0,
-        and reset accumID.
-
-        if whichChannel&OSP_FB_NORMAL!=0, clear the normal buffer to 0,0,1.
-        if whichChannel&OSP_FB_ALBEDO!=0, clear the albedo buffer to 0,0,0.
-      */
-      void frameBufferClear(OSPFrameBuffer _fb,
-                                    const uint32 fbChannelFlags) override;
+      void resetAccumulation(OSPFrameBuffer _fb) override;
 
       /*! call a renderer to render a frame buffer */
       float renderFrame(OSPFrameBuffer _sc,
-                               OSPRenderer _renderer,
-                               const uint32 fbChannelFlags) override;
+                        OSPRenderer _renderer,
+                        const uint32 fbChannelFlags) override;
+
+      OSPFuture renderFrameAsync(OSPFrameBuffer _sc,
+                                 OSPRenderer _renderer,
+                                 const uint32 fbChannelFlags) override;
+
+      int isReady(OSPFuture) override;
+
+      void wait(OSPFuture, OSPSyncEvent) override;
+
+      void cancel(OSPFuture) override;
+
+      float getProgress(OSPFuture) override;
+
+      float getVariance(OSPFuture) override;
 
       //! release (i.e., reduce refcount of) given object
       /*! note that all objects in ospray are refcounted, so one cannot

@@ -26,10 +26,6 @@ cmake -L ^
 -T "Intel C++ Compiler 18.0" ^
 -D OSPRAY_BUILD_ISA=ALL ^
 -D OSPRAY_MODULE_MPI=ON ^
--D OSPRAY_MODULE_MPI_APPS=OFF ^
--D OSPRAY_SG_CHOMBO=OFF ^
--D OSPRAY_SG_OPENIMAGEIO=OFF ^
--D OSPRAY_SG_VTK=OFF ^
 -D OSPRAY_ZIP_MODE=OFF ^
 -D OSPRAY_INSTALL_DEPENDENCIES=ON ^
 -D USE_STATIC_RUNTIME=OFF ^
@@ -47,7 +43,10 @@ cmake --build . --config Release --target PACKAGE -- /m /nologo
 if %ERRORLEVEL% GEQ 1 goto abort
 
 rem create ZIP files
-cmake -D OSPRAY_ZIP_MODE=ON ..
+cmake -D OSPRAY_ZIP_MODE=ON ^
+-D OSPRAY_APPS_ENABLE_DENOISER=ON ^
+-D OSPRAY_INSTALL_DEPENDENCIES=ON ^
+..
 cmake --build . --config Release --target PACKAGE -- /m /nologo
 if %ERRORLEVEL% GEQ 1 goto abort
 

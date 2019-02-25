@@ -26,14 +26,22 @@ struct UnstructuredVolume
   //! struct).
   Volume super;
 
-  uniform int nVertices;
-  const vec3f *uniform vertices;
+  // vertex data
+  const vec3f* uniform vertex;
+  const float* uniform vertexValue; // attribute value at each vertex
 
-  uniform int nCells;
-  const vec4i *uniform indices;     // indices into vertices array.
-  const float *uniform field;       // Attribute value at each vertex.
-  const float *uniform cellField;   // Attribute value at each cell.
-  const vec3f *uniform faceNormals;
+  // index data
+  const uint32* uniform index;      // indices into vertices array
+  uniform bool index32Bit;          // true if index is 32-bit integer, false if 64-bit
+
+  // cell data
+  const uint32* uniform cell;       // cell offsets in indices array
+  uniform bool cell32Bit;           // true if cell offset is 32-bit integer, false if 64-bit
+  uniform uint32 cellSkipIds;       // skip indices when index array contain other data e.g. size
+  const uint8* uniform cellType;    // cell type array
+  const float* uniform cellValue;   // attribute value at each cell
+
+  const vec3f* uniform faceNormals;
 
   uniform MinMaxBVH2 bvh;
 

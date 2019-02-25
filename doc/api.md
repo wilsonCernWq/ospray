@@ -42,9 +42,11 @@ prefixed by convention with "`--osp:`") are understood:
   `--osp:loglevel <n>`       set logging level, default `0`; increasing `n` means
                              increasingly verbose log messages
 
-  `--osp:verbose`            shortcut for `--osp:loglevel 1`
+  `--osp:verbose`            shortcut for `--osp:loglevel 1` and enable debug
+                             output on console
 
-  `--osp:vv`                 shortcut for `--osp:loglevel 2`
+  `--osp:vv`                 shortcut for `--osp:loglevel 2` and enable debug
+                             output on console
 
   `--osp:module:<name>`      load a module during initialization; equivalent to
                              calling `ospLoadModule(name)`
@@ -213,6 +215,9 @@ callback which does nothing, so any output desired by an application
 will require that a callback is provided. Note that callbacks for C++
 `std::cout` and `std::cerr` can be alternatively set through `ospInit()`
 or the `OSPRAY_LOG_OUTPUT` environment variable.
+
+Applications can clear either callback by passing `nullptr` instead of an
+actual function pointer.
 
 ### Loading OSPRay Extensions at Runtime
 
@@ -573,22 +578,22 @@ like the structured volume equivalent, but they only modify the root
 
 ### Unstructured Volumes
 
-Unstructured volumes can contain tetrahedral, wedge, or hexahedral
-cell types, and are defined by three arrays: vertices, corresponding
-field values, and eight indices per cell (first four are -1 for
-tetrahedral cells, first two are -2 for wedge cells). An unstructured
-volume type is created by passing the type string
-"`unstructured_volume`" to `ospNewVolume`.
+Unstructured volumes can have its topology and geometry freely defined.
+Geometry can be composed of tetrahedral, wedge, or hexahedral cell
+types. Data format optinally matches VTK and consists from multiple
+arrays: vertex positions and values, vertex indices, cell start indices,
+cell types, and cell values. An unstructured volume type is created by
+passing the type string "`unstructured_volume`" to `ospNewVolume`.
 
-Field values can be specified per-vertex (`field`) or per-cell
-(`cellField`). If both values are set, `cellField` takes precedence.
+Sampled cell values can be specified either per-vertex (`vertex.value`)
+or per-cell (`cell.value`). If both arrays are set, `cell.value` takes
+precedence.
 
-Similar to [triangle mesh], each tetrahedron is formed by a group of
-indices into the vertices. For each vertex, the corresponding (by array
-index) data value will be used for sampling when rendering. Note that
-the index order for each tetrahedron does not matter, as OSPRay
-internally calculates vertex normals to ensure proper sampling and
-interpolation.
+Similar to a mesh, each cell is formed by a group of indices into the
+vertices. For each vertex, the corresponding (by array index) data value
+will be used for sampling when rendering, if specified. The index order
+for a tetrahedron is the same as `VTK_TETRA`: bottom triangle
+counterclockwise, then the top vertex.
 
 For wedge cells, each wedge is formed by a group of six indices into the
 vertices and data value. Vertex ordering is the same as `VTK_WEDGE`:
@@ -599,26 +604,43 @@ indices into the vertices and data value. Vertex ordering is the same as
 `VTK_HEXAHEDRON`: four bottom vertices counterclockwise, then top four
 counterclockwise.
 
-  -------- ------------------  -------  ---------------------------------------
-  Type     Name                Default  Description
-  -------- ------------------  -------  ---------------------------------------
-  vec3f[]  vertices                     [data] array of vertex positions
+To maintain VTK data compatibility an index array may be specified via
+`indexPrefixed` array that allow vertex indices to be interleaved with
+cell sizes in the following format: $n, id_1, ..., id_n, m, id_1, ...,
+id_m$.
 
-  float[]  field                        [data] array of vertex data values to
-                                        be sampled
+  -------------------  ------------------  -------  ---------------------------------------
+  Type                 Name                Default  Description
+  -------------------  ------------------  -------  ---------------------------------------
+  vec3f[]              vertex                       [data] array of vertex positions
 
-  float[]  cellField                    [data] array of cell data values to be
-                                        sampled
+  float[]              vertex.value                 [data] array of vertex data values to
+                                                    be sampled
 
-  vec4i[]  indices                      [data] array of tetrahedra indices
-                                        (into vertices and field)
+  uint32[] / uint64[]  index                        [data] array of indices (into the
+                                                    vertex array(s)) that form cells
 
-  string   hexMethod           planar   "planar" (faster, assumes planar sides)
-                                        or "nonplanar"
+  uint32[] / uint64[]  indexPrefixed                alternative [data] array of indices
+                                                    compatible to VTK, where the indices of
+                                                    each cell are prefixed with the number
+                                                    of vertices
 
-  bool     precomputedNormals  true     whether to accelerate by precomputing,
-                                        at a cost of 72 bytes/cell
-  -------- ------------------  -------  ---------------------------------------
+  uint32[] / uint64[]  cell                         [data] array of locations (into the
+                                                    index array), specifying the first index
+                                                    of each cell
+
+  float[]              cell.value                   [data] array of cell data values to be
+                                                    sampled
+
+  uint8[]              cell.type                    [data] array of cell types
+                                                    (VTK compatible)
+
+  string               hexMethod           planar   "planar" (faster, assumes planar sides)
+                                                    or "nonplanar"
+
+  bool                 precomputedNormals  true     whether to accelerate by precomputing,
+                                                    at a cost of 12 bytes/face
+  -------------------  ------------------  -------  ---------------------------------------
   : Additional configuration parameters for unstructured volumes.
 
 ### Transfer Function
@@ -1980,8 +2002,7 @@ values of `OSPFrameBufferChannel` listed in the table below.
   ---------------- -----------------------------------------------------------
   : Framebuffer channels constants (of type `OSPFrameBufferChannel`),
   naming optional information the framebuffer can store. These values
-  can be combined by bitwise OR when passed to `ospNewFrameBuffer` or
-  `ospFrameBufferClear`.
+  can be combined by bitwise OR when passed to `ospNewFrameBuffer`.
 
 If a certain channel value is _not_ specified, the given buffer channel
 will not be present. Note that OSPRay makes a clear distinction
@@ -2019,13 +2040,20 @@ the received pointer `mapped` to
 
 The individual channels of a framebuffer can be cleared with
 
-    void ospFrameBufferClear(OSPFrameBuffer, const uint32_t frameBufferChannels);
+    void ospResetAccumulation(OSPFrameBuffer);
 
-When selected, `OSP_FB_COLOR` will clear the color buffer to black `(0,
-0, 0, 0)`, `OSP_FB_DEPTH` will clear the depth buffer to `inf`.
-`OSP_FB_ACCUM` will clear *all* accumulating buffers (`OSP_FB_VARIANCE`,
+This function will clear *all* accumulating buffers (`OSP_FB_VARIANCE`,
 `OSP_FB_NORMAL`, and `OSP_FB_ALBEDO`, if present) and resets the
-accumulation counter `accumID`.
+accumulation counter `accumID`. It is unspecified if the existing color and
+depth buffers are physically cleared when `ospResetAccumulation` is called.
+
+If `OSP_FB_VARIANCE` is specified, an estimate of the variance of the last
+accumulated frame can be queried with
+
+    float ospGetVariance(OSPFrameBuffer);
+
+Note this value is only updated after synchronizing with `OSP_FRAME_FINISHED`,
+as further described in [asynchronous rendering].
 
 ### Pixel Operation {-}
 
@@ -2051,7 +2079,7 @@ Color Encoding System (ACES). The tone mapper is created by passing the type
 string "`tonemapper`" to `ospNewPixelOp`. The tone mapping curve can be
 customized using the parameters listed in the table below.
 
-  ----- ---------- --------    -----------------------------------------
+  ----- ---------  --------    -----------------------------------------
   Type  Name       Default     Description
   ----- ---------  --------    -----------------------------------------
   float contrast   1.6773      contrast (toe of the curve); typically is
@@ -2090,6 +2118,8 @@ parameters to the values listed in the table below.
 Rendering
 ---------
 
+### Synchronous Rendering
+
 To render a frame into the given framebuffer with the given renderer use
 
     float ospRenderFrame(OSPFrameBuffer, OSPRenderer,
@@ -2107,26 +2137,54 @@ variance of the rendered image, otherwise `inf` is returned. The
 estimated variance can be used by the application as a quality indicator
 and thus to decide whether to stop or to continue progressive rendering.
 
-### Progress and Cancel {-}
+### Asynchronous Rendering
 
-To be informed about the progress of rendering the current frame the
-application can register a callback function of type
+Rendering can also be done asynchronously, with a similar interface to the
+above synchronous version. To start an asynchronous render, use
 
-    typedef int (*OSPProgressFunc)(void* userPtr, const float progress);
+    OSPFuture ospRenderFrameAsync(OSPFrameBuffer,
+                                  OSPRenderer,
+                                  const uint32_t);
 
-via
+This version returns an `OSPFuture` handle, which can be used to
+synchronize with, cancel, or query for progress of the running task.
+When `ospRenderFrameAsync` is called, there is no guarantee when the
+associated task will begin execution.
 
-    void ospSetProgressFunc(OSPProgressFunc, void* userPtr);
+Progress of a running frame can be queried with the following API function
 
-The provided user pointer `userPtr` is passed as first argument to the
-callback function^[That way applications can also register a member
-function of a C++ class together with the `this` pointer as `userPtr`.]
-and the reported progress is in (0–1]. If the callback function returns
-zero than the application requests to cancel rendering, i.e., the current
-`ospRenderFrame` will return at the first opportunity and the content of
-the frame buffer will be undefined. Therefore, better clear the
-framebuffer with `ospFrameBufferClear` then before a subsequent call of
-`ospRenderFrame`.
+    float ospGetProgress(OSPFuture);
 
-Passing `NULL` as `OSPProgressFunc` function pointer disables the
-progress callback.
+This returns the progress of the task in [0-1].
+
+Applications can wait on the result of an asynchronous operation, or choose to
+only synchronize with a specific event. To synchronize with an `OSPFuture` use
+
+    void ospWait(OSPFuture, OSPSyncEvent = OSP_TASK_FINISHED);
+
+The following are values which can be synchronized with the application
+
+  Name                 Description
+  -------------------- --------------------------------------------------------
+  OSP_NONE_FINISHED    Don't wait for anything to be finished (immediately
+                       return from `ospWait`)
+  OSP_WORLD_COMMITTED  Wait for the world to be committed (not yet implemented)
+  OSP_WORLD_RENDERED   Wait for the world to be rendered, but not
+                       post-processing operations (Pixel/Tile/Frame Op)
+  OSP_FRAME_FINISHED   Wait for all rendering operations to complete
+  OSP_TASK_FINISHED    Wait on full completion of the task associated with
+                       the future. The underlying task may involve one or
+                       more of the above synchronization events
+  -------------------- --------------------------------------------------------
+  : Supported events that can be passed to `ospWait`
+
+Currently only rendering can be invoked asynchronously. However, future
+releases of OSPRay may add more asynchronous versions of API calls (and
+thus return `OSPFuture`).
+
+### Asynchronous Rendering and ospCommit()
+
+The use of either `ospRenderFrame` or `ospRenderFrameAsync` requires
+that all objects in the scene being rendererd have been committed before
+rendering occurs. If a call to `ospCommit()` happens while a frame is
+rendered, the result is undefined behavior and should be avoided.

@@ -166,15 +166,26 @@ namespace ospray {
         if fbChannelFlags&OSP_FB_ACCUM!=0, clear the accum buffer to 0,0,0,0,
         and reset accumID.
       */
-      virtual void frameBufferClear(OSPFrameBuffer _fb,
-                                    const uint32 fbChannelFlags) = 0;
+      virtual void resetAccumulation(OSPFrameBuffer _fb) = 0;
 
       /*! call a renderer to render a frame buffer */
       virtual float renderFrame(OSPFrameBuffer _sc,
                                 OSPRenderer _renderer,
                                 const uint32 fbChannelFlags) = 0;
 
+      virtual OSPFuture renderFrameAsync(OSPFrameBuffer,
+                                         OSPRenderer,
+                                         const uint32) = 0;
 
+      virtual int isReady(OSPFuture) = 0;
+
+      virtual void wait(OSPFuture, OSPSyncEvent) = 0;
+
+      virtual void cancel(OSPFuture) = 0;
+
+      virtual float getProgress(OSPFuture) = 0;
+
+      virtual float getVariance(OSPFrameBuffer) = 0;
 
       //! release (i.e., reduce refcount of) given object
       /*! note that all objects in ospray are refcounted, so one cannot
@@ -195,7 +206,7 @@ namespace ospray {
         model.  the resulting geometry still has to be added to another
         model via ospAddGeometry */
       virtual OSPGeometry newInstance(OSPModel modelToInstantiate,
-                                      const osp::affine3f &xfm)
+                                      const osp_affine3f &xfm)
       {
         UNUSED(modelToInstantiate, xfm);
         NOT_IMPLEMENTED;
@@ -219,8 +230,6 @@ namespace ospray {
 
       virtual void commit();
       bool isCommitted();
-
-      bool hasProgressCallback() { return progressCallback != nullptr; }
 
       // Public Data //
 
@@ -250,15 +259,6 @@ namespace ospray {
 
       OSPError    lastErrorCode = OSP_NO_ERROR;
       std::string lastErrorMsg  = "no error";// no braced initializer for MSVC12
-
-      /* TODO
-      std::function<int(void*, const float)>
-      progress_fcn { [](void*, const float){ return 1; } };*/
-      OSPProgressFunc progressCallback {nullptr};
-      void *progressUserPtr;
-      std::mutex progressMutex; // protect user callback function
-
-      bool reportProgress(const float);
 
     private:
 

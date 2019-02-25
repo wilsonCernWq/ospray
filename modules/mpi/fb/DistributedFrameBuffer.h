@@ -62,7 +62,7 @@ namespace ospray {
       can clear only its own tiles without having to tell any other
       node about it
      */
-    void clear(const uint32 fbChannelFlags) override;
+    void clear() override;
 
     // ==================================================================
     // framebuffer-renderer/loadbalancer interface
@@ -80,8 +80,7 @@ namespace ospray {
 
     int32 accumID(const vec2i &) override;
     float tileError(const vec2i &tile) override;
-    void  beginFrame() override;
-    float endFrame(const float errorThreshold) override;
+    void endFrame(const float errorThreshold) override;
 
     enum FrameMode { WRITE_MULTIPLE, ALPHA_BLEND, Z_COMPOSITE };
 
@@ -105,9 +104,6 @@ namespace ospray {
 
     size_t ownerIDFromTileID(size_t tileID) const;
 
-    // signal the workers whether to cancel 
-    bool continueRendering() const { return !cancelRendering; }
-
     void reportTimings(std::ostream &os);
 
   private:
@@ -116,11 +112,15 @@ namespace ospray {
     std::vector<RealMilliseconds> queueTimes;
     std::vector<RealMilliseconds> workTimes;
     RealMilliseconds finalGatherTime, masterTileWriteTime,
-                     waitFrameFinishTime, compressTime, decompressTime;
+                     waitFrameFinishTime, compressTime, decompressTime,
+                     preGatherDuration;
     double compressedPercent;
     std::mutex statsMutex;
 
+    std::vector<char> compressedBuf;
+    std::vector<char> tileGatherResult;
     std::vector<char> tileGatherBuffer;
+    std::vector<char> compressedResults;
     std::atomic<size_t> nextTileWrite;
 
     friend struct TileData;
@@ -152,7 +152,7 @@ namespace ospray {
     size_t numMyTiles() const;
 
     //! \brief common function to help printf-debugging
-    /*! \detailed Every derived class should overrride this! */
+    /*! \detailed Every derived class should override this! */
     std::string toString() const override;
 
     /*! return tile descriptor for given pixel coordinates. this tile
@@ -238,12 +238,10 @@ namespace ospray {
         frame */
     bool frameIsDone;
 
-    //! whether or not the frame has been cancelled
-    std::atomic<bool> cancelRendering;
-
     bool masterIsAWorker {false};
 
-    int reportRenderingProgress;
+    int renderingProgressTiles;
+    std::chrono::high_resolution_clock::time_point lastProgressReport;
 
     //! condition that gets triggered when the frame is done
     std::condition_variable frameDoneCond;

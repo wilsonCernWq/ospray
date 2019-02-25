@@ -36,6 +36,8 @@
 #include "ospcommon/networking/Socket.h"
 #include "ospcommon/utility/getEnvVar.h"
 
+#include "common/SynchronousRenderTask.h"
+
 // std
 #ifndef _WIN32
 #  include <unistd.h> // for fork()
@@ -781,22 +783,9 @@ namespace ospray {
       return (OSPLight)(int64)handle;
     }
 
-    /*! clear the specified channel(s) of the frame buffer specified in
-        'whichChannels'
-
-      if whichChannel&OSP_FB_COLOR!=0, clear the color buffer to
-      '0,0,0,0'.
-
-      if whichChannel&OSP_FB_DEPTH!=0, clear the depth buffer to
-      +inf.
-
-      if whichChannel&OSP_FB_ACCUM!=0, clear the accum buffer to 0,0,0,0,
-      and reset accumID.
-    */
-    void MPIOffloadDevice::frameBufferClear(OSPFrameBuffer _fb,
-                                     const uint32 fbChannelFlags)
+    void MPIOffloadDevice::resetAccumulation(OSPFrameBuffer _fb)
     {
-      work::ClearFrameBuffer work(_fb, fbChannelFlags);
+      work::ResetAccumulation work(_fb);
       processWork(work);
     }
 
@@ -818,11 +807,59 @@ namespace ospray {
     /*! call a renderer to render a frame buffer */
     float MPIOffloadDevice::renderFrame(OSPFrameBuffer _fb,
                                         OSPRenderer _renderer,
-                                        const uint32 fbChannelFlags)
+                                        const uint32 fbFlags)
     {
-      work::RenderFrame work(_fb, _renderer, fbChannelFlags);
+      work::RenderFrame work(_fb, _renderer, fbFlags);
       processWork(work, true);
       return work.varianceResult;
+    }
+
+    OSPFuture MPIOffloadDevice::renderFrameAsync(OSPFrameBuffer _fb,
+                                                 OSPRenderer _renderer,
+                                                 const uint32 fbFlags)
+    {
+      work::RenderFrame work(_fb, _renderer, fbFlags);
+      processWork(work, true);
+
+      ObjectHandle futureHandle = allocateHandle();
+      work::NewFuture future(_fb, futureHandle);
+      processWork(future, true);
+      return (OSPFuture)(int64)futureHandle;
+    }
+
+    int MPIOffloadDevice::isReady(OSPFuture _task)
+    {
+      auto handle = (ObjectHandle&)_task;
+      auto *task = (QueryableTask *)handle.lookup();
+      return task->isFinished();
+    }
+
+    void MPIOffloadDevice::wait(OSPFuture _task, OSPSyncEvent event)
+    {
+      auto handle = (ObjectHandle&)_task;
+      auto *task = (QueryableTask *)handle.lookup();
+      task->wait(event);
+    }
+
+    void MPIOffloadDevice::cancel(OSPFuture _task)
+    {
+      auto handle = (ObjectHandle&)_task;
+      auto *task = (QueryableTask *)handle.lookup();
+      return task->cancel();
+    }
+
+    float MPIOffloadDevice::getProgress(OSPFuture _task)
+    {
+      auto handle = (ObjectHandle&)_task;
+      auto *task = (QueryableTask *)handle.lookup();
+      return task->getProgress();
+    }
+
+    float MPIOffloadDevice::getVariance(OSPFrameBuffer _fb)
+    {
+      auto fbHandle = (ObjectHandle&)_fb;
+      auto *fb      = (FrameBuffer*)fbHandle.lookup();
+      return fb->getVariance();
     }
 
     //! release (i.e., reduce refcount of) given object

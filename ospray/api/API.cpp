@@ -282,7 +282,7 @@ OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END()
 
-extern "C" OSPFrameBuffer ospNewFrameBuffer(const osp::vec2i &size,
+extern "C" OSPFrameBuffer ospNewFrameBuffer(const osp_vec2i size,
                                             const OSPFrameBufferFormat mode,
                                             const uint32_t channels)
 OSPRAY_CATCH_BEGIN
@@ -556,12 +556,13 @@ OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" OSPTexture ospNewTexture2D(const osp::vec2i &size,
+extern "C" OSPTexture ospNewTexture2D(const osp_vec2i *_size,
                                       const OSPTextureFormat type,
                                       void *data,
                                       const uint32_t _flags)
 OSPRAY_CATCH_BEGIN
 {
+  auto &size = *_size;
   ASSERT_DEVICE();
   Assert2(size.x > 0, "Width must be greater than 0 in ospNewTexture2D");
   Assert2(size.y > 0, "Height must be greater than 0 in ospNewTexture2D");
@@ -625,12 +626,11 @@ OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" void ospFrameBufferClear(OSPFrameBuffer fb,
-                                    const uint32_t fbChannelFlags)
+extern "C" void ospResetAccumulation(OSPFrameBuffer fb)
 OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
-  currentDevice().frameBufferClear(fb, fbChannelFlags);
+  currentDevice().resetAccumulation(fb);
 }
 OSPRAY_CATCH_END()
 
@@ -641,6 +641,58 @@ OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   return currentDevice().renderFrame(fb, renderer, fbChannelFlags);
+}
+OSPRAY_CATCH_END(inf)
+
+extern "C" OSPFuture ospRenderFrameAsync(OSPFrameBuffer fb,
+                                         OSPRenderer renderer,
+                                         const uint32_t fbChannelFlags)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().renderFrameAsync(fb, renderer, fbChannelFlags);
+}
+OSPRAY_CATCH_END(nullptr)
+
+extern "C" int ospIsReady(OSPFuture f)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().isReady(f);
+}
+OSPRAY_CATCH_END(1)
+
+extern "C" void ospWait(OSPFuture f, OSPSyncEvent et)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  if (et == OSP_NONE_FINISHED)
+    return;
+  currentDevice().wait(f, et);
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospCancel(OSPFuture f)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().cancel(f);
+}
+OSPRAY_CATCH_END()
+
+extern "C" float ospGetProgress(OSPFuture f)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().getProgress(f);
+}
+OSPRAY_CATCH_END(1.f)
+
+extern "C" float ospGetVariance(OSPFrameBuffer f)
+OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().getVariance(f);
 }
 OSPRAY_CATCH_END(inf)
 
@@ -699,21 +751,21 @@ extern "C" void ospDeviceSetStatusFunc(OSPDevice object, OSPStatusFunc callback)
 OSPRAY_CATCH_BEGIN
 {
   auto *device = (Device *)object;
-  device->msg_fcn = callback;
+  if (callback == nullptr)
+    device->msg_fcn = [](const char *){};
+  else
+    device->msg_fcn = callback;
 }
 OSPRAY_CATCH_END()
-
-// for backward compatibility, will be removed in futur
-extern "C" void ospDeviceSetErrorMsgFunc(OSPDevice dev, OSPErrorMsgFunc cb)
-{
-  ospDeviceSetStatusFunc(dev, cb);
-}
 
 extern "C" void ospDeviceSetErrorFunc(OSPDevice object, OSPErrorFunc callback)
 OSPRAY_CATCH_BEGIN
 {
   auto *device = (Device *)object;
-  device->error_fcn = callback;
+  if (callback == nullptr)
+    device->error_fcn = [](OSPError, const char *){};
+  else
+    device->error_fcn = callback;
 }
 OSPRAY_CATCH_END()
 
@@ -732,15 +784,6 @@ OSPRAY_CATCH_BEGIN
   return device->lastErrorMsg.c_str();
 }
 OSPRAY_CATCH_END(nullptr)
-
-extern "C" void ospSetProgressFunc(OSPProgressFunc callback, void* userPtr)
-OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().progressCallback = callback;
-  currentDevice().progressUserPtr = userPtr;
-}
-OSPRAY_CATCH_END()
 
 extern "C" void ospSetString(OSPObject _object, const char *id, const char *s)
 OSPRAY_CATCH_BEGIN
@@ -791,7 +834,7 @@ OSPRAY_CATCH_BEGIN
 OSPRAY_CATCH_END()
 
 extern "C" OSPError ospSetRegion(OSPVolume object, void *source,
-                            const osp::vec3i &index, const osp::vec3i &count)
+                            osp_vec3i index, osp_vec3i count)
 OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
@@ -800,56 +843,6 @@ OSPRAY_CATCH_BEGIN
     ? OSP_NO_ERROR : OSP_UNKNOWN_ERROR;
 }
 OSPRAY_CATCH_END(OSP_UNKNOWN_ERROR)
-
-extern "C" void ospSetVec2f(OSPObject _object,
-                            const char *id,
-                            const osp::vec2f &v)
-OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setVec2f(_object, id, (const vec2f &)v);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospSetVec2i(OSPObject _object,
-                            const char *id,
-                            const osp::vec2i &v)
-OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setVec2i(_object, id, (const vec2i &)v);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospSetVec3f(OSPObject _object,
-                            const char *id,
-                            const osp::vec3f &v)
-OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setVec3f(_object, id, (const vec3f &)v);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospSetVec4f(OSPObject _object,
-                            const char *id,
-                            const osp::vec4f &v)
-OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setVec4f(_object, id, (const vec4f &)v);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospSetVec3i(OSPObject _object,
-                            const char *id,
-                            const osp::vec3i &v)
-OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setVec3i(_object, id, (const vec3i &)v);
-}
-OSPRAY_CATCH_END()
 
 extern "C" void ospSet2f(OSPObject _object, const char *id, float x, float y)
 OSPRAY_CATCH_BEGIN
@@ -968,7 +961,7 @@ OSPRAY_CATCH_BEGIN
 OSPRAY_CATCH_END()
 
 extern "C" OSPGeometry ospNewInstance(OSPModel modelToInstantiate,
-                                      const osp::affine3f &xfm)
+                                      const osp_affine3f xfm)
 OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
@@ -984,7 +977,7 @@ OSPRAY_CATCH_END(nullptr)
 
 extern "C" void ospPick(OSPPickResult *result,
                         OSPRenderer renderer,
-                        const osp::vec2f &screenPos)
+                        const osp_vec2f screenPos)
 OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
@@ -996,7 +989,7 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospSampleVolume(float **results,
                                 OSPVolume volume,
-                                const osp::vec3f &worldCoordinates,
+                                const osp_vec3f worldCoordinates,
                                 const size_t count)
 OSPRAY_CATCH_BEGIN
 {

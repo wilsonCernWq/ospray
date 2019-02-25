@@ -20,6 +20,9 @@
 #include "render/util.ih"
 #include "math/random.ih"
 #include "math/sampling.ih"
+#include "lights/Light.ih"
+#include "render/scivis/SciVisMaterial.ih"
+#include "render/scivis/surfaceShading.ih"
 
 struct DistributedRegion
 {
@@ -34,6 +37,11 @@ struct DistributedRaycastRenderer
   uniform DistributedRegion *uniform regions;
   uniform int numRegions;
   uniform int aoSamples;
+  uniform bool oneSidedLighting;
+  uniform bool shadowsEnabled;
+  uniform vec3f ambientLight;
+  uniform uint32 numLights;
+  const uniform Light *uniform *uniform lights;
   uniform Model *uniform *uniform myRegions;
   uniform Model *uniform *uniform ghostRegions;
 };
@@ -159,7 +167,7 @@ float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform se
                                   uniform Model *uniform ghostModel,
                                   const varying vec3i &sampleID,
                                   const varying DifferentialGeometry &dg,
-                                  const varying vec3f &shadingNormal)
+                                  const varying SciVisShadingInfo &info)
 {
   const int accumID = sampleID.z;
   const int ix = sampleID.x;
@@ -171,7 +179,7 @@ float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform se
   const vec2f rot = RandomTEA__getFloats(rng);
 
   float occlusion = 0.f;
-  const linear3f localToWorld = frame(shadingNormal);
+  const linear3f localToWorld = frame(info.shadingNormal);
 
   for (uniform int i = 0; i < self->aoSamples; i++) {
     const vec2f halton = HaltonSequence_get2D(accumID * self->aoSamples + i);
@@ -180,7 +188,7 @@ float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform se
     const vec3f aoDir = normalize(localToWorld * localAoDir);
 
     // Check if the ray goes below the surface
-    if (dot(aoDir, shadingNormal) < 0.05f) { 
+    if (dot(aoDir, info.shadingNormal) < 0.05f) { 
       occlusion += 1.f;
       continue;
     }
@@ -197,6 +205,63 @@ float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform se
   // the cosTheta of cosineSampleHemispherePDF and dot(shadingNormal, ao_dir) cancel
   return 1.0f - occlusion / self->aoSamples;
 }
+
+vec3f DRR_integrateOverLights(const uniform DistributedRaycastRenderer *uniform self,
+                              uniform Model *uniform model,
+                              uniform Model *uniform ghostModel,
+                              const varying Ray &ray,
+                              const varying DifferentialGeometry &dg,
+                              const varying SciVisShadingInfo &info)
+{
+  vec3f color = make_vec3f(info.Kd * self->ambientLight);
+
+  // Calculate shading for all lights
+  for (uniform int i = 0; self->lights && i < self->numLights; i++) {
+    const uniform Light *uniform l = self->lights[i];
+    const vec2f s = make_vec2f(0.0f); // sample center of area lights
+    const Light_SampleRes light = l->sample(l, dg, s);
+
+    // any potential contribution?
+    if (reduce_max(light.weight) > 0.f) {
+      float cosNL = dot(light.dir, info.shadingNormal);
+      if (cosNL < 0.0f) {
+        if (self->oneSidedLighting)
+          continue;
+        cosNL = abs(cosNL);
+      }
+
+      const vec3f H = normalize(light.dir - ray.dir);
+      const float cosNH = dot(H, info.shadingNormal);
+      const vec3f specular = info.Ks * powf(cosNH, info.Ns);
+      const vec3f diffuse = info.Kd * cosNL;
+      const vec3f light_contrib =
+        info.local_opacity * (diffuse + specular) * light.weight;
+
+      if (self->shadowsEnabled) {
+        const float max_contrib = reduce_max(light_contrib);
+        if (max_contrib > self->super.minContribution) {
+          vec3f P = dg.P;
+          if (dot(dg.Ng, light.dir) < 0.0f) {
+            P = P - (2.f * dg.epsilon) * dg.Ng;
+          }
+
+          Ray shadowRay;
+          setRay(shadowRay, P, light.dir, 0.0f, light.dist, ray.time);
+          if (!isOccluded(model, shadowRay)
+              && !(ghostModel && isOccluded(ghostModel, shadowRay)))
+          {
+            color = color + light_contrib;
+          }
+        }
+      } else {
+        color = color + light_contrib;
+      }
+    }
+  }
+  return color;
+}
+
+
 
 void DistributedRaycastRenderer_renderSample(uniform Renderer *uniform _self,
                                              void *uniform perFrameData,
@@ -268,6 +333,9 @@ void DistributedRaycastRenderer_renderSample(uniform Renderer *uniform _self,
   // shade the geometry and so on.
   vec4f color = make_vec4f(0.f);
   float firstHit;
+  // TODO: Possible issue: if the user renders a completely flat object, where
+  // the region bounds are just a plane, regionEnter == regionExit, and will
+  // not enter this loop and thus not see the object
   while ((firstHit = min(geomRay.t, volRay.t0)) < regionExit && color.w < 0.99) {
     vec4f currentContribution = make_vec4f(0);
     // Shade the current volume interval if it's before the next geometry
@@ -292,39 +360,38 @@ void DistributedRaycastRenderer_renderSample(uniform Renderer *uniform _self,
     } else {
       // Shade the current geometry hit
       DifferentialGeometry dg;
-      dg.color = make_vec4f(0.f);
       postIntersect(model, dg, geomRay,
-                    DG_COLOR | DG_MATERIALID | DG_NG | DG_NS);
-      const vec3f matColor = make_vec3f(dg.color);
-      const vec3f specColor = make_vec3f(0.6);
-      const vec3f viewDir = normalize(negate(geomRay.dir));
-      // TODO: read the light params?
-      const vec3f lightDir = normalize(make_vec3f(1.0));
-      const vec3f dgNormal = normalize(dg.Ns);
-      // Hard-coded Blinn-Phong. TODO: Materials API support
-      vec3f geomColor = matColor * make_vec3f(0.1);
-      if (dot(lightDir, dgNormal) > 0.0) {
-        geomColor = geomColor + matColor * dot(lightDir, dgNormal)
-          + specColor * pow(dot(dgNormal, normalize(viewDir + lightDir)), 20);
-      }
+                    DG_NG|DG_NS|DG_NORMALIZE|DG_FACEFORWARD|DG_TANGENTS|
+                    DG_MATERIALID|DG_COLOR|DG_TEXCOORD);
+
+      SciVisShadingInfo info;
+      initShadingInfo(info);
+
+      shadeMaterials(dg, info);
+      info.local_opacity = info.d;
+
+      vec3f geomColor = DRR_integrateOverLights(self, model, ghostModel,
+                                                geomRay, dg, info);
+
       float occlusion = 1.0;
       if (self->aoSamples > 0) {
         occlusion = DRR_computeAmbientOcclusion(self,
                                                 model,
                                                 ghostModel,
                                                 sample.sampleID,
-                                                dg,
-                                                dgNormal);
+                                                dg, info);
       }
-      currentContribution = make_vec4f(geomColor * occlusion, dg.color.w);
+
+      currentContribution = make_vec4f(geomColor * occlusion,
+                                       info.local_opacity);
 
       geomRay.t0 = geomRay.t + dg.epsilon;
       geomRay.t = regionExit;
       geomRay.primID = -1;
       geomRay.geomID = -1;
       geomRay.instID = -1;
-      // Find the next geometry hit by the ray, if it wasn't opaque
-      if (dg.color.w < 0.99) {
+      // Find the next geometry hit by the ray, if we're not opaque
+      if (color.w + (1.0 - color.w) * currentContribution.w < 0.99) {
         traceRay(model, geomRay);
       }
     }
@@ -345,6 +412,7 @@ export void *uniform DistributedRaycastRenderer_create(void *uniform cppE) {
   self->regions = NULL;
   self->numRegions = 0;
   self->aoSamples = 0;
+  self->shadowsEnabled = false;
   self->ghostRegions = NULL;
 
   return self;
@@ -352,8 +420,13 @@ export void *uniform DistributedRaycastRenderer_create(void *uniform cppE) {
 
 export void DistributedRaycastRenderer_set(void *uniform _self,
                                            void *uniform regions,
-                                           const uniform int uniform numRegions,
-                                           const uniform int uniform aoSamples,
+                                           const uniform int numRegions,
+                                           const uniform int aoSamples,
+                                           const uniform bool oneSidedLighting,
+                                           const uniform bool shadowsEnabled,
+                                           const uniform vec3f *uniform ambientLight,
+                                           uniform uint32 numLights,
+                                           void *uniform *uniform lights,
                                            void *uniform *uniform myRegions,
                                            void *uniform *uniform ghostRegions)
 {
@@ -361,11 +434,18 @@ export void DistributedRaycastRenderer_set(void *uniform _self,
     (uniform DistributedRaycastRenderer *uniform)_self;
   // Correct the params the parent probably got wrong if we took
   // a list of OSPModels
-  self->super.model = NULL;
+  if (regions != NULL) {
+    self->super.model = NULL;
+  }
 
   self->regions = (uniform DistributedRegion *uniform)regions;
   self->numRegions = numRegions;
   self->aoSamples = aoSamples;
+  self->oneSidedLighting = oneSidedLighting;
+  self->shadowsEnabled = shadowsEnabled;
+  self->ambientLight = *ambientLight;
+  self->numLights = numLights;
+  self->lights = (const uniform Light *uniform *uniform)lights;
   self->myRegions = (uniform Model *uniform *uniform)myRegions;
   self->ghostRegions = (uniform Model *uniform *uniform)ghostRegions;
 }

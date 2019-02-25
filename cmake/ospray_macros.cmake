@@ -14,6 +14,29 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
+## Tasking system target macro ##
+
+macro(ospray_create_tasking_target)
+  add_library(ospray_tasking INTERFACE)
+
+  target_include_directories(ospray_tasking
+  INTERFACE
+    ${TASKING_SYSTEM_INCLUDES}
+  )
+
+  target_link_libraries(ospray_tasking
+  INTERFACE
+    ${TASKING_SYSTEM_LIBS}
+  )
+
+  target_compile_definitions(ospray_tasking
+  INTERFACE
+    ${TASKING_SYSTEM_DEFINITIONS}
+  )
+endmacro()
+
+## Embree functions/macros ##
+
 function(ospray_check_embree_feature FEATURE DESCRIPTION)
   set(FEATURE EMBREE_${FEATURE})
   if(NOT ${ARGN})
@@ -38,6 +61,22 @@ function(ospray_verify_embree_features)
   ospray_check_embree_feature(RAY_PACKETS "ray packets")
   ospray_check_embree_feature(BACKFACE_CULLING "backface culling" OFF)
 endfunction()
+
+macro(ospray_create_embree_target)
+  if (NOT TARGET embree::embree)
+    add_library(embree INTERFACE)
+
+    target_include_directories(embree
+    INTERFACE
+      $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>
+    )
+
+    target_link_libraries(embree
+    INTERFACE
+      $<BUILD_INTERFACE:${EMBREE_LIBRARIES}>
+    )
+  endif()
+endmacro()
 
 macro(ospray_find_embree EMBREE_VERSION_REQUIRED)
   find_package(embree ${EMBREE_VERSION_REQUIRED} QUIET)

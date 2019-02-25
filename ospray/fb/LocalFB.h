@@ -43,18 +43,18 @@ namespace ospray {
     virtual ~LocalFrameBuffer() override;
 
     //! \brief common function to help printf-debugging
-    /*! \detailed Every derived class should overrride this! */
+    /*! \detailed Every derived class should override this! */
     virtual std::string toString() const override;
 
     void setTile(Tile &tile) override;
     int32 accumID(const vec2i &tile) override;
     float tileError(const vec2i &tile) override;
     void beginFrame() override;
-    float endFrame(const float errorThreshold) override;
+    void endFrame(const float errorThreshold) override;
 
     const void *mapBuffer(OSPFrameBufferChannel channel) override;
     void unmap(const void *mappedMem) override;
-    void clear(const uint32 fbChannelFlags) override;
+    void clear() override;
   };
 
 } // ::ospray

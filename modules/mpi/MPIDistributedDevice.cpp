@@ -16,25 +16,26 @@
 
 #undef NDEBUG // do all assertions in this file
 
-//ospray
-#include "ospray/camera/Camera.h"
-#include "ospray/common/Data.h"
-#include "ospray/lights/Light.h"
-#include "ospray/transferFunction/TransferFunction.h"
-#include "ospray/api/ISPCDevice.h"
+// ospray
+#include "camera/Camera.h"
+#include "common/Data.h"
+#include "lights/Light.h"
+#include "transferFunction/TransferFunction.h"
+#include "api/ISPCDevice.h"
+// ospcommon
+#include "ospcommon/tasking/tasking_system_handle.h"
 #include "ospcommon/utility/getEnvVar.h"
-//mpiCommon
+// mpiCommon
 #include "mpiCommon/MPICommon.h"
-//ospray_mpi
+// ospray_mpi
 #include "mpi/MPIDistributedDevice.h"
+#include "mpi/common/SynchronousRenderTask.h"
 #include "mpi/fb/DistributedFrameBuffer.h"
 #include "mpi/render/MPILoadBalancer.h"
 
-//distributed objects
+// distributed objects
 #include "render/distributed/DistributedRaycast.h"
 #include "common/DistributedModel.h"
-
-#include "ospcommon/tasking/tasking_system_handle.h"
 
 #ifdef OPEN_MPI
 # include <thread>
@@ -165,11 +166,10 @@ namespace ospray {
       fb.unmap(mapped);
     }
 
-    void MPIDistributedDevice::frameBufferClear(OSPFrameBuffer _fb,
-                                                const uint32 fbChannelFlags)
+    void MPIDistributedDevice::resetAccumulation(OSPFrameBuffer _fb)
     {
       auto &fb = lookupDistributedObject<FrameBuffer>(_fb);
-      fb.clear(fbChannelFlags);
+      fb.clear();
     }
 
     OSPModel MPIDistributedDevice::newModel()
@@ -394,24 +394,70 @@ namespace ospray {
 
     float MPIDistributedDevice::renderFrame(OSPFrameBuffer _fb,
                                             OSPRenderer _renderer,
-                                            const uint32 fbChannelFlags)
+                                            const uint32 fbFlags)
     {
       mpicommon::world.barrier();
       auto &fb       = lookupDistributedObject<FrameBuffer>(_fb);
       auto &renderer = lookupDistributedObject<Renderer>(_renderer);
-      auto result    = renderer.renderFrame(&fb, fbChannelFlags);
+      auto result    = renderer.renderFrame(&fb, fbFlags);
       mpicommon::world.barrier();
       return result;
+    }
+
+    OSPFuture MPIDistributedDevice::renderFrameAsync(OSPFrameBuffer _fb,
+                                                     OSPRenderer _renderer,
+                                                     const uint32 fbFlags)
+    {
+      mpicommon::world.barrier();
+      auto &fb       = lookupDistributedObject<FrameBuffer>(_fb);
+      auto &renderer = lookupDistributedObject<Renderer>(_renderer);
+      renderer.renderFrame(&fb, fbFlags);
+      mpicommon::world.barrier();
+
+      auto *f  = new SynchronousRenderTask(&fb);
+      return (OSPFuture)f;
+    }
+
+    int MPIDistributedDevice::isReady(OSPFuture _task)
+    {
+      auto *task = (QueryableTask *)_task;
+      return task->isFinished();
+    }
+
+    void MPIDistributedDevice::wait(OSPFuture _task, OSPSyncEvent event)
+    {
+      auto *task = (QueryableTask *)_task;
+      task->wait(event);
+    }
+
+    void MPIDistributedDevice::cancel(OSPFuture _task)
+    {
+      auto *task = (QueryableTask *)_task;
+      return task->cancel();
+    }
+
+    float MPIDistributedDevice::getProgress(OSPFuture _task)
+    {
+      auto *task = (QueryableTask *)_task;
+      return task->getProgress();
+    }
+
+    float MPIDistributedDevice::getVariance(OSPFrameBuffer _fb)
+    {
+      auto &fb = lookupDistributedObject<FrameBuffer>(_fb);
+      return fb.getVariance();
     }
 
     void MPIDistributedDevice::release(OSPObject _obj)
     {
       if (!_obj) return;
-      auto *obj = lookupObject<ManagedObject>(_obj);
-      obj->refDec();
+
       auto &handle = reinterpret_cast<ObjectHandle&>(_obj);
       if (handle.defined()) {
         handle.freeObject();
+      } else {
+        auto *obj = (ManagedObject*)_obj;
+        obj->refDec();
       }
     }
 
