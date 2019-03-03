@@ -162,9 +162,10 @@ vec4f DRR_integrateVolumeSegment(uniform DistributedRaycastRenderer *uniform sel
   return volumeColor;
 }
 
-float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform self,
-                                  uniform Model *uniform model,
-                                  uniform Model *uniform ghostModel,
+float DRR_computeAmbientOcclusion(DistributedRaycastRenderer *uniform self,
+                                  FrameBuffer *uniform fb,
+                                  Model *uniform model,
+                                  Model *uniform ghostModel,
                                   const varying vec3i &sampleID,
                                   const varying DifferentialGeometry &dg,
                                   const varying SciVisShadingInfo &info)
@@ -175,7 +176,7 @@ float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform se
 
   RandomTEA rng_state;
   varying RandomTEA* const uniform rng = &rng_state;
-  RandomTEA__Constructor(rng, 0x290374, (self->super.fb->size.x * iy) + ix);
+  RandomTEA__Constructor(rng, 0x290374, (fb->size.x * iy) + ix);
   const vec2f rot = RandomTEA__getFloats(rng);
 
   float occlusion = 0.f;
@@ -188,7 +189,7 @@ float DRR_computeAmbientOcclusion(uniform DistributedRaycastRenderer *uniform se
     const vec3f aoDir = normalize(localToWorld * localAoDir);
 
     // Check if the ray goes below the surface
-    if (dot(aoDir, info.shadingNormal) < 0.05f) { 
+    if (dot(aoDir, info.shadingNormal) < 0.05f) {
       occlusion += 1.f;
       continue;
     }
@@ -263,7 +264,9 @@ vec3f DRR_integrateOverLights(const uniform DistributedRaycastRenderer *uniform 
 
 
 
-void DistributedRaycastRenderer_renderSample(uniform Renderer *uniform _self,
+void DistributedRaycastRenderer_renderSample(Renderer *uniform _self,
+                                             FrameBuffer *uniform fb,
+                                             Model *uniform local_world,
                                              void *uniform perFrameData,
                                              varying ScreenSample &sample)
 {
@@ -308,7 +311,7 @@ void DistributedRaycastRenderer_renderSample(uniform Renderer *uniform _self,
       ghostModel = self->ghostRegions[regionInfo->currentRegion];
     }
   } else {
-    model = self->super.model;
+    model = local_world;
   }
 
   // Intersect with current region for this node's local data
@@ -376,6 +379,7 @@ void DistributedRaycastRenderer_renderSample(uniform Renderer *uniform _self,
       float occlusion = 1.0;
       if (self->aoSamples > 0) {
         occlusion = DRR_computeAmbientOcclusion(self,
+                                                fb,
                                                 model,
                                                 ghostModel,
                                                 sample.sampleID,
@@ -407,7 +411,7 @@ export void *uniform DistributedRaycastRenderer_create(void *uniform cppE) {
   uniform DistributedRaycastRenderer *uniform self =
     uniform new uniform DistributedRaycastRenderer;
 
-  Renderer_Constructor(&self->super, cppE, NULL, NULL, 1);
+  Renderer_Constructor(&self->super, cppE, 1);
   self->super.renderSample = DistributedRaycastRenderer_renderSample;
   self->regions = NULL;
   self->numRegions = 0;
@@ -432,11 +436,6 @@ export void DistributedRaycastRenderer_set(void *uniform _self,
 {
   uniform DistributedRaycastRenderer *uniform self =
     (uniform DistributedRaycastRenderer *uniform)_self;
-  // Correct the params the parent probably got wrong if we took
-  // a list of OSPModels
-  if (regions != NULL) {
-    self->super.model = NULL;
-  }
 
   self->regions = (uniform DistributedRegion *uniform)regions;
   self->numRegions = numRegions;

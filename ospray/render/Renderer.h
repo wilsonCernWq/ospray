@@ -16,8 +16,7 @@
 
 #pragma once
 
-/*! \file Renderer.h Defines the base renderer class */
-
+#include "camera/Camera.h"
 #include "common/Model.h"
 #include "fb/FrameBuffer.h"
 #include "texture/Texture2D.h"
@@ -36,7 +35,7 @@ namespace ospray {
    */
   struct OSPRAY_SDK_INTERFACE Renderer : public ManagedObject
   {
-    Renderer() = default;
+    Renderer()                   = default;
     virtual ~Renderer() override = default;
 
     /*! \brief creates an abstract renderer class of given type
@@ -51,7 +50,7 @@ namespace ospray {
     virtual std::string toString() const override;
 
     /*! \brief render one frame, and put it into given frame buffer */
-    virtual float renderFrame(FrameBuffer *fb, const uint32 fbChannelFlags);
+    virtual float renderFrame(FrameBuffer *fb, Camera *camera, Model *world);
 
     //! \brief called to initialize a new frame
     /*! this function gets called exactly once (on each node) at the
@@ -63,29 +62,35 @@ namespace ospray {
 
       \returns pointer to per-frame data, or NULL if this does not apply
      */
-    virtual void *beginFrame(FrameBuffer *fb);
+    virtual void *beginFrame(FrameBuffer *fb, Model *world);
 
     /*! \brief called exactly once (on each node) at the end of each frame */
-    virtual void endFrame(void *perFrameData, const int32 fbChannelFlags);
+    virtual void endFrame(FrameBuffer *fb, void *perFrameData);
 
     /*! \brief called by the load balancer to render one tile of "samples" */
-    virtual void renderTile(void *perFrameData, Tile &tile, size_t jobID) const;
+    virtual void renderTile(FrameBuffer *fb,
+                            Camera *camera,
+                            Model *world,
+                            void *perFrameData,
+                            Tile &tile,
+                            size_t jobID) const;
 
-    virtual OSPPickResult pick(const vec2f &screenPos);
-
-    Model *model {nullptr};
-    FrameBuffer *currentFB {nullptr};
+    virtual OSPPickResult pick(FrameBuffer *fb,
+                               Camera *camera,
+                               Model *world,
+                               const vec2f &screenPos);
 
     /*! \brief number of samples to be used per pixel in a tile */
-    int32 spp {1};
+    int32 spp{1};
 
     /*! adaptive accumulation: variance-based error to reach */
-    float errorThreshold {0.f};
+    float errorThreshold{0.f};
 
     /*! \brief the background color */
-    vec4f bgColor {0.f};
+    vec4f bgColor{0.f};
 
-    /*! \brief maximum depth texture provided as an optional parameter to the renderer, used for early ray termination
+    /*! \brief maximum depth texture provided as an optional parameter to the
+      renderer, used for early ray termination
 
       The texture format should be OSP_TEXTURE_R32F and texture filtering
       should be set to nearest-neighbor interpolation:
@@ -103,8 +108,7 @@ namespace ospray {
       of this renderer.
   */
 #define OSP_REGISTER_RENDERER(InternalClass, external_name) \
-  OSP_REGISTER_OBJECT(::ospray::Renderer, renderer, \
-                      InternalClass, external_name)
+  OSP_REGISTER_OBJECT(                                      \
+      ::ospray::Renderer, renderer, InternalClass, external_name)
 
-} // ::ospray
-
+}  // namespace ospray

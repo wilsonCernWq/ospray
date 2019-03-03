@@ -136,8 +136,6 @@ int main(int argc, const char **argv) {
   // complete setup of renderer
   renderer.set("aoSamples", 1);
   renderer.set("bgColor", 1.0f); // white, transparent
-  renderer.set("model",  world);
-  renderer.set("camera", camera);
   renderer.set("lights", lights);
   renderer.commit();
 
@@ -147,7 +145,7 @@ int main(int argc, const char **argv) {
   framebuffer.clear();
 
   // render one frame
-  renderer.renderFrame(framebuffer, OSP_FB_COLOR | OSP_FB_ACCUM);
+  framebuffer.renderFrame(renderer, camera, world);
 
   // access framebuffer and write its content as PPM file
   uint32_t* fb = (uint32_t*)framebuffer.map(OSP_FB_COLOR);
@@ -157,7 +155,7 @@ int main(int argc, const char **argv) {
 
   // render 10 more frames, which are accumulated to result in a better converged image
   for (int frames = 0; frames < 10; frames++)
-    renderer.renderFrame(framebuffer, OSP_FB_COLOR | OSP_FB_ACCUM);
+    framebuffer.renderFrame(renderer, camera, world);
 
   fb = (uint32_t*)framebuffer.map(OSP_FB_COLOR);
   writePPM("accumulatedFrameCpp.ppm", imgSize, fb);

@@ -807,18 +807,20 @@ namespace ospray {
     /*! call a renderer to render a frame buffer */
     float MPIOffloadDevice::renderFrame(OSPFrameBuffer _fb,
                                         OSPRenderer _renderer,
-                                        const uint32 fbFlags)
+                                        OSPCamera _camera,
+                                        OSPModel _world)
     {
-      work::RenderFrame work(_fb, _renderer, fbFlags);
+      work::RenderFrame work(_fb, _renderer, _camera, _world);
       processWork(work, true);
       return work.varianceResult;
     }
 
     OSPFuture MPIOffloadDevice::renderFrameAsync(OSPFrameBuffer _fb,
                                                  OSPRenderer _renderer,
-                                                 const uint32 fbFlags)
+                                                 OSPCamera _camera,
+                                                 OSPModel _world)
     {
-      work::RenderFrame work(_fb, _renderer, fbFlags);
+      work::RenderFrame work(_fb, _renderer, _camera, _world);
       processWork(work, true);
 
       ObjectHandle futureHandle = allocateHandle();
@@ -908,10 +910,13 @@ namespace ospray {
       return false;
     }
 
-    OSPPickResult MPIOffloadDevice::pick(OSPRenderer renderer,
+    OSPPickResult MPIOffloadDevice::pick(OSPFrameBuffer fb,
+                                         OSPRenderer renderer,
+                                         OSPCamera camera,
+                                         OSPModel world,
                                          const vec2f &screenPos)
     {
-      work::Pick work(renderer, screenPos);
+      work::Pick work(fb, renderer, camera, world, screenPos);
       processWork(work, true);
       return work.pickResult;
     }

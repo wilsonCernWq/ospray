@@ -58,12 +58,12 @@ namespace ospray {
 
       void commit() override;
 
-      float renderFrame(FrameBuffer *fb, const uint32 fbChannelFlags) override;
+      float renderFrame(FrameBuffer *fb, Camera *camera, Model *scene) override;
 
       // TODO WILL: This is only for benchmarking the compositing using
       // the same rendering code path. Remove it once we're done! Or push
       // it behind some ifdefs!
-      float renderNonDistrib(FrameBuffer *fb, const uint32 fbChannelFlags);
+      float renderNonDistrib(FrameBuffer *fb, Camera *camera, Model *scene);
 
       std::string toString() const override;
 
@@ -89,6 +89,10 @@ namespace ospray {
       std::vector<DistributedRegion> allRegions;
       // The ranks which own each region
       std::unordered_map<int, std::set<size_t>> regionOwners;
+
+      //TODO: Dummy model pointer as this is no longer a member of the base
+      //      Renderer
+      Model *model{nullptr};
     };
 
   } // ::ospray::mpi

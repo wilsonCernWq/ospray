@@ -136,8 +136,6 @@ int main(int argc, const char **argv) {
   // complete setup of renderer
   ospSet1i(renderer, "aoSamples", 1);
   ospSet1f(renderer, "bgColor", 1.0f); // white, transparent
-  ospSetObject(renderer, "model",  world);
-  ospSetObject(renderer, "camera", camera);
   ospSetObject(renderer, "lights", lights);
   ospCommit(renderer);
 
@@ -146,7 +144,7 @@ int main(int argc, const char **argv) {
   ospResetAccumulation(framebuffer);
 
   // render one frame
-  ospRenderFrame(framebuffer, renderer, OSP_FB_COLOR | OSP_FB_ACCUM);
+  ospRenderFrame(framebuffer, renderer, camera, world);
 
   // access framebuffer and write its content as PPM file
   const uint32_t * fb = (uint32_t*)ospMapFrameBuffer(framebuffer, OSP_FB_COLOR);
@@ -155,7 +153,7 @@ int main(int argc, const char **argv) {
 
   // render 10 more frames, which are accumulated to result in a better converged image
   for (int frames = 0; frames < 10; frames++)
-    ospRenderFrame(framebuffer, renderer, OSP_FB_COLOR | OSP_FB_ACCUM);
+    ospRenderFrame(framebuffer, renderer, camera, world);
 
   fb = (uint32_t*)ospMapFrameBuffer(framebuffer, OSP_FB_COLOR);
   writePPM("accumulatedFrame.ppm", &imgSize, fb);

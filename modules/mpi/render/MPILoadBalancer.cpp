@@ -70,9 +70,10 @@ namespace ospray {
         openStatsLog();
       }
 
-      float Master::renderFrame(Renderer *renderer,
-                                FrameBuffer *fb,
-                                const uint32 /*channelFlags*/)
+      float Master::renderFrame(FrameBuffer *fb,
+                                Renderer *renderer,
+                                Camera * /*camera*/,
+                                Model * /*world*/)
       {
         DistributedFrameBuffer *dfb =
             dynamic_cast<DistributedFrameBuffer *>(fb);
@@ -127,9 +128,10 @@ namespace ospray {
         openStatsLog();
       }
 
-      float Slave::renderFrame(Renderer *renderer,
-                               FrameBuffer *fb,
-                               const uint32 channelFlags)
+      float Slave::renderFrame(FrameBuffer *fb,
+                               Renderer *renderer,
+                               Camera *camera,
+                               Model *world)
       {
         auto *dfb = dynamic_cast<DistributedFrameBuffer *>(fb);
 
@@ -137,7 +139,7 @@ namespace ospray {
 
         dfb->startNewFrame(renderer->errorThreshold);
         // dfb->beginFrame(); is called by renderer->beginFrame:
-        void *perFrameData = renderer->beginFrame(fb);
+        void *perFrameData = renderer->beginFrame(fb, world);
 
         const auto fbSize = dfb->getNumPixels();
 
@@ -176,7 +178,8 @@ namespace ospray {
           if (!dfb->frameCancelled()) {
             tasking::parallel_for(
                 numJobs(renderer->spp, accumID), [&](size_t tid) {
-                  renderer->renderTile(perFrameData, tile, tid);
+                  renderer->renderTile(
+                      fb, camera, world, perFrameData, tile, tid);
                 });
           }
 
@@ -185,7 +188,7 @@ namespace ospray {
         auto endRender = high_resolution_clock::now();
 
         dfb->waitUntilFinished();
-        renderer->endFrame(perFrameData, channelFlags);
+        renderer->endFrame(dfb, perFrameData);
 
         ProfilingPoint endComposite;
 
@@ -224,7 +227,10 @@ namespace ospray {
 
       // staticLoadBalancer::Distributed definitions //////////////////////////
 
-      float Distributed::renderFrame(Renderer *, FrameBuffer *, const uint32)
+      float Distributed::renderFrame(FrameBuffer *,
+                                     Renderer *,
+                                     Camera *,
+                                     Model *)
       {
         throw std::runtime_error(
             "Distributed renderers must implement their"
@@ -357,10 +363,10 @@ namespace ospray {
         }
       }
 
-      float Master::renderFrame(Renderer *renderer,
-                                FrameBuffer *fb,
-                                const uint32 /*channelFlags*/
-      )
+      float Master::renderFrame(FrameBuffer *fb,
+                                Renderer *renderer,
+                                Camera * /*camera*/,
+                                Model * /*world*/)
       {
         dfb = dynamic_cast<DistributedFrameBuffer *>(fb);
         assert(dfb);
@@ -409,12 +415,16 @@ namespace ospray {
           cv.notify_one();
       }
 
-      float Slave::renderFrame(Renderer *_renderer,
-                               FrameBuffer *_fb,
-                               const uint32 channelFlags)
+      float Slave::renderFrame(FrameBuffer *_fb,
+                               Renderer *_renderer,
+                               Camera *_camera,
+                               Model *_world)
       {
-        renderer  = _renderer;
-        fb        = _fb;
+        renderer = _renderer;
+        fb       = _fb;
+        camera   = _camera;
+        world    = _world;
+
         auto *dfb = dynamic_cast<DistributedFrameBuffer *>(fb);
 
         tilesAvailable = true;
@@ -422,7 +432,7 @@ namespace ospray {
 
         dfb->startNewFrame(renderer->errorThreshold);
         // dfb->beginFrame(); is called by renderer->beginFrame:
-        perFrameData = renderer->beginFrame(fb);
+        perFrameData = renderer->beginFrame(fb, world);
         frameActive  = true;
 
         dfb->waitUntilFinished();  // swap with below?
@@ -432,7 +442,7 @@ namespace ospray {
         }
         frameActive = false;
 
-        renderer->endFrame(perFrameData, channelFlags);
+        renderer->endFrame(dfb, perFrameData);
 
         dfb->endFrame(inf);
         return dfb->getVariance();
@@ -453,10 +463,11 @@ namespace ospray {
 
         auto *dfb = dynamic_cast<DistributedFrameBuffer *>(fb);
         if (!dfb->frameCancelled()) {
-          tasking::parallel_for(numJobs(renderer->spp, task.accumId),
-                                [&](size_t tid) {
-                                  renderer->renderTile(perFrameData, tile, tid);
-                                });
+          tasking::parallel_for(
+              numJobs(renderer->spp, task.accumId), [&](size_t tid) {
+                renderer->renderTile(
+                    fb, camera, world, perFrameData, tile, tid);
+              });
         }
 
         if (tilesAvailable)
