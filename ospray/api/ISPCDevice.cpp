@@ -20,8 +20,8 @@
 #include "common/Data.h"
 #include "common/Library.h"
 #include "common/Material.h"
-#include "common/Model.h"
 #include "common/Util.h"
+#include "common/World.h"
 #include "fb/LocalFB.h"
 #include "geometry/TriangleMesh.h"
 #include "lights/Light.h"
@@ -117,9 +117,9 @@ namespace ospray {
       fb->unmap(mapped);
     }
 
-    OSPModel ISPCDevice::newModel()
+    OSPWorld ISPCDevice::newWorld()
     {
-      return (OSPModel) new Model;
+      return (OSPWorld) new World;
     }
 
     void ISPCDevice::commit(OSPObject _object)
@@ -128,16 +128,16 @@ namespace ospray {
       object->commit();
     }
 
-    void ISPCDevice::addGeometry(OSPModel _model, OSPGeometry _geometry)
+    void ISPCDevice::addGeometry(OSPWorld _model, OSPGeometry _geometry)
     {
-      Model *model       = (Model *)_model;
+      World *model       = (World *)_model;
       Geometry *geometry = (Geometry *)_geometry;
       model->geometry.push_back(geometry);
     }
 
-    void ISPCDevice::removeGeometry(OSPModel _model, OSPGeometry _geometry)
+    void ISPCDevice::removeGeometry(OSPWorld _model, OSPGeometry _geometry)
     {
-      Model *model       = (Model *)_model;
+      World *model       = (World *)_model;
       Geometry *geometry = (Geometry *)_geometry;
 
       auto it = std::find_if(
@@ -150,16 +150,16 @@ namespace ospray {
       }
     }
 
-    void ISPCDevice::addVolume(OSPModel _model, OSPVolume _volume)
+    void ISPCDevice::addVolume(OSPWorld _model, OSPVolume _volume)
     {
-      Model *model   = (Model *)_model;
+      World *model   = (World *)_model;
       Volume *volume = (Volume *)_volume;
       model->volume.push_back(volume);
     }
 
-    void ISPCDevice::removeVolume(OSPModel _model, OSPVolume _volume)
+    void ISPCDevice::removeVolume(OSPWorld _model, OSPVolume _volume)
     {
-      Model *model   = (Model *)_model;
+      World *model   = (World *)_model;
       Volume *volume = (Volume *)_volume;
 
       auto it = std::find_if(
@@ -307,14 +307,6 @@ namespace ospray {
       return (OSPGeometry)Geometry::createInstance(type);
     }
 
-    OSPMaterial ISPCDevice::newMaterial(OSPRenderer _renderer,
-                                        const char *material_type)
-    {
-      auto *renderer = reinterpret_cast<Renderer *>(_renderer);
-      auto name      = renderer->getParamString("externalNameFromAPI");
-      return newMaterial(name.c_str(), material_type);
-    }
-
     OSPMaterial ISPCDevice::newMaterial(const char *renderer_type,
                                         const char *material_type)
     {
@@ -355,7 +347,7 @@ namespace ospray {
     float ISPCDevice::renderFrame(OSPFrameBuffer _fb,
                                   OSPRenderer _renderer,
                                   OSPCamera _camera,
-                                  OSPModel _world)
+                                  OSPWorld _world)
     {
       auto f = renderFrameAsync(_fb, _renderer, _camera, _world);
       wait(f, OSP_FRAME_FINISHED);
@@ -365,12 +357,12 @@ namespace ospray {
     OSPFuture ISPCDevice::renderFrameAsync(OSPFrameBuffer _fb,
                                            OSPRenderer _renderer,
                                            OSPCamera _camera,
-                                           OSPModel _world)
+                                           OSPWorld _world)
     {
       FrameBuffer *fb    = (FrameBuffer *)_fb;
       Renderer *renderer = (Renderer *)_renderer;
       Camera *camera     = (Camera *)_camera;
-      Model *world       = (Model *)_world;
+      World *world       = (World *)_world;
 
       fb->setCompletedEvent(OSP_NONE_FINISHED);
 
@@ -380,10 +372,10 @@ namespace ospray {
       return (OSPFuture)f;
     }
 
-    int ISPCDevice::isReady(OSPFuture _task)
+    int ISPCDevice::isReady(OSPFuture _task, OSPSyncEvent event)
     {
       auto *task = (QueryableTask *)_task;
-      return task->isFinished();
+      return task->isFinished(event);
     }
 
     void ISPCDevice::wait(OSPFuture _task, OSPSyncEvent event)
@@ -428,13 +420,13 @@ namespace ospray {
     OSPPickResult ISPCDevice::pick(OSPFrameBuffer _fb,
                                    OSPRenderer _renderer,
                                    OSPCamera _camera,
-                                   OSPModel _world,
+                                   OSPWorld _world,
                                    const vec2f &screenPos)
     {
       FrameBuffer *fb    = (FrameBuffer *)_fb;
       Renderer *renderer = (Renderer *)_renderer;
       Camera *camera     = (Camera *)_camera;
-      Model *world       = (Model *)_world;
+      World *world       = (World *)_world;
       return renderer->pick(fb, camera, world, screenPos);
     }
 

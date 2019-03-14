@@ -17,16 +17,22 @@
 #include <chrono>
 #include <thread>
 
+#include "Collectives.h"
 #include "MPIBcastFabric.h"
+#include "maml/maml.h"
 
 namespace mpicommon {
 
-  MPIBcastFabric::MPIBcastFabric(const Group &group, int sendRank, int recvRank)
-    : group(group), sendRank(sendRank), recvRank(recvRank)
+  MPIBcastFabric::MPIBcastFabric(const Group &parentGroup,
+                                 int sendRank,
+                                 int recvRank)
+      : group(parentGroup.dup()), sendRank(sendRank), recvRank(recvRank)
   {
     if (!group.valid())
-      throw std::runtime_error("#osp:mpi: trying to set up an MPI fabric "
-                               "with an invalid MPI communicator");
+      throw std::runtime_error(
+          "#osp:mpi: trying to set up an MPI fabric "
+          "with an invalid MPI communicator");
+
 #ifndef NDEBUG
     int isInter = 0;
     MPI_CALL(Comm_test_inter(group.comm, &isInter));
@@ -41,20 +47,16 @@ namespace mpicommon {
   size_t MPIBcastFabric::read(void *&mem)
   {
     uint32_t sz32 = 0;
-    // Get the size of the bcast being sent to us. Only this part must be non-blocking,
-    // after getting the size we know everyone will enter the blocking barrier and the
-    // blocking bcast where the buffer is sent out.
-    MPI_Request request;
-    MPI_CALL(Ibcast(&sz32, 1, MPI_INT, recvRank, group.comm, &request));
+    // Get the size of the bcast being sent to us. Only this part must be
+    // non-blocking, after getting the size we know everyone will enter the
+    // blocking barrier and the blocking bcast where the buffer is sent out.
+    mpicommon::bcast(&sz32, 1, MPI_INT, recvRank, group.comm).wait();
 
-    // Now do non-blocking test to see when this bcast is satisfied to avoid
-    // locking out the send/recv threads
-    waitForBcast(request);
-
-    // TODO: Maybe at some point we should dump the buffer if it gets really large
+    // TODO: Maybe at some point we should dump the buffer if it gets really
+    // large
     buffer.resize(sz32);
     mem = buffer.data();
-    MPI_CALL(Bcast(mem, sz32, MPI_BYTE, recvRank, group.comm));
+    mpicommon::bcast(mem, sz32, MPI_BYTE, recvRank, group.comm).wait();
     return sz32;
   }
 
@@ -63,34 +65,18 @@ namespace mpicommon {
     delivered */
   void MPIBcastFabric::send(const void *_mem, size_t size)
   {
-    assert(size < (1LL<<30));
+    assert(size < (1LL << 30));
     uint32_t sz32 = size;
 
-    // Send the size of the bcast we're sending. Only this part must be non-blocking,
-    // after getting the size we know everyone will enter the blocking barrier and the
-    // blocking bcast where the buffer is sent out.
-    MPI_Request request;
-    MPI_CALL(Ibcast(&sz32, 1, MPI_INT, sendRank, group.comm, &request));
+    // Send the size of the bcast we're sending. Only this part must be
+    // non-blocking, after getting the size we know everyone will enter the
+    // blocking barrier and the blocking bcast where the buffer is sent out.
+    auto sizeBcast = mpicommon::bcast(&sz32, 1, MPI_INT, sendRank, group.comm);
 
-    // Now do non-blocking test to see when this bcast is satisfied to avoid
-    // locking out the send/recv threads
-    waitForBcast(request);
-
-    // NOTE(jda) - UGH! MPI doesn't let us send const data!
-    void *mem = const_cast<void*>(_mem);
-    MPI_CALL(Bcast(mem, sz32, MPI_BYTE, sendRank, group.comm));
+    void *mem     = const_cast<void *>(_mem);
+    auto bufBcast = mpicommon::bcast(mem, sz32, MPI_BYTE, sendRank, group.comm);
+    sizeBcast.wait();
+    bufBcast.wait();
   }
 
-  void MPIBcastFabric::waitForBcast(MPI_Request &request)
-  {
-    for(;;) {
-      int size_bcast_done;
-      MPI_CALL(Test(&request, &size_bcast_done, MPI_STATUS_IGNORE));
-      if (size_bcast_done)
-        break;
-      std::this_thread::sleep_for(std::chrono::nanoseconds(250));
-    }
-    group.barrier();
-  }
-
-} // ::mpicommon
+}  // namespace mpicommon

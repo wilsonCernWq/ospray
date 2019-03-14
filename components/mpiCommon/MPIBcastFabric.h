@@ -25,12 +25,14 @@ namespace mpicommon {
 
   /*! a specific fabric based on MPI. Note that in the case of an
    *  MPIBcastFabric using an intercommunicator the send rank must
-   *  be MPI_ROOT and the recv rank must be 0.
+   *  be MPI_ROOT and the recv rank must be 0. The group passed will
+   *  be duplicated to avoid MPI collective matching issues with other
+   *  fabrics and collectives.
    */
   class OSPRAY_MPI_INTERFACE MPIBcastFabric : public networking::Fabric
   {
-  public:
-    MPIBcastFabric(const Group &group, int sendRank, int recvRank);
+   public:
+    MPIBcastFabric(const Group &parentGroup, int sendRank, int recvRank);
 
     virtual ~MPIBcastFabric() override = default;
 
@@ -43,13 +45,10 @@ namespace mpicommon {
       and give us size and pointer to this data */
     virtual size_t read(void *&mem) override;
 
-  private:
-    // wait for Bcast with non-blocking test, and barrier
-    void waitForBcast(MPI_Request &);
-
+   private:
     std::vector<byte_t> buffer;
-    Group   group;
-    int     sendRank, recvRank;
+    Group group;
+    int sendRank, recvRank;
   };
 
-} // ::mpicommon
+}  // namespace mpicommon

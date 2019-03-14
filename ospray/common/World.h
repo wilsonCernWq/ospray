@@ -16,17 +16,9 @@
 
 #pragma once
 
-#include <ostream>
-#include <unordered_map>
-#include <set>
-
 // ospray stuff
 #include "geometry/Geometry.h"
 #include "volume/Volume.h"
-#include "common/Model.h"
-
-// ospray common
-#include "ospcommon/box.h"
 
 // stl
 #include <vector>
@@ -35,22 +27,40 @@
 #include "embree3/rtcore.h"
 
 namespace ospray {
-  namespace mpi {
 
-    struct DistributedModel : public Model
-    {
-      DistributedModel();
-      virtual ~DistributedModel() override = default;
+  /*! \brief Base Abstraction for an OSPRay 'World' entity
 
-      virtual std::string toString() const override;
+    A 'model' is the generalization of a 'scene' in embree: it is a
+    collection of geometries and volumes that one can trace rays
+    against, and that one can afterwards 'query' for certain
+    properties (like the shading normal or material for a given
+    ray/model intersection) */
+  struct OSPRAY_SDK_INTERFACE World : public ManagedObject
+  {
+    World();
+    virtual ~World() override;
 
-      // commit synchronizes the distributed models between processes
-      // so that ranks know how many tiles to expect for sort-last
-      // compositing.
-      virtual void commit() override;
+    //! \brief common function to help printf-debugging
+    virtual std::string toString() const override;
+    virtual void commit() override;
 
-      int id;
-    };
+    // Data members //
 
-  } // ::ospray::mpi
+    using GeometryVector = std::vector<Ref<Geometry>>;
+    using VolumeVector   = std::vector<Ref<Volume>>;
+
+    //! \brief vector of all geometries used in this model
+    GeometryVector geometry;
+    //! \brief vector of all volumes used in this model
+    VolumeVector volume;
+
+    //! \brief the embree scene handle for this geometry
+    RTCScene embreeSceneHandle {nullptr};
+    box3f bounds;
+
+    bool useEmbreeDynamicSceneFlag{true};
+    bool useEmbreeCompactSceneFlag{false};
+    bool useEmbreeRobustSceneFlag{false};
+  };
+
 } // ::ospray

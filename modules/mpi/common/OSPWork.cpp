@@ -21,14 +21,13 @@
 #include "mpi/render/MPILoadBalancer.h"
 #include "mpiCommon/MPICommon.h"
 #include "ospray/common/ObjectHandle.h"
+#include "render/RenderTask.h"
 
 #include "common/Data.h"
 #include "common/Library.h"
-#include "common/Model.h"
+#include "common/World.h"
 #include "geometry/TriangleMesh.h"
 #include "texture/Texture.h"
-
-#include "SynchronousRenderTask.h"
 
 namespace ospray {
   namespace mpi {
@@ -39,7 +38,7 @@ namespace ospray {
         registerWorkUnit<SetLoadBalancer>(registry);
 
         registerWorkUnit<NewRenderer>(registry);
-        registerWorkUnit<NewModel>(registry);
+        registerWorkUnit<NewWorld>(registry);
         registerWorkUnit<NewGeometry>(registry);
         registerWorkUnit<NewCamera>(registry);
         registerWorkUnit<NewVolume>(registry);
@@ -47,12 +46,10 @@ namespace ospray {
         registerWorkUnit<NewPixelOp>(registry);
 
         registerWorkUnit<NewMaterial>(registry);
-        registerWorkUnit<NewMaterial2>(registry);
         registerWorkUnit<NewLight>(registry);
 
         registerWorkUnit<NewData>(registry);
         registerWorkUnit<NewTexture>(registry);
-        registerWorkUnit<NewFuture>(registry);
 
         registerWorkUnit<CommitObject>(registry);
         registerWorkUnit<CommandRelease>(registry);
@@ -66,7 +63,7 @@ namespace ospray {
 
         registerWorkUnit<CreateFrameBuffer>(registry);
         registerWorkUnit<ResetAccumulation>(registry);
-        registerWorkUnit<RenderFrame>(registry);
+        registerWorkUnit<RenderFrameAsync>(registry);
 
         registerWorkUnit<SetRegion>(registry);
         registerWorkUnit<SetPixelOp>(registry);
@@ -284,27 +281,18 @@ namespace ospray {
         run();
       }
 
-      // ospNewModel //////////////////////////////////////////////////////////
+      // ospNewWorld //////////////////////////////////////////////////////////
 
       template <>
-      void NewModel::run()
+      void NewWorld::run()
       {
-        auto *model = new Model;
+        auto *model = new World;
         handle.assign(model);
       }
 
       // ospNewMaterial ///////////////////////////////////////////////////////
 
       void NewMaterial::run()
-      {
-        auto *renderer    = (Renderer *)rendererHandle.lookup();
-        auto rendererType = renderer->getParamString("externalNameFromAPI");
-        auto *material    = Material::createInstance(rendererType.c_str(),
-                                                  materialType.c_str());
-        handle.assign(material);
-      }
-
-      void NewMaterial2::run()
       {
         auto *material = Material::createInstance(rendererType.c_str(),
                                                   materialType.c_str());
@@ -352,7 +340,7 @@ namespace ospray {
         if (format == OSP_OBJECT || format == OSP_CAMERA ||
             format == OSP_DATA || format == OSP_FRAMEBUFFER ||
             format == OSP_GEOMETRY || format == OSP_LIGHT ||
-            format == OSP_MATERIAL || format == OSP_MODEL ||
+            format == OSP_MATERIAL || format == OSP_WORLD ||
             format == OSP_RENDERER || format == OSP_TEXTURE ||
             format == OSP_TRANSFER_FUNCTION || format == OSP_VOLUME ||
             format == OSP_PIXEL_OP) {
@@ -385,34 +373,6 @@ namespace ospray {
         b >> handle.i64 >> nItems >> fmt >> flags >> copiedData;
         dataView = copiedData;
         format   = (OSPDataType)fmt;
-      }
-
-      // newFuture ////////////////////////////////////////////////////////////
-
-      NewFuture::NewFuture(OSPFrameBuffer fbHandle, ObjectHandle handle)
-          : fbHandle((ObjectHandle &)fbHandle), handle(handle)
-      {
-      }
-
-      void NewFuture::run()
-      {
-        auto *f = new SynchronousRenderTask((FrameBuffer *)fbHandle.lookup());
-        handle.assign(f);
-      }
-
-      void NewFuture::runOnMaster()
-      {
-        run();
-      }
-
-      void NewFuture::serialize(WriteStream &b) const
-      {
-        b << (int64)fbHandle << (int64)handle;
-      }
-
-      void NewFuture::deserialize(ReadStream &b)
-      {
-        b >> fbHandle.i64 >> handle.i64;
       }
 
       // ospSetRegion /////////////////////////////////////////////////////////
@@ -493,52 +453,58 @@ namespace ospray {
         b >> handle.i64;
       }
 
-      // ospRenderFrame ///////////////////////////////////////////////////////
+      // ospRenderFrameAsync ///////////////////////////////////////////////////////
 
-      RenderFrame::RenderFrame(OSPFrameBuffer fb,
-                               OSPRenderer renderer,
-                               OSPCamera camera,
-                               OSPModel world)
+      RenderFrameAsync::RenderFrameAsync(OSPFrameBuffer fb,
+                                         OSPRenderer renderer,
+                                         OSPCamera camera,
+                                         OSPWorld world,
+                                         ObjectHandle futureHandle)
           : fbHandle((ObjectHandle &)fb),
             rendererHandle((ObjectHandle &)renderer),
             cameraHandle((ObjectHandle &)camera),
             worldHandle((ObjectHandle &)world),
-            varianceResult(0.f)
+            futureHandle(futureHandle)
       {
       }
 
-      void RenderFrame::run()
+      void RenderFrameAsync::run()
       {
         mpicommon::world.barrier();
         Renderer *renderer = (Renderer *)rendererHandle.lookup();
         FrameBuffer *fb    = (FrameBuffer *)fbHandle.lookup();
         Camera *camera     = (Camera *)cameraHandle.lookup();
-        Model *world       = (Model *)worldHandle.lookup();
-        varianceResult     = renderer->renderFrame(fb, camera, world);
+        World *world       = (World *)worldHandle.lookup();
+
+        fb->setCompletedEvent(OSP_NONE_FINISHED);
+
+        auto *f = new RenderTask(fb,
+            [=]() { return renderer->renderFrame(fb, camera, world); });
+        futureHandle.assign(f);
       }
 
-      void RenderFrame::runOnMaster()
+      void RenderFrameAsync::runOnMaster()
       {
         run();
       }
 
-      void RenderFrame::serialize(WriteStream &b) const
+      void RenderFrameAsync::serialize(WriteStream &b) const
       {
         b << (int64)fbHandle << (int64)rendererHandle << (int64)cameraHandle
-          << (int64)worldHandle;
+          << (int64)worldHandle << (int64)futureHandle;
       }
 
-      void RenderFrame::deserialize(ReadStream &b)
+      void RenderFrameAsync::deserialize(ReadStream &b)
       {
         b >> fbHandle.i64 >> rendererHandle.i64 >> cameraHandle.i64 >>
-            worldHandle.i64;
+            worldHandle.i64 >> futureHandle.i64;
       }
 
       // ospAddGeometry ///////////////////////////////////////////////////////
 
       void AddGeometry::run()
       {
-        Model *model       = (Model *)modelHandle.lookup();
+        World *model       = (World *)modelHandle.lookup();
         Geometry *geometry = (Geometry *)objectHandle.lookup();
         Assert(model);
         Assert(geometry);
@@ -549,7 +515,7 @@ namespace ospray {
 
       void AddVolume::run()
       {
-        Model *model   = (Model *)modelHandle.lookup();
+        World *model   = (World *)modelHandle.lookup();
         Volume *volume = (Volume *)objectHandle.lookup();
         Assert(model);
         Assert(volume);
@@ -560,7 +526,7 @@ namespace ospray {
 
       void RemoveGeometry::run()
       {
-        Model *model       = (Model *)modelHandle.lookup();
+        World *model       = (World *)modelHandle.lookup();
         Geometry *geometry = (Geometry *)objectHandle.lookup();
         Assert(model);
         Assert(geometry);
@@ -577,7 +543,7 @@ namespace ospray {
 
       void RemoveVolume::run()
       {
-        Model *model   = (Model *)modelHandle.lookup();
+        World *model   = (World *)modelHandle.lookup();
         Volume *volume = (Volume *)objectHandle.lookup();
         Assert(model);
         Assert(volume);
@@ -702,7 +668,6 @@ namespace ospray {
       void CommandFinalize::runOnMaster()
       {
         maml::shutdown();
-        world.barrier();
         MPI_CALL(Finalize());
       }
 
@@ -715,7 +680,7 @@ namespace ospray {
       Pick::Pick(OSPFrameBuffer fb,
                  OSPRenderer renderer,
                  OSPCamera camera,
-                 OSPModel world,
+                 OSPWorld world,
                  const vec2f &screenPos)
           : fbHandle((ObjectHandle &)fb),
             rendererHandle((ObjectHandle &)renderer),
@@ -734,29 +699,30 @@ namespace ospray {
           FrameBuffer *fb    = (FrameBuffer *)fbHandle.lookup();
           Renderer *renderer = (Renderer *)rendererHandle.lookup();
           Camera *camera     = (Camera *)cameraHandle.lookup();
-          Model *world       = (Model *)worldHandle.lookup();
+          World *world       = (World *)worldHandle.lookup();
 
           pickResult = renderer->pick(fb, camera, world, screenPos);
 
-          MPI_CALL(Send(&pickResult,
-                        sizeof(pickResult),
-                        MPI_BYTE,
-                        0,
-                        0,
-                        mpicommon::world.comm));
+          mpicommon::send(&pickResult,
+                          sizeof(pickResult),
+                          MPI_BYTE,
+                          0,
+                          typeIdOf<Pick>(),
+                          mpicommon::world.comm)
+              .wait();
         }
-        mpicommon::worker.barrier();
+        mpicommon::barrier(mpicommon::worker.comm).wait();
       }
       void Pick::runOnMaster()
       {
         // Master just needs to recv the result from the first worker
-        MPI_CALL(Recv(&pickResult,
-                      sizeof(pickResult),
-                      MPI_BYTE,
-                      1,
-                      0,
-                      mpicommon::world.comm,
-                      MPI_STATUS_IGNORE));
+        mpicommon::recv(&pickResult,
+                        sizeof(pickResult),
+                        MPI_BYTE,
+                        1,
+                        typeIdOf<Pick>(),
+                        mpicommon::world.comm)
+            .wait();
       }
 
       void Pick::serialize(WriteStream &b) const

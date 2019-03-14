@@ -149,7 +149,7 @@ OSPGeometry createGroundPlaneGeometry()
   ospSetData(planeGeometry, "index", indexData);
 
   // create and assign a material to the geometry
-  OSPMaterial material = ospNewMaterial2("pathtracer", "OBJMaterial");
+  OSPMaterial material = ospNewMaterial("pathtracer", "OBJMaterial");
   ospCommit(material);
 
   ospSetMaterial(planeGeometry, material);
@@ -187,8 +187,8 @@ int main(int argc, const char **argv)
         exit(error);
       });
 
-  // create the "world" model which will contain all of our geometries
-  OSPModel world = ospNewModel();
+  // create the world which will contain all of our geometries
+  OSPWorld world = ospNewWorld();
 
   // add in spheres geometry
   OSPTestingGeometry spheres = ospTestingNewGeometry("spheres", "pathtracer");
@@ -198,7 +198,7 @@ int main(int argc, const char **argv)
   // add in a ground plane geometry
   ospAddGeometry(world, createGroundPlaneGeometry());
 
-  // commit the world model
+  // commit the world
   ospCommit(world);
 
   // create OSPRay renderer

@@ -35,11 +35,11 @@ struct Sphere
   vec4f color;
 };
 
-// track the spheres data, geometry, and model globally so we can update them
+// track the spheres data, geometry, and world globally so we can update them
 // every frame
 static std::vector<Sphere> g_spheres;
 static OSPGeometry g_spheresGeometry;
-static OSPModel g_model;
+static OSPWorld g_world;
 
 std::vector<Sphere> generateRandomSpheres(size_t numSpheres)
 {
@@ -196,7 +196,7 @@ OSPGeometry createGroundPlaneGeometry()
   ospSetData(planeGeometry, "index", indexData);
 
   // create and assign a material to the geometry
-  OSPMaterial material = ospNewMaterial2("pathtracer", "OBJMaterial");
+  OSPMaterial material = ospNewMaterial("pathtracer", "OBJMaterial");
   ospCommit(material);
 
   ospSetMaterial(planeGeometry, material);
@@ -236,7 +236,7 @@ OSPGeometry createRandomSpheresGeometry(size_t numSpheres)
   ospSet1i(g_spheresGeometry, "color_stride", int(sizeof(Sphere)));
 
   // create glass material and assign to geometry
-  OSPMaterial glassMaterial = ospNewMaterial2("pathtracer", "ThinGlass");
+  OSPMaterial glassMaterial = ospNewMaterial("pathtracer", "ThinGlass");
   ospSet1f(glassMaterial, "attenuationDistance", 0.2f);
   ospCommit(glassMaterial);
 
@@ -252,10 +252,10 @@ OSPGeometry createRandomSpheresGeometry(size_t numSpheres)
   return g_spheresGeometry;
 }
 
-OSPModel createModel()
+OSPWorld createWorld()
 {
-  // create the "world" model which will contain all of our geometries
-  OSPModel world = ospNewModel();
+  // create the world which will contain all of our geometries
+  OSPWorld world = ospNewWorld();
 
   // add in spheres geometry (100 of them)
   ospAddGeometry(world, createRandomSpheresGeometry(100));
@@ -263,7 +263,7 @@ OSPModel createModel()
   // add in a ground plane geometry
   ospAddGeometry(world, createGroundPlaneGeometry());
 
-  // commit the world model
+  // commit the world
   ospCommit(world);
 
   return world;
@@ -275,7 +275,7 @@ OSPRenderer createRenderer()
   OSPRenderer renderer = ospNewRenderer("pathtracer");
 
   // create an ambient light
-  OSPLight ambientLight = ospNewLight3("ambient");
+  OSPLight ambientLight = ospNewLight("ambient");
   ospCommit(ambientLight);
 
   // create lights data containing all lights
@@ -302,7 +302,7 @@ void updateSpheresCoordinates()
   static float t = 0.f;
 
   for (auto &s : g_spheres) {
-    const float g    = 9.81f;
+    const float g    = 1.62f;  // moon surface gravity
     const float T    = sqrtf(8.f * s.maxHeight / g);
     const float Vmax = sqrtf(2.f * s.maxHeight * g);
 
@@ -312,8 +312,19 @@ void updateSpheresCoordinates()
                  Vmax * tRemainder;
   }
 
-  // increment by fixed time interval, rather than actual elapsed time
-  t += 0.01f;
+  // increment based on actual elapsed time
+  static auto lastTime = std::chrono::high_resolution_clock::now();
+  auto nowTime         = std::chrono::high_resolution_clock::now();
+
+  float elaspedTimeSeconds =
+      float(std::chrono::duration_cast<std::chrono::microseconds>(nowTime -
+                                                                  lastTime)
+                .count()) /
+      1e6f;
+
+  t += elaspedTimeSeconds;
+
+  lastTime = nowTime;
 }
 
 void updateSpheresGeometry()
@@ -332,19 +343,19 @@ void updateSpheresGeometry()
   ospRelease(spheresData);
 }
 
-// updates the bouncing spheres' coordinates, geometry, and model
+// updates the bouncing spheres' coordinates, geometry, and world
 void displayCallback(GLFWOSPRayWindow *glfwOSPRayWindow)
 {
   // update the spheres coordinates and geometry
   updateSpheresCoordinates();
   updateSpheresGeometry();
 
-  // queue the model to be committed since it changed, however don't commit
+  // queue the world to be committed since it changed, however don't commit
   // it immediately because it's being rendered asynchronously
-  glfwOSPRayWindow->addObjectToCommit(g_model);
+  glfwOSPRayWindow->addObjectToCommit(g_world);
 
-  // update the model on the GLFW window
-  glfwOSPRayWindow->setModel(g_model);
+  // update the world on the GLFW window
+  glfwOSPRayWindow->setWorld(g_world);
 }
 
 int main(int argc, const char **argv)
@@ -367,8 +378,8 @@ int main(int argc, const char **argv)
         exit(error);
       });
 
-  // create OSPRay model
-  g_model = createModel();
+  // create OSPRay world
+  g_world = createWorld();
 
   // create OSPRay renderer
   OSPRenderer renderer = createRenderer();
@@ -377,9 +388,9 @@ int main(int argc, const char **argv)
   // frame buffer and camera directly
   auto glfwOSPRayWindow =
       std::unique_ptr<GLFWOSPRayWindow>(new GLFWOSPRayWindow(
-          vec2i{1024, 768}, box3f(vec3f(-1.f), vec3f(1.f)), g_model, renderer));
+          vec2i{1024, 768}, box3f(vec3f(-1.f), vec3f(1.f)), g_world, renderer));
 
-  // register a callback with the GLFW OSPRay window to update the model every
+  // register a callback with the GLFW OSPRay window to update the world every
   // frame
   glfwOSPRayWindow->registerDisplayCallback(
       std::function<void(GLFWOSPRayWindow *)>(displayCallback));

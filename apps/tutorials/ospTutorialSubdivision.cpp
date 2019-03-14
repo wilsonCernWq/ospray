@@ -149,7 +149,7 @@ OSPGeometry createGroundPlaneGeometry()
   ospSetData(planeGeometry, "index", indexData);
 
   // create and assign a material to the geometry
-  OSPMaterial material = ospNewMaterial2("scivis", "OBJMaterial");
+  OSPMaterial material = ospNewMaterial("scivis", "OBJMaterial");
   ospCommit(material);
 
   ospSetMaterial(planeGeometry, material);
@@ -187,8 +187,8 @@ int main(int argc, const char **argv)
         exit(error);
       });
 
-  // create the "world" model which will contain all of our geometries
-  OSPModel world = ospNewModel();
+  // create the world which will contain all of our geometries
+  OSPWorld world = ospNewWorld();
 
   // add in subdivision geometry
   OSPTestingGeometry subdivisionGeometry =
@@ -198,7 +198,7 @@ int main(int argc, const char **argv)
   // add in a ground plane geometry
   ospAddGeometry(world, createGroundPlaneGeometry());
 
-  // commit the world model
+  // commit the world
   ospCommit(world);
 
   // create OSPRay renderer
@@ -222,8 +222,6 @@ int main(int argc, const char **argv)
       ospSet1f(subdivisionGeometry.geometry, "level", tessellationLevel);
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
       glfwOSPRayWindow->addObjectToCommit(world);
-
-      GLFWOSPRayWindow::getActiveWindow()->resetAccumulation();
     }
 
     static float vertexCreaseWeight = 2.f;
@@ -247,8 +245,6 @@ int main(int argc, const char **argv)
 
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
       glfwOSPRayWindow->addObjectToCommit(world);
-
-      GLFWOSPRayWindow::getActiveWindow()->resetAccumulation();
     }
 
     static float edgeCreaseWeight = 2.f;
@@ -271,8 +267,6 @@ int main(int argc, const char **argv)
 
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
       glfwOSPRayWindow->addObjectToCommit(world);
-
-      GLFWOSPRayWindow::getActiveWindow()->resetAccumulation();
     }
   });
 

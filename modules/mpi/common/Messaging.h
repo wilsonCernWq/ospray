@@ -45,6 +45,13 @@ namespace ospray {
 
       // async point messaging interface //////////////////////////////////////
 
+      /* Register the object message handler and dispatcher to run all object
+       * fire & forget messaging on the specified group. The internal
+       * communicator used will be a dup'd from this group, to avoid
+       * conflicting with other messaging.
+       */
+      void init(mpicommon::Group parentGroup);
+
       void registerMessageListener(int handleObjID, MessageHandler *listener);
 
       void removeMessageListener(int handleObjID);
@@ -57,34 +64,6 @@ namespace ospray {
                   std::shared_ptr<mpicommon::Message> msg);
 
       void disableAsyncMessaging();
-
-      // collective messaging interface ///////////////////////////////////////
-
-      // Broadcast some data, if rank == rootGlobalRank we send data, otherwise
-      // the received data will be put in data.
-      // TODO: Handling non-world groups? I'm not sure how
-      // we could set up object handlers for the bcast or collective layer,
-      // since it's inherently a global sync operation. If we async dispatched
-      // collectives then maybe? But how could you ensure the queue of
-      // collectives seen by all nodes was the same order? You might
-      // mismatch collectives or hang trying to dispatch
-      // the wrong ones?
-      template<typename T>
-      inline void bcast(const int rootGlobalRank, T &data)
-      {
-        using namespace mpicommon;
-
-        MPIBcastFabric fabric(world, rootGlobalRank, rootGlobalRank);
-
-        if (globalRank() == rootGlobalRank) {
-          networking::BufferedWriteStream stream(fabric);
-          stream << data;
-          stream.flush();
-        } else {
-          networking::BufferedReadStream stream(fabric);
-          stream >> data;
-        }
-      }
 
     } // ::ospray::mpi::messaging
   } // ::ospray::mpi

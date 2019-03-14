@@ -32,7 +32,7 @@
 #include "ospcommon/utility/ArrayView.h"
 
 #include "camera/Camera.h"
-#include "common/Model.h"
+#include "common/World.h"
 #include "lights/Light.h"
 #include "render/Renderer.h"
 #include "transferFunction/TransferFunction.h"
@@ -163,7 +163,7 @@ namespace ospray {
 
       // NewObjectT explicit instantiations ///////////////////////////////////
 
-      using NewModel            = NewObjectT<Model>;
+      using NewWorld            = NewObjectT<World>;
       using NewPixelOp          = NewObjectT<PixelOp>;
       using NewRenderer         = NewObjectT<Renderer>;
       using NewCamera           = NewObjectT<Camera>;
@@ -180,41 +180,12 @@ namespace ospray {
       void NewVolume::runOnMaster();
 
       template <>
-      void NewModel::run();
+      void NewWorld::run();
 
       struct NewMaterial : public Work
       {
         NewMaterial() = default;
-        NewMaterial(OSPRenderer renderer,
-                    const char *material_type,
-                    ObjectHandle handle)
-            : rendererHandle((ObjectHandle &)renderer),
-              materialType(material_type),
-              handle(handle)
-        {
-        }
-
-        void run() override;
-
-        void serialize(WriteStream &b) const override
-        {
-          b << (int64)handle << (int64)rendererHandle << materialType;
-        }
-
-        void deserialize(ReadStream &b) override
-        {
-          b >> handle.i64 >> rendererHandle.i64 >> materialType;
-        }
-
-        ObjectHandle rendererHandle;
-        std::string materialType;
-        ObjectHandle handle;
-      };
-
-      struct NewMaterial2 : public Work
-      {
-        NewMaterial2() = default;
-        NewMaterial2(const char *renderer_type,
+        NewMaterial(const char *renderer_type,
                      const char *material_type,
                      ObjectHandle handle)
             : rendererType(renderer_type),
@@ -297,22 +268,6 @@ namespace ospray {
         int32 flags;
       };
 
-      struct NewFuture : public Work
-      {
-        NewFuture() = default;
-        NewFuture(OSPFrameBuffer fbHandle, ObjectHandle handle);
-
-        void run() override;
-
-        void runOnMaster() override;
-
-        void serialize(WriteStream &b) const override;
-
-        void deserialize(ReadStream &b) override;
-
-        ObjectHandle fbHandle, handle;
-      };
-
       struct SetRegion : public Work
       {
         SetRegion() = default;
@@ -381,13 +336,14 @@ namespace ospray {
         ObjectHandle handle;
       };
 
-      struct RenderFrame : public Work
+      struct RenderFrameAsync : public Work
       {
-        RenderFrame() = default;
-        RenderFrame(OSPFrameBuffer fb,
-                    OSPRenderer renderer,
-                    OSPCamera camera,
-                    OSPModel world);
+        RenderFrameAsync() = default;
+        RenderFrameAsync(OSPFrameBuffer fb,
+                         OSPRenderer renderer,
+                         OSPCamera camera,
+                         OSPWorld world,
+                         ObjectHandle futureHandle);
 
         void run() override;
         void runOnMaster() override;
@@ -405,14 +361,13 @@ namespace ospray {
         ObjectHandle rendererHandle;
         ObjectHandle cameraHandle;
         ObjectHandle worldHandle;
-        // Variance result for adaptive accumulation
-        float varianceResult{0.f};
+        ObjectHandle futureHandle;
       };
 
       struct AddVolume : public Work
       {
         AddVolume() = default;
-        AddVolume(OSPModel model, const OSPVolume &t)
+        AddVolume(OSPWorld model, const OSPVolume &t)
             : modelHandle((const ObjectHandle &)model),
               objectHandle((const ObjectHandle &)t)
         {
@@ -442,7 +397,7 @@ namespace ospray {
       struct AddGeometry : public Work
       {
         AddGeometry() = default;
-        AddGeometry(OSPModel model, const OSPGeometry &t)
+        AddGeometry(OSPWorld model, const OSPGeometry &t)
             : modelHandle((const ObjectHandle &)model),
               objectHandle((const ObjectHandle &)t)
         {
@@ -472,7 +427,7 @@ namespace ospray {
       struct RemoveGeometry : public Work
       {
         RemoveGeometry() = default;
-        RemoveGeometry(OSPModel model, const OSPGeometry &t)
+        RemoveGeometry(OSPWorld model, const OSPGeometry &t)
             : modelHandle((const ObjectHandle &)model),
               objectHandle((const ObjectHandle &)t)
         {
@@ -502,7 +457,7 @@ namespace ospray {
       struct RemoveVolume : public Work
       {
         RemoveVolume() = default;
-        RemoveVolume(OSPModel model, const OSPVolume &t)
+        RemoveVolume(OSPWorld model, const OSPVolume &t)
             : modelHandle((const ObjectHandle &)model),
               objectHandle((const ObjectHandle &)t)
         {
@@ -796,7 +751,7 @@ namespace ospray {
         Pick(OSPFrameBuffer fb,
              OSPRenderer renderer,
              OSPCamera camera,
-             OSPModel world,
+             OSPWorld world,
              const vec2f &screenPos);
 
         void run() override;

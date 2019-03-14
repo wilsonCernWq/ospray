@@ -58,25 +58,25 @@ namespace ospray {
       void setPixelOp(OSPFrameBuffer _fb, OSPPixelOp _op) override;
 
       /*! create a new model */
-      OSPModel newModel() override;
+      OSPWorld newWorld() override;
 
       // /*! finalize a newly specified model */
-      // void finalizeModel(OSPModel _model) override;
+      // void finalizeWorld(OSPWorld _model) override;
 
       /*! commit the given object's outstanding changes */
       void commit(OSPObject object) override;
 
       /*! add a new geometry to a model */
-      void addGeometry(OSPModel _model, OSPGeometry _geometry) override;
+      void addGeometry(OSPWorld _model, OSPGeometry _geometry) override;
 
       /*! remove an existing geometry from a model */
-      void removeGeometry(OSPModel _model, OSPGeometry _geometry) override;
+      void removeGeometry(OSPWorld _model, OSPGeometry _geometry) override;
 
       /*! add a new volume to a model */
-      void addVolume(OSPModel _model, OSPVolume _volume) override;
+      void addVolume(OSPWorld _model, OSPVolume _volume) override;
 
       /*! remove an existing volume from a model */
-      void removeVolume(OSPModel _model, OSPVolume _volume) override;
+      void removeVolume(OSPWorld _model, OSPVolume _volume) override;
 
       /*! create a new data buffer */
       OSPData newData(size_t nitems,
@@ -154,10 +154,6 @@ namespace ospray {
       OSPGeometry newGeometry(const char *type) override;
 
       /*! have given renderer create a new material */
-      OSPMaterial newMaterial(OSPRenderer renderer,
-                              const char *material_type) override;
-
-      /*! have given renderer create a new material */
       OSPMaterial newMaterial(const char *renderer_type,
                               const char *material_type) override;
 
@@ -182,14 +178,14 @@ namespace ospray {
       float renderFrame(OSPFrameBuffer,
                         OSPRenderer,
                         OSPCamera,
-                        OSPModel) override;
+                        OSPWorld) override;
 
       OSPFuture renderFrameAsync(OSPFrameBuffer,
                                  OSPRenderer,
                                  OSPCamera,
-                                 OSPModel) override;
+                                 OSPWorld) override;
 
-      int isReady(OSPFuture) override;
+      int isReady(OSPFuture, OSPSyncEvent) override;
 
       void wait(OSPFuture, OSPSyncEvent) override;
 
@@ -197,7 +193,7 @@ namespace ospray {
 
       float getProgress(OSPFuture) override;
 
-      float getVariance(OSPFuture) override;
+      float getVariance(OSPFrameBuffer) override;
 
       //! release (i.e., reduce refcount of) given object
       /*! note that all objects in ospray are refcounted, so one cannot
@@ -217,7 +213,7 @@ namespace ospray {
       OSPPickResult pick(OSPFrameBuffer fb,
                          OSPRenderer renderer,
                          OSPCamera camera,
-                         OSPModel world,
+                         OSPWorld world,
                          const vec2f &screenPos) override;
 
       void sampleVolume(float **results,
