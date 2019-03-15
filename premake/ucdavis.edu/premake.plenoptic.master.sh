@@ -5,6 +5,7 @@
     --mpi \
     -a " -DTFN_MODULE_ROOT=~/Work/projects/ospray/apps/TransferFunctionModule" \
     -a " -DOSPRAY_MODULE_BRICKTREE=ON" \
+    -a " -DOSPRAY_ENABLE_TESTING=ON" \
     -a " -DOSPRAY_MODULE_BRICKTREE_BENCH=ON" \
     -a " -DOSPRAY_MODULE_BRICKTREE_WIDGET=ON" \
     --embree-dir "/home/qadwu/Work/softwares/embree/embree-3.2.0-install" \
