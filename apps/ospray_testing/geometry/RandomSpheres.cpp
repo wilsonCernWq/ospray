@@ -39,13 +39,13 @@ namespace ospray {
 
     // Inlined definitions ////////////////////////////////////////////////////
 
-    OSPTestingGeometry RandomSpheres::createGeometry(const std::string &) const
+    OSPTestingGeometry RandomSpheres::createGeometry(
+        const std::string &renderer_type) const
     {
       struct Sphere
       {
         vec3f center;
         float radius;
-        vec4f color;
       };
 
       // create random number distributions for sphere center, radius, and color
@@ -59,6 +59,7 @@ namespace ospray {
       // populate the spheres
       box3f bounds;
       std::vector<Sphere> spheres(numSpheres);
+      std::vector<vec4f> colors(numSpheres);
 
       for (auto &s : spheres) {
         s.center.x = centerDistribution(gen);
@@ -67,12 +68,14 @@ namespace ospray {
 
         s.radius = radiusDistribution(gen);
 
-        s.color.x = colorDistribution(gen);
-        s.color.y = colorDistribution(gen);
-        s.color.z = colorDistribution(gen);
-        s.color.w = colorDistribution(gen);
-
         bounds.extend(box3f(s.center - s.radius, s.center + s.radius));
+      }
+
+      for (auto &c : colors) {
+        c.x = colorDistribution(gen);
+        c.y = colorDistribution(gen);
+        c.z = colorDistribution(gen);
+        c.w = colorDistribution(gen);
       }
 
       // create a data object with all the sphere information
@@ -87,27 +90,33 @@ namespace ospray {
       ospSet1i(spheresGeometry, "offset_center", int(offsetof(Sphere, center)));
       ospSet1i(spheresGeometry, "offset_radius", int(offsetof(Sphere, radius)));
 
-      ospSetData(spheresGeometry, "color", spheresData);
-      ospSet1i(spheresGeometry, "color_offset", int(offsetof(Sphere, color)));
-      ospSet1i(spheresGeometry, "color_format", int(OSP_FLOAT4));
-      ospSet1i(spheresGeometry, "color_stride", int(sizeof(Sphere)));
-
-      // create glass material and assign to geometry
-      OSPMaterial glassMaterial = ospNewMaterial("pathtracer", "ThinGlass");
-      ospSet1f(glassMaterial, "attenuationDistance", 0.2f);
-      ospCommit(glassMaterial);
-
-      ospSetMaterial(spheresGeometry, glassMaterial);
-
       // commit the spheres geometry
       ospCommit(spheresGeometry);
 
+      OSPGeometryInstance instance = ospNewGeometryInstance(spheresGeometry);
+
+      OSPData colorData = ospNewData(numSpheres, OSP_FLOAT4, colors.data());
+
+      ospSetData(instance, "color", colorData);
+
+      // create glass material and assign to geometry
+      OSPMaterial glassMaterial =
+          ospNewMaterial(renderer_type.c_str(), "ThinGlass");
+      ospSet1f(glassMaterial, "attenuationDistance", 0.2f);
+      ospCommit(glassMaterial);
+
+      ospSetMaterial(instance, glassMaterial);
+
       // release handles we no longer need
       ospRelease(spheresData);
+      ospRelease(colorData);
       ospRelease(glassMaterial);
+
+      ospCommit(instance);
 
       OSPTestingGeometry retval;
       retval.geometry = spheresGeometry;
+      retval.instance = instance;
       retval.bounds   = reinterpret_cast<osp_box3f &>(bounds);
 
       return retval;

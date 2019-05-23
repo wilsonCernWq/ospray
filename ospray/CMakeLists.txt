@@ -73,6 +73,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   fb/PixelOp.cpp
   fb/ToneMapperPixelOp.cpp
   fb/ToneMapperPixelOp.ispc
+  fb/DebugPixelOp.cpp
   fb/Tile.h
   fb/TileError.cpp
 
@@ -87,6 +88,10 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   geometry/Geometry.ispc
   geometry/Geometry.cpp
+  geometry/GeometryInstance.ispc
+  geometry/GeometryInstance.cpp
+  geometry/Boxes.ispc
+  geometry/Boxes.cpp
   geometry/TriangleMesh.ispc
   geometry/TriangleMesh.cpp
   geometry/Subdivision.ispc
@@ -97,8 +102,6 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   geometry/Curves.ispc
   geometry/StreamLines.cpp
   geometry/StreamLines.ispc
-  geometry/Instance.ispc
-  geometry/Instance.cpp
   geometry/Spheres.cpp
   geometry/Spheres.ispc
   geometry/Cylinders.cpp
@@ -138,19 +141,12 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   render/util.ispc
   render/raycast/RaycastRenderer.cpp
   render/raycast/RaycastRenderer.ispc
-  render/simpleAO/SimpleAO.cpp
-  render/simpleAO/SimpleAO.ispc
-  render/simpleAO/SimpleAOMaterial.cpp
-  render/simpleAO/SimpleAOMaterial.ih
-  render/simpleAO/SimpleAOMaterial.ispc
-  render/scivis/lightAlpha.ispc
-  render/scivis/volumeIntegration.ispc
-  render/scivis/surfaceShading.ispc
-  render/scivis/SciVisRenderer.ispc
-  render/scivis/SciVisMaterial.ispc
-  render/scivis/SciVisMaterial.ih
-  render/scivis/SciVisRenderer.cpp
+  render/scivis/SciVis.cpp
+  render/scivis/SciVis.ispc
   render/scivis/SciVisMaterial.cpp
+  render/scivis/SciVisMaterial.ispc
+  render/scivis/surfaces.ispc
+  render/scivis/volumes.ispc
 
   render/pathtracer/PathTracer.ispc
   render/pathtracer/PathTracer.cpp
@@ -195,6 +191,8 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   volume/Volume.ispc
   volume/Volume.cpp
+  volume/VolumeInstance.ispc
+  volume/VolumeInstance.cpp
 
   volume/structured/GridAccelerator.ispc
   volume/structured/StructuredVolume.ispc

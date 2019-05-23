@@ -28,16 +28,14 @@ namespace ospray {
     virtual std::string toString() const override;
     virtual void commit() override;
 
-    void generateGeometryLights(const World *const, const affine3f& xfm,
-                                float *const areaPDF);
+    void generateGeometryLights(const World &);
     void destroyGeometryLights();
 
     std::vector<void*> lightArray; // the 'IE's of the XXXLights
     size_t geometryLights {0}; // number of GeometryLights at beginning of lightArray
-    std::vector<float> areaPDF; // pdfs wrt. area of regular (not instanced) geometry lights
-    Data *lightData;
+    Ref<Data> lightData;
 
-    World *model{nullptr};
+    Ref<World> world;
   };
 
 }// ::ospray

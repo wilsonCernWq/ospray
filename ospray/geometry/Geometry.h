@@ -16,17 +16,15 @@
 
 #pragma once
 
-#include "common/Managed.h"
-#include "common/OSPCommon.h"
-#include "common/Data.h"
-#include "common/Material.h"
 #include "api/ISPCDevice.h"
-//embree
+#include "common/Data.h"
+#include "common/Managed.h"
+#include "common/Material.h"
+#include "common/OSPCommon.h"
+// embree
 #include "embree3/rtcore.h"
 
 namespace ospray {
-
-  struct World;
 
   /*! \brief abstract base class for geometries.
 
@@ -41,25 +39,10 @@ namespace ospray {
   struct OSPRAY_SDK_INTERFACE Geometry : public ManagedObject
   {
     Geometry();
-    virtual ~Geometry() override = default;
-
-    //! set given geometry's materials.
-    /*! all material assignations should go through these functions;
-        This allows the respective geometry's derived instance to
-        always properly set the material field of the ISCP-equivalent
-        whenever the C++-side's material gets changed */
-    virtual void setMaterial(Material *mat);
-    virtual void setMaterialList(Data *matListData);
-
-    //! get material assigned to this geometry
-    virtual Material *getMaterial() const;
+    virtual ~Geometry() override;
 
     //! \brief common function to help printf-debugging
     virtual std::string toString() const override;
-
-    /*! \brief integrates this geometry's primitives into the respective
-        model's acceleration structure */
-    virtual void finalize(World *);
 
     /*! \brief creates an abstract geometry class of given type
 
@@ -69,14 +52,15 @@ namespace ospray {
       ospLoadModule first. */
     static Geometry *createInstance(const char *type);
 
-    box3f bounds {empty};
+    virtual size_t numPrimitives() const = 0;
 
-    //! materials associated to this geometry
-    /*! these fields should be set only through
-        'setMaterial' and 'setMaterialList' (see comments there) */
-    Material **materialList {nullptr};   //!< per-primitive material list
-    Ref<Data> materialListData;          //!< data array for per-prim materials
-    std::vector<void*> ispcMaterialPtrs; //!< pointers to ISPC equivalent materials
+    box3f bounds{empty};
+
+    RTCGeometry embreeGeometry{nullptr};
+    uint32_t geomID{0};
+
+  protected:
+    virtual void createEmbreeGeometry() = 0;
   };
 
   /*! \brief registers a internal ospray::<ClassName> geometry under
@@ -89,7 +73,7 @@ namespace ospray {
       of this geometry.
   */
 #define OSP_REGISTER_GEOMETRY(InternalClass, external_name) \
-  OSP_REGISTER_OBJECT(::ospray::Geometry, geometry, \
-                      InternalClass, external_name)
+  OSP_REGISTER_OBJECT(                                      \
+      ::ospray::Geometry, geometry, InternalClass, external_name)
 
-} // ::ospray
+}  // namespace ospray

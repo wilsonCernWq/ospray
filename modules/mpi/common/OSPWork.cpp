@@ -40,8 +40,10 @@ namespace ospray {
         registerWorkUnit<NewRenderer>(registry);
         registerWorkUnit<NewWorld>(registry);
         registerWorkUnit<NewGeometry>(registry);
+        registerWorkUnit<NewGeometryInstance>(registry);
         registerWorkUnit<NewCamera>(registry);
         registerWorkUnit<NewVolume>(registry);
+        registerWorkUnit<NewVolumeInstance>(registry);
         registerWorkUnit<NewTransferFunction>(registry);
         registerWorkUnit<NewPixelOp>(registry);
 
@@ -56,17 +58,11 @@ namespace ospray {
 
         registerWorkUnit<LoadModule>(registry);
 
-        registerWorkUnit<AddGeometry>(registry);
-        registerWorkUnit<AddVolume>(registry);
-        registerWorkUnit<RemoveGeometry>(registry);
-        registerWorkUnit<RemoveVolume>(registry);
-
         registerWorkUnit<CreateFrameBuffer>(registry);
         registerWorkUnit<ResetAccumulation>(registry);
         registerWorkUnit<RenderFrameAsync>(registry);
 
         registerWorkUnit<SetRegion>(registry);
-        registerWorkUnit<SetPixelOp>(registry);
 
         registerWorkUnit<SetMaterial>(registry);
         registerWorkUnit<SetParam<OSPObject>>(registry);
@@ -256,13 +252,9 @@ namespace ospray {
 
       void SetMaterial::run()
       {
-        Geometry *geom = (Geometry *)handle.lookup();
-        Material *mat  = (Material *)material.lookup();
-        Assert(geom);
-        Assert(mat);
-        /* might we worthwhile doing a dyncast here to check if that
-           is actually a proper geometry .. */
-        geom->setMaterial(mat);
+        auto *inst = (GeometryInstance *)handle.lookup();
+        auto *mat  = (Material *)material.lookup();
+        inst->setMaterial(mat);
       }
 
       // ospNewRenderer ///////////////////////////////////////////////////////
@@ -286,8 +278,8 @@ namespace ospray {
       template <>
       void NewWorld::run()
       {
-        auto *model = new World;
-        handle.assign(model);
+        auto *world = new World;
+        handle.assign(world);
       }
 
       // ospNewMaterial ///////////////////////////////////////////////////////
@@ -297,6 +289,24 @@ namespace ospray {
         auto *material = Material::createInstance(rendererType.c_str(),
                                                   materialType.c_str());
         handle.assign(material);
+      }
+
+      // ospNewGeometryInstance ///////////////////////////////////////////////
+
+      void NewGeometryInstance::run()
+      {
+        auto *geom     = (Geometry *)geometryHandle.lookup();
+        auto *instance = new GeometryInstance(geom);
+        handle.assign(instance);
+      }
+
+      // ospNewVolumeInstance ///////////////////////////////////////////////
+
+      void NewVolumeInstance::run()
+      {
+        auto *geom     = (Volume *)volumeHandle.lookup();
+        auto *instance = new VolumeInstance(geom);
+        handle.assign(instance);
       }
 
       // ospNewLight //////////////////////////////////////////////////////////
@@ -453,7 +463,7 @@ namespace ospray {
         b >> handle.i64;
       }
 
-      // ospRenderFrameAsync ///////////////////////////////////////////////////////
+      // ospRenderFrameAsync //////////////////////////////////////////////////
 
       RenderFrameAsync::RenderFrameAsync(OSPFrameBuffer fb,
                                          OSPRenderer renderer,
@@ -478,14 +488,24 @@ namespace ospray {
 
         fb->setCompletedEvent(OSP_NONE_FINISHED);
 
-        auto *f = new RenderTask(fb,
-            [=]() { return renderer->renderFrame(fb, camera, world); });
+        auto *f = new RenderTask(
+            fb, [=]() { return renderer->renderFrame(fb, camera, world); });
         futureHandle.assign(f);
       }
 
       void RenderFrameAsync::runOnMaster()
       {
-        run();
+        mpicommon::world.barrier();
+        Renderer *renderer = (Renderer *)rendererHandle.lookup();
+        FrameBuffer *fb    = (FrameBuffer *)fbHandle.lookup();
+
+        fb->setCompletedEvent(OSP_NONE_FINISHED);
+
+        // The master doesn't have or need a world or camera, so skip
+        // looking them up
+        auto *f = new RenderTask(
+            fb, [=]() { return renderer->renderFrame(fb, nullptr, nullptr); });
+        futureHandle.assign(f);
       }
 
       void RenderFrameAsync::serialize(WriteStream &b) const
@@ -498,63 +518,6 @@ namespace ospray {
       {
         b >> fbHandle.i64 >> rendererHandle.i64 >> cameraHandle.i64 >>
             worldHandle.i64 >> futureHandle.i64;
-      }
-
-      // ospAddGeometry ///////////////////////////////////////////////////////
-
-      void AddGeometry::run()
-      {
-        World *model       = (World *)modelHandle.lookup();
-        Geometry *geometry = (Geometry *)objectHandle.lookup();
-        Assert(model);
-        Assert(geometry);
-        model->geometry.push_back(geometry);
-      }
-
-      // ospAddVolume /////////////////////////////////////////////////////////
-
-      void AddVolume::run()
-      {
-        World *model   = (World *)modelHandle.lookup();
-        Volume *volume = (Volume *)objectHandle.lookup();
-        Assert(model);
-        Assert(volume);
-        model->volume.push_back(volume);
-      }
-
-      // ospRemoveGeometry ////////////////////////////////////////////////////
-
-      void RemoveGeometry::run()
-      {
-        World *model       = (World *)modelHandle.lookup();
-        Geometry *geometry = (Geometry *)objectHandle.lookup();
-        Assert(model);
-        Assert(geometry);
-        auto it = std::find_if(
-            model->geometry.begin(),
-            model->geometry.end(),
-            [&](const Ref<Geometry> &g) { return geometry == &*g; });
-        if (it != model->geometry.end()) {
-          model->geometry.erase(it);
-        }
-      }
-
-      // ospRemoveVolume //////////////////////////////////////////////////////
-
-      void RemoveVolume::run()
-      {
-        World *model   = (World *)modelHandle.lookup();
-        Volume *volume = (Volume *)objectHandle.lookup();
-        Assert(model);
-        Assert(volume);
-        model->volume.push_back(volume);
-        auto it =
-            std::find_if(model->volume.begin(),
-                         model->volume.end(),
-                         [&](const Ref<Volume> &v) { return volume == &*v; });
-        if (it != model->volume.end()) {
-          model->volume.erase(it);
-        }
       }
 
       // ospRemoveParam ///////////////////////////////////////////////////////
@@ -588,39 +551,6 @@ namespace ospray {
       void RemoveParam::deserialize(ReadStream &b)
       {
         b >> handle.i64 >> name;
-      }
-
-      // ospSetPixelOp ////////////////////////////////////////////////////////
-
-      SetPixelOp::SetPixelOp(OSPFrameBuffer fb, OSPPixelOp op)
-          : fbHandle((ObjectHandle &)fb), poHandle((ObjectHandle &)op)
-      {
-      }
-
-      void SetPixelOp::run()
-      {
-        FrameBuffer *fb = (FrameBuffer *)fbHandle.lookup();
-        PixelOp *po     = (PixelOp *)poHandle.lookup();
-        Assert(fb);
-        Assert(po);
-        fb->pixelOp = po->createInstance(fb, fb->pixelOp.ptr);
-
-        if (!fb->pixelOp) {
-          postStatusMsg(
-              "#osp:mpi: WARNING: PixelOp did not create "
-              "an instance!",
-              1);
-        }
-      }
-
-      void SetPixelOp::serialize(WriteStream &b) const
-      {
-        b << (int64)fbHandle << (int64)poHandle;
-      }
-
-      void SetPixelOp::deserialize(ReadStream &b)
-      {
-        b >> fbHandle.i64 >> poHandle.i64;
       }
 
       // ospRelease ///////////////////////////////////////////////////////////

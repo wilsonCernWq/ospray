@@ -60,9 +60,6 @@ namespace ospray {
       /*! unmap previously mapped frame buffer */
       void frameBufferUnmap(const void *mapped, OSPFrameBuffer fb) override;
 
-      /*! set a frame buffer's pixel op object */
-      void setPixelOp(OSPFrameBuffer _fb, OSPPixelOp _op) override;
-
       /*! create a new pixelOp object (out of list of registered pixelOps) */
       OSPPixelOp newPixelOp(const char *type) override;
 
@@ -73,18 +70,6 @@ namespace ospray {
 
       /*! commit the given object's outstanding changes */
       void commit(OSPObject object) override;
-
-      /*! add a new geometry to a model */
-      void addGeometry(OSPWorld _model, OSPGeometry _geometry) override;
-
-      /*! remove an existing geometry from a model */
-      void removeGeometry(OSPWorld _model, OSPGeometry _geometry) override;
-
-      /*! add a new volume to a model */
-      void addVolume(OSPWorld _model, OSPVolume _volume) override;
-
-      /*! remove an existing volume from a model */
-      void removeVolume(OSPWorld _model, OSPVolume _volume) override;
 
       /*! create a new data buffer */
       OSPData newData(size_t nitems,
@@ -168,6 +153,10 @@ namespace ospray {
       /*! create a new volume object (out of list of registered volumes) */
       OSPVolume newVolume(const char *type) override;
 
+      OSPGeometryInstance newGeometryInstance(OSPGeometry geom) override;
+
+      OSPVolumeInstance newVolumeInstance(OSPVolume volume) override;
+
       /*! call a renderer to render a frame buffer */
       float renderFrame(OSPFrameBuffer,
                         OSPRenderer,
@@ -204,8 +193,7 @@ namespace ospray {
         stay 'alive' as long as the given geometry requires it. */
       void release(OSPObject _obj) override;
 
-      //! assign given material to given geometry
-      void setMaterial(OSPGeometry _geom, OSPMaterial _mat) override;
+      void setMaterial(OSPGeometryInstance _inst, OSPMaterial _mat) override;
 
       /*! create a new Texture object */
       OSPTexture newTexture(const char *type) override;

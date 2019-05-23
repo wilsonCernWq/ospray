@@ -172,8 +172,10 @@ namespace osp {
   struct Data             : public ManagedObject {};
   struct Future           : public ManagedObject {};
   struct Geometry         : public ManagedObject {};
+  struct GeometryInstance : public ManagedObject {};
   struct Material         : public ManagedObject {};
   struct Volume           : public ManagedObject {};
+  struct VolumeInstance   : public ManagedObject {};
   struct TransferFunction : public ManagedObject {};
   struct Texture          : public ManagedObject {};
   struct Light            : public ManagedObject {};
@@ -188,9 +190,11 @@ typedef osp::Camera            *OSPCamera;
 typedef osp::Data              *OSPData;
 typedef osp::Future            *OSPFuture;
 typedef osp::Geometry          *OSPGeometry;
+typedef osp::GeometryInstance  *OSPGeometryInstance;
 typedef osp::Material          *OSPMaterial;
 typedef osp::Light             *OSPLight;
 typedef osp::Volume            *OSPVolume;
+typedef osp::VolumeInstance    *OSPVolumeInstance;
 typedef osp::TransferFunction  *OSPTransferFunction;
 typedef osp::Texture           *OSPTexture;
 typedef osp::ManagedObject     *OSPObject;
@@ -211,9 +215,11 @@ typedef _OSPManagedObject *OSPManagedObject,
   *OSPWorld,
   *OSPData,
   *OSPGeometry,
+  *OSPGeometryInstance,
   *OSPMaterial,
   *OSPLight,
   *OSPVolume,
+  *OSPVolumeInstance,
   *OSPTransferFunction,
   *OSPTexture,
   *OSPObject,
@@ -249,8 +255,8 @@ extern "C" {
   OSPRAY_INTERFACE OSPDevice ospGetCurrentDevice();
 
   OSPRAY_INTERFACE void ospDeviceSetString(OSPDevice, const char *id, const char *s);
-  OSPRAY_INTERFACE void ospDeviceSet1i(OSPDevice, const char *id, int32_t x);
-  OSPRAY_INTERFACE void ospDeviceSet1b(OSPDevice, const char *id, int32_t x);
+  OSPRAY_INTERFACE void ospDeviceSet1i(OSPDevice, const char *id, int x);
+  OSPRAY_INTERFACE void ospDeviceSet1b(OSPDevice, const char *id, int x);
   OSPRAY_INTERFACE void ospDeviceSetVoidPtr(OSPDevice, const char *id, void *v);
 
   /*! status message callback function type */
@@ -283,12 +289,12 @@ extern "C" {
   OSPRAY_INTERFACE OSPData ospNewData(size_t numItems,
                                       OSPDataType,
                                       const void *source,
-                                      const uint32_t dataCreationFlags OSP_DEFAULT_VAL(=0));
+                                      uint32_t dataCreationFlags OSP_DEFAULT_VAL(=0));
 
   OSPRAY_INTERFACE OSPError ospSetRegion(OSPVolume,
                                          void *source,
-                                         const osp_vec3i regionCoords,
-                                         const osp_vec3i regionSize);
+                                         osp_vec3i regionCoords,
+                                         osp_vec3i regionSize);
 
   // Renderable Objects ///////////////////////////////////////////////////////
 
@@ -302,12 +308,14 @@ extern "C" {
 
   // Instancing ///////////////////////////////////////////////////////////////
 
-  OSPRAY_INTERFACE OSPGeometry ospNewInstance(OSPWorld modelToInstantiate,
-                                              const osp_affine3f transform);
+  OSPRAY_INTERFACE OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geom);
+
+  OSPRAY_INTERFACE OSPVolumeInstance ospNewVolumeInstance(OSPVolume volume);
 
   // Instance Meta-Data ///////////////////////////////////////////////////////
 
-  OSPRAY_INTERFACE OSPMaterial ospNewMaterial(const char *renderer_type, const char *material_type);
+  OSPRAY_INTERFACE OSPMaterial ospNewMaterial(const char *rendererType,
+                                              const char *materialType);
 
   OSPRAY_INTERFACE OSPTransferFunction ospNewTransferFunction(const char *type);
 
@@ -317,11 +325,6 @@ extern "C" {
 
   OSPRAY_INTERFACE OSPWorld ospNewWorld();
 
-  OSPRAY_INTERFACE void ospAddGeometry(OSPWorld, OSPGeometry);
-  OSPRAY_INTERFACE void ospRemoveGeometry(OSPWorld, OSPGeometry);
-  OSPRAY_INTERFACE void ospAddVolume(OSPWorld, OSPVolume);
-  OSPRAY_INTERFACE void ospRemoveVolume(OSPWorld, OSPVolume);
-
   // Object Parameters ////////////////////////////////////////////////////////
 
   OSPRAY_INTERFACE void ospSetString(OSPObject, const char *id, const char *s);
@@ -330,9 +333,8 @@ extern "C" {
   OSPRAY_INTERFACE void ospSetData(OSPObject, const char *id, OSPData);
 
   OSPRAY_INTERFACE void ospSet1b(OSPObject, const char *id, int x);
-  OSPRAY_INTERFACE void ospSetf(OSPObject, const char *id, float x);
   OSPRAY_INTERFACE void ospSet1f(OSPObject, const char *id, float x);
-  OSPRAY_INTERFACE void ospSet1i(OSPObject, const char *id, int32_t x);
+  OSPRAY_INTERFACE void ospSet1i(OSPObject, const char *id, int x);
 
   OSPRAY_INTERFACE void ospSet2f(OSPObject, const char *id, float x, float y);
   OSPRAY_INTERFACE void ospSet2fv(OSPObject, const char *id, const float *xy);
@@ -349,7 +351,7 @@ extern "C" {
 
   OSPRAY_INTERFACE void ospSetVoidPtr(OSPObject, const char *id, void *v);
 
-  OSPRAY_INTERFACE void ospSetMaterial(OSPGeometry, OSPMaterial);
+  OSPRAY_INTERFACE void ospSetMaterial(OSPGeometryInstance, OSPMaterial);
 
   OSPRAY_INTERFACE void ospRemoveParam(OSPObject, const char *id);
 
@@ -360,20 +362,17 @@ extern "C" {
 
   // FrameBuffer Manipulation /////////////////////////////////////////////////
 
-  OSPRAY_INTERFACE OSPFrameBuffer ospNewFrameBuffer(const osp_vec2i size,
-                                                    const OSPFrameBufferFormat format OSP_DEFAULT_VAL(= OSP_FB_SRGBA),
-                                                    const uint32_t frameBufferChannels OSP_DEFAULT_VAL(= OSP_FB_COLOR));
+  OSPRAY_INTERFACE OSPFrameBuffer ospNewFrameBuffer(osp_vec2i size,
+                                                    OSPFrameBufferFormat format OSP_DEFAULT_VAL(= OSP_FB_SRGBA),
+                                                    uint32_t frameBufferChannels OSP_DEFAULT_VAL(= OSP_FB_COLOR));
 
   //! create a new pixel op of given type
   /*! return 'NULL' if that type is not known */
   OSPRAY_INTERFACE OSPPixelOp ospNewPixelOp(const char *type);
 
-  //! set a frame buffer's pixel op */
-  OSPRAY_INTERFACE void ospSetPixelOp(OSPFrameBuffer, OSPPixelOp);
-
   /*! \brief map app-side content of a framebuffer (see \ref frame_buffer_handling) */
   OSPRAY_INTERFACE const void *ospMapFrameBuffer(OSPFrameBuffer,
-                                                 const OSPFrameBufferChannel OSP_DEFAULT_VAL(=OSP_FB_COLOR));
+                                                 OSPFrameBufferChannel OSP_DEFAULT_VAL(=OSP_FB_COLOR));
 
   /*! \brief unmap a previously mapped frame buffer (see \ref frame_buffer_handling) */
   OSPRAY_INTERFACE void ospUnmapFrameBuffer(const void *mapped, OSPFrameBuffer);
@@ -405,8 +404,10 @@ extern "C" {
   OSPRAY_INTERFACE float ospGetProgress(OSPFuture);
 
   typedef struct {
-    osp_vec3f position; //< the position of the hit point (in world-space)
-    int hit;            //< whether or not a hit actually occurred
+    int hasHit;
+    osp_vec3f worldPosition;
+    OSPGeometryInstance geometryInstance;
+    uint32_t primID;
   } OSPPickResult;
 
   OSPRAY_INTERFACE void ospPick(OSPPickResult *result,
@@ -414,7 +415,7 @@ extern "C" {
                                 OSPRenderer renderer,
                                 OSPCamera camera,
                                 OSPWorld world,
-                                const osp_vec2f screenPos);
+                                osp_vec2f screenPos);
 
 #ifdef __cplusplus
 } // extern "C"

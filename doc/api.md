@@ -305,9 +305,9 @@ adding various types of parameters with name `id` to a given object:
     void ospSetVoidPtr(OSPObject, const char *id, void *v);
 
     // add scalar and vector integer and float parameters
-    void ospSetf  (OSPObject, const char *id, float x);
+    void ospSet1b (OSPObject, const char *id, int x);
     void ospSet1f (OSPObject, const char *id, float x);
-    void ospSet1i (OSPObject, const char *id, int32_t x);
+    void ospSet1i (OSPObject, const char *id, int x);
     void ospSet2f (OSPObject, const char *id, float x, float y);
     void ospSet2fv(OSPObject, const char *id, const float *xy);
     void ospSet2i (OSPObject, const char *id, int x, int y);
@@ -318,13 +318,6 @@ adding various types of parameters with name `id` to a given object:
     void ospSet3iv(OSPObject, const char *id, const int *xyz);
     void ospSet4f (OSPObject, const char *id, float x, float y, float z, float w);
     void ospSet4fv(OSPObject, const char *id, const float *xyzw);
-
-    // additional functions to pass vector integer and float parameters in C++
-    void ospSetVec2f(OSPObject, const char *id, const vec2f &v);
-    void ospSetVec2i(OSPObject, const char *id, const vec2i &v);
-    void ospSetVec3f(OSPObject, const char *id, const vec3f &v);
-    void ospSetVec3i(OSPObject, const char *id, const vec3i &v);
-    void ospSetVec4f(OSPObject, const char *id, const vec4f &v);
 
 Users can also remove parameters that have been explicitly set via an
 ospSet call. Any parameters which have been removed will go back to
@@ -415,33 +408,8 @@ in the table below.
   ------------------- ------------------------ ---------  -----------------------------------
   Type                Name                       Default  Description
   ------------------- ------------------------ ---------  -----------------------------------
-  OSPTransferFunction transferFunction                    [transfer function] to use
-
   vec2f               voxelRange                          minimum and maximum of the scalar
                                                           values
-
-  bool                gradientShadingEnabled       false  volume is rendered with surface
-                                                          shading wrt. to normalized gradient
-
-  bool                preIntegration               false  use pre-integration for
-                                                          [transfer function] lookups
-
-  bool                singleShade                   true  shade only at the point of maximum
-                                                          intensity
-
-  bool                adaptiveSampling              true  adapt ray step size based on
-                                                          opacity
-
-  float               adaptiveScalar                  15  modifier for adaptive step size
-
-  float               adaptiveMaxSamplingRate          2  maximum sampling rate for adaptive
-                                                          sampling
-
-  float               samplingRate                 0.125  sampling rate of the volume (this
-                                                          is the minimum step size for
-                                                          adaptive sampling)
-
-  vec3f               specular                  gray 0.3  specular color for shading
 
   vec3f               volumeClippingBoxLower    disabled  lower coordinate (in object-space)
                                                           to clip the volume values
@@ -478,8 +446,8 @@ rearrangement of voxel data it cannot be shared the with the application
 anymore, but has to be transferred to OSPRay via
 
     OSPError ospSetRegion(OSPVolume, void *source,
-                          const vec3i &regionCoords,
-                          const vec3i &regionSize);
+                          osp_vec3i regionCoords,
+                          osp_vec3i regionSize);
 
 The voxel data pointed to by `source` is copied into the given volume
 starting at position `regionCoords`, must be of size `regionSize` and be
@@ -584,8 +552,8 @@ like the structured volume equivalent, but they only modify the root
 ### Unstructured Volumes
 
 Unstructured volumes can have its topology and geometry freely defined.
-Geometry can be composed of tetrahedral, wedge, or hexahedral cell
-types. Data format optinally matches VTK and consists from multiple
+Geometry can be composed of tetrahedral, hexahedral, wedge or pyramid cell
+types. Used data format is compatible with VTK and consists from multiple
 arrays: vertex positions and values, vertex indices, cell start indices,
 cell types, and cell values. An unstructured volume type is created by
 passing the type string "`unstructured_volume`" to `ospNewVolume`.
@@ -600,14 +568,18 @@ will be used for sampling when rendering, if specified. The index order
 for a tetrahedron is the same as `VTK_TETRA`: bottom triangle
 counterclockwise, then the top vertex.
 
-For wedge cells, each wedge is formed by a group of six indices into the
-vertices and data value. Vertex ordering is the same as `VTK_WEDGE`:
-three bottom vertices counterclockwise, then top three counterclockwise.
-
 For hexahedral cells, each hexahedron is formed by a group of eight
-indices into the vertices and data value. Vertex ordering is the same as
+indices into the vertices and data values. Vertex ordering is the same as
 `VTK_HEXAHEDRON`: four bottom vertices counterclockwise, then top four
 counterclockwise.
+
+For wedge cells, each wedge is formed by a group of six indices into the
+vertices and data values. Vertex ordering is the same as `VTK_WEDGE`:
+three bottom vertices counterclockwise, then top three counterclockwise.
+
+For pyramid cells, each cell is formed by a group of five indices into the
+vertices and data values. Vertex ordering is the same as `VTK_PYRAMID`:
+four bottom vertices counterclockwise, then the top vertex.
 
 To maintain VTK data compatibility an index array may be specified via
 `indexPrefixed` array that allow vertex indices to be interleaved with
@@ -640,8 +612,9 @@ id_m$.
   uint8[]              cell.type                    [data] array of cell types
                                                     (VTK compatible)
 
-  string               hexMethod           planar   "planar" (faster, assumes planar sides)
-                                                    or "nonplanar"
+  string               hexMethod           fast     hexahedron interpolation method,
+                                                    "fast" (rendering inaccuracies may appear
+                                                    if hex is not parallelepiped) or "iterative"
 
   bool                 precomputedNormals  true     whether to accelerate by precomputing,
                                                     at a cost of 12 bytes/face
@@ -673,6 +646,59 @@ to `ospNewTransferFunction` and it is controlled by these parameters:
   vec2f        valueRange  domain (scalar range) this function maps from
   ------------ ----------- ----------------------------------------------
   : Parameters accepted by the linear transfer function.
+
+
+VolumeInstances
+-----------------
+
+Volumes in OSPRay are instantiated in a World to give them a world-space
+transform and addition appearance information. To create a volume instance,
+call
+
+    OSPVolumeInstance ospNewVolumeInstance(OSPVolume volume);
+
+  -------------------- ----------------------- ---------- --------------------------------------
+  Type                 Name                    Default    Description
+  -------------------- ----------------------- ---------- --------------------------------------
+  OSPTransferFunction  transferFunction                   [transfer function] to use
+
+  vec3f                xfm.l.vx                   (1,0,0) First row of the world-space
+                                                          transformation matrix
+
+  vec3f                xfm.l.vy                   (0,1,0) Second row of the world-space
+                                                          transformation matrix
+
+  vec3f                xfm.l.vz                   (0,0,1) Third row of the world-space
+                                                          transformation matrix
+
+  vec3f                xfm.p                      (0,0,0) Fourth row of the world-space
+                                                          transformation matrix
+
+  bool                 gradientShadingEnabled       false volume is rendered with surface
+                                                          shading wrt. to normalized gradient
+
+  bool                 preIntegration               false use pre-integration for
+                                                          [transfer function] lookups
+
+  bool                 singleShade                   true shade only at the point of maximum
+                                                          intensity
+
+  bool                 adaptiveSampling              true adapt ray step size based on
+                                                          opacity
+
+  float                adaptiveScalar                  15 modifier for adaptive step size
+
+  float                adaptiveMaxSamplingRate          2 maximum sampling rate for adaptive
+                                                          sampling
+
+  float                samplingRate                 0.125 sampling rate of the volume (this
+                                                          is the minimum step size for
+                                                          adaptive sampling)
+
+  vec3f                specular                  gray 0.3 specular color for shading
+
+  -------------------- ------------------------ --------- ---------------------------------------
+  : Parameters understood by VolumeInstance.
 
 
 Geometries
@@ -979,13 +1005,44 @@ according to the provided volume's [transfer function].
   ---------- ---------- ----------------------------------------------------
   : Parameters defining a slices geometry.
 
-### Instances
 
-OSPRay supports instancing via a special type of geometry. Instances are
-created by transforming another given [world] `worldToInstantiate` with
-the given affine transformation `transform` by calling
+GeometryInstances
+-----------------
 
-    OSPGeometry ospNewInstance(OSPWorld worldToInstantiate, const affine3f &transform);
+Geometries in OSPRay are instantiated in a World to give them a world-space
+transform and addition appearance information. To create a geometry instance,
+call
+
+    OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geometry);
+
+  ------------------ --------------- --------- --------------------------------------
+  Type               Name            Default   Description
+  ------------------ --------------- --------- --------------------------------------
+  vec3f              xfm.l.vx          (1,0,0) First row of the world-space
+                                               transformation matrix
+
+  vec3f              xfm.l.vy          (0,1,0) Second row of the world-space
+                                               transformation matrix
+
+  vec3f              xfm.l.vz          (0,0,1) Third row of the world-space
+                                               transformation matrix
+
+  vec3f              xfm.p             (0,0,0) Fourth row of the world-space
+                                               transformation matrix
+
+  vec4f[]            color                NULL [data] array of per-primitive colors
+
+  uint32[]           prim.materialID      NULL [data] array of per-primitive colors
+
+  OSPMaterial[]      materialList         NULL [data] array of per-primitive
+                                               materials, which overrides any
+                                               single material set by
+                                               'ospSetMaterial`. This is also the
+                                               list optionally indexed by
+                                               "prim.materialID" (otherwise it is
+                                               per-primitive)
+  ------------------ --------------- --------- ---------------------------------------
+  : Parameters understood by GeometryInstance.
 
 
 Renderer
@@ -1119,23 +1176,24 @@ structure. To create an (empty) world call
 
     OSPWorld ospNewWorld();
 
-The call returns an `OSPWorld` handle to the created world. To add an
-already created geometry or volume to a world use
-
-    void ospAddGeometry(OSPWorld, OSPGeometry);
-    void ospAddVolume(OSPWorld, OSPVolume);
-
-An existing geometry or volume can be removed from a world with
-
-    void ospRemoveGeometry(OSPWorld, OSPGeometry);
-    void ospRemoveVolume(OSPWorld, OSPVolume);
+The call returns an `OSPWorld` handle to the created world. Objects are
+placed in the world by existing in either the `geometries` or `volumes`
+data array parameters. Either array of objects is optional: in other
+words, there is no need to create empty arrays if there are no
+geometries or volumes to be rendered.
 
 Finally, Worlds can be configured with parameters for making various
-feature/performance trade-offs:
+feature/performance trade-offs.
 
   ------------- ---------------- --------  -------------------------------------
   Type          Name              Default  Description
   ------------- ---------------- --------  -------------------------------------
+  OSPData       geometries           NULL  data array of OSPGeometryInstance
+                                           geometry objects in the scene
+
+  OSPData       volumes              NULL  data array of OSPVolumeInstance
+                                           volume objects in the scene
+
   bool          dynamicScene        false  use RTC_SCENE_DYNAMIC flag (faster
                                            BVH build, slower ray traversal),
                                            otherwise uses RTC_SCENE_STATIC flag
@@ -1324,7 +1382,7 @@ The call returns `NULL` if the material type is not known by the
 renderer type, or else an `OSPMaterial` handle to the created material. The
 handle can then be used to assign the material to a given geometry with
 
-    void ospSetMaterial(OSPGeometry, OSPMaterial);
+    void ospSetMaterial(OSPGeometryInstance, OSPMaterial);
 
 #### OBJ Material
 
@@ -1952,13 +2010,15 @@ normalized screen-space pixel coordinates `screenPos` use
                  OSPRenderer,
                  OSPCamera,
                  OSPWorld,
-                 const osp_vec2f screenPos);
+                 osp_vec2f screenPos);
 
 The result is returned in the provided `OSPPickResult` struct:
 
     typedef struct {
-        vec3f position; // the position of the hit point (in world-space)
-        bool hit;       // whether or not a hit actually occurred
+        int hasHit;
+        osp_vec3f worldPosition;
+        OSPGeometryInstance geometryInstance;
+        uint32_t primID;
     } OSPPickResult;
 
 Note that `ospPick` considers exactly the same camera of the given
@@ -1974,9 +2034,9 @@ The framebuffer holds the rendered 2D image (and optionally auxiliary
 information associated with pixels). To create a new framebuffer object
 of given size `size` (in pixels), color format, and channels use
 
-    OSPFrameBuffer ospNewFrameBuffer(const vec2i &size,
-                                     const OSPFrameBufferFormat format = OSP_FB_SRGBA,
-                                     const uint32_t frameBufferChannels = OSP_FB_COLOR);
+    OSPFrameBuffer ospNewFrameBuffer(osp_vec2i size,
+                                     OSPFrameBufferFormat format = OSP_FB_SRGBA,
+                                     uint32_t frameBufferChannels = OSP_FB_COLOR);
 
 The parameter `format` describes the format the color buffer has _on the
 host_, and the format that `ospMapFrameBuffer` will eventually return.
@@ -2032,7 +2092,7 @@ The application can map the given channel of a framebuffer – and thus
 access the stored pixel information – via
 
     const void *ospMapFrameBuffer(OSPFrameBuffer,
-                                  const OSPFrameBufferChannel = OSP_FB_COLOR);
+                                  OSPFrameBufferChannel = OSP_FB_COLOR);
 
 Note that `OSP_FB_ACCUM` or `OSP_FB_VARIANCE` cannot be mapped. The
 origin of the screen coordinate system in OSPRay is the lower left
@@ -2061,6 +2121,18 @@ accumulated frame can be queried with
 Note this value is only updated after synchronizing with `OSP_FRAME_FINISHED`,
 as further described in [asynchronous rendering].
 
+The framebuffer takes a list of pixel operations to be applied to the image
+in sequence as an `OSPData`. The pixel operations will be run in the order
+they are in the array.
+
+  Type          Name            Default  Description
+  ------------  --------------- -------- -----------------------------------
+  OSPPixelOp[]  pixelOperations NULL     The ordered sequence of pixel
+                                         operations to apply to rendered tiles.
+  ------------  --------------- -------- -----------------------------------
+  : Parameters accepted by the framebuffer.
+
+
 ### Pixel Operation {-}
 
 Pixel operations are functions that are applied to every pixel that
@@ -2072,10 +2144,6 @@ To create a new pixel operation of given type `type` use
 
 The call returns `NULL` if that type is not known, or else an
 `OSPPixelOp` handle to the created pixel operation.
-
-To set a pixel operation to the given framebuffer use
-
-    void ospSetPixelOp(OSPFrameBuffer, OSPPixelOp);
 
 #### Tone Mapper {-}
 

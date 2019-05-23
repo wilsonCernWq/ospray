@@ -17,7 +17,6 @@
 #pragma once
 
 #include <ospray/ospray_cpp/ManagedObject.h>
-#include <ospray/ospray_cpp/Material.h>
 
 namespace ospray {
   namespace cpp    {
@@ -29,12 +28,9 @@ namespace ospray {
       Geometry(const std::string &type);
       Geometry(const Geometry &copy);
       Geometry(OSPGeometry existing);
-
-      void setMaterial(Material &m) const;
-      void setMaterial(OSPMaterial m) const;
     };
 
-    // Inlined function definitions ///////////////////////////////////////////////
+    // Inlined function definitions ///////////////////////////////////////////
 
     inline Geometry::Geometry(const std::string &type)
     {
@@ -54,16 +50,6 @@ namespace ospray {
     inline Geometry::Geometry(OSPGeometry existing) :
       ManagedObject_T<OSPGeometry>(existing)
     {
-    }
-
-    inline void Geometry::setMaterial(Material &m) const
-    {
-      setMaterial(m.handle());
-    }
-
-    inline void Geometry::setMaterial(OSPMaterial m) const
-    {
-      ospSetMaterial(handle(), m);
     }
 
   }// namespace cpp

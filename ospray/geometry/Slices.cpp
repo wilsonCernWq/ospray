@@ -35,21 +35,40 @@ namespace ospray {
     return "ospray::Slices";
   }
 
-  void Slices::finalize(World *model)
+  void Slices::commit()
   {
-    planesData = getParamData("planes", nullptr);
-    volume     = (Volume *)getParamObject("volume", nullptr);
+    Geometry::commit();
 
-    Assert(planesData);
-    Assert(volume);
+    planesData = getParamData("planes", nullptr);
+    volume     = (VolumeInstance *)getParamObject("volume", nullptr);
 
     numPlanes = planesData->numItems;
-    planes    = (vec4f*)planesData->data;
+    planes    = (vec4f *)planesData->data;
 
-    ispc::Slices_set(getIE(), model->getIE(), numPlanes,
-                     (ispc::vec4f*)planes, volume->getIE());
+    createEmbreeGeometry();
+
+    ispc::Slices_set(getIE(),
+                     embreeGeometry,
+                     geomID,
+                     numPlanes,
+                     (ispc::vec4f *)planes,
+                     volume->getIE());
+  }
+
+  size_t Slices::numPrimitives() const
+  {
+    return numPlanes;
+  }
+
+  void Slices::createEmbreeGeometry()
+  {
+    if (embreeGeometry)
+      rtcReleaseGeometry(embreeGeometry);
+
+    embreeGeometry =
+        rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_USER);
   }
 
   OSP_REGISTER_GEOMETRY(Slices, slices);
 
-} // ::ospray
+}  // namespace ospray

@@ -311,7 +311,7 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospDeviceSet1b(OSPDevice _object,
                                const char *id,
-                               int32_t x) OSPRAY_CATCH_BEGIN
+                               int x) OSPRAY_CATCH_BEGIN
 {
   Device *object = (Device *)_object;
   object->setParam(id, static_cast<bool>(x));
@@ -320,7 +320,7 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospDeviceSet1i(OSPDevice _object,
                                const char *id,
-                               int32_t x) OSPRAY_CATCH_BEGIN
+                               int x) OSPRAY_CATCH_BEGIN
 {
   Device *object = (Device *)_object;
   object->setParam(id, x);
@@ -398,7 +398,7 @@ OSPRAY_CATCH_END(OSP_UNKNOWN_ERROR)
 extern "C" OSPData ospNewData(size_t nitems,
                               OSPDataType format,
                               const void *init,
-                              const uint32_t flags) OSPRAY_CATCH_BEGIN
+                              uint32_t flags) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   OSPData data = currentDevice().newData(nitems, format, init, flags);
@@ -476,17 +476,21 @@ OSPRAY_CATCH_END(nullptr)
 // Instancing /////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-extern "C" OSPGeometry ospNewInstance(OSPWorld modelToInstantiate,
-                                      const osp_affine3f xfm) OSPRAY_CATCH_BEGIN
+extern "C" OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geom)
+    OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
-  OSPGeometry geom = ospNewGeometry("instance");
-  ospSet3f(geom, "xfm.l.vx", xfm.l.vx.x, xfm.l.vx.y, xfm.l.vx.z);
-  ospSet3f(geom, "xfm.l.vy", xfm.l.vy.x, xfm.l.vy.y, xfm.l.vy.z);
-  ospSet3f(geom, "xfm.l.vz", xfm.l.vz.x, xfm.l.vz.y, xfm.l.vz.z);
-  ospSet3f(geom, "xfm.p", xfm.p.x, xfm.p.y, xfm.p.z);
-  ospSetObject(geom, "model", modelToInstantiate);
-  return geom;
+  OSPGeometryInstance instance = currentDevice().newGeometryInstance(geom);
+  return instance;
+}
+OSPRAY_CATCH_END(nullptr)
+
+extern "C" OSPVolumeInstance ospNewVolumeInstance(OSPVolume volume)
+    OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  OSPVolumeInstance instance = currentDevice().newVolumeInstance(volume);
+  return instance;
 }
 OSPRAY_CATCH_END(nullptr)
 
@@ -544,46 +548,6 @@ extern "C" OSPWorld ospNewWorld() OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" void ospAddGeometry(OSPWorld model,
-                               OSPGeometry geometry) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  Assert(model != nullptr && "invalid model in ospAddGeometry");
-  Assert(geometry != nullptr && "invalid geometry in ospAddGeometry");
-  return currentDevice().addGeometry(model, geometry);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospRemoveGeometry(OSPWorld model,
-                                  OSPGeometry geometry) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  Assert(model != nullptr && "invalid model in ospRemoveGeometry");
-  Assert(geometry != nullptr && "invalid geometry in ospRemoveGeometry");
-  return currentDevice().removeGeometry(model, geometry);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospAddVolume(OSPWorld model,
-                             OSPVolume volume) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  Assert(model != nullptr && "invalid model in ospAddVolume");
-  Assert(volume != nullptr && "invalid volume in ospAddVolume");
-  return currentDevice().addVolume(model, volume);
-}
-OSPRAY_CATCH_END()
-
-extern "C" void ospRemoveVolume(OSPWorld model,
-                                OSPVolume volume) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  Assert(model != nullptr && "invalid model in ospRemoveVolume");
-  Assert(volume != nullptr && "invalid volume in ospRemoveVolume");
-  return currentDevice().removeVolume(model, volume);
-}
-OSPRAY_CATCH_END()
-
 ///////////////////////////////////////////////////////////////////////////////
 // Object Parameters //////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -624,15 +588,6 @@ extern "C" void ospSet1b(OSPObject _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSetf(OSPObject _object,
-                        const char *id,
-                        float x) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setFloat(_object, id, x);
-}
-OSPRAY_CATCH_END()
-
 extern "C" void ospSet1f(OSPObject _object,
                          const char *id,
                          float x) OSPRAY_CATCH_BEGIN
@@ -644,7 +599,7 @@ OSPRAY_CATCH_END()
 
 extern "C" void ospSet1i(OSPObject _object,
                          const char *id,
-                         int32_t x) OSPRAY_CATCH_BEGIN
+                         int x) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setInt(_object, id, x);
@@ -770,12 +725,11 @@ extern "C" void ospRemoveParam(OSPObject _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSetMaterial(OSPGeometry geometry,
+extern "C" void ospSetMaterial(OSPGeometryInstance instance,
                                OSPMaterial material) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
-  Assert2(geometry, "nullptr geometry passed to ospSetMaterial");
-  currentDevice().setMaterial(geometry, material);
+  currentDevice().setMaterial(instance, material);
 }
 OSPRAY_CATCH_END()
 
@@ -804,9 +758,9 @@ OSPRAY_CATCH_END()
 // FrameBuffer Manipulation ///////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-extern "C" OSPFrameBuffer ospNewFrameBuffer(const osp_vec2i size,
-                                            const OSPFrameBufferFormat mode,
-                                            const uint32_t channels)
+extern "C" OSPFrameBuffer ospNewFrameBuffer(osp_vec2i size,
+                                            OSPFrameBufferFormat mode,
+                                            uint32_t channels)
     OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
@@ -836,14 +790,6 @@ extern "C" OSPPixelOp ospNewPixelOp(const char *_type) OSPRAY_CATCH_BEGIN
   return pixelOp;
 }
 OSPRAY_CATCH_END(nullptr)
-
-extern "C" void ospSetPixelOp(OSPFrameBuffer fb,
-                              OSPPixelOp op) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  return currentDevice().setPixelOp(fb, op);
-}
-OSPRAY_CATCH_END()
 
 extern "C" const void *ospMapFrameBuffer(
     OSPFrameBuffer fb, OSPFrameBufferChannel channel) OSPRAY_CATCH_BEGIN
@@ -954,7 +900,7 @@ extern "C" void ospPick(OSPPickResult *result,
                         OSPRenderer renderer,
                         OSPCamera camera,
                         OSPWorld world,
-                        const osp_vec2f screenPos) OSPRAY_CATCH_BEGIN
+                        osp_vec2f screenPos) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   Assert2(renderer, "nullptr renderer passed to ospPick");

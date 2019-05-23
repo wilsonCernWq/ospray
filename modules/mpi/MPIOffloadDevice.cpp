@@ -33,8 +33,8 @@
 #include "ospcommon/networking/Socket.h"
 #include "ospcommon/sysinfo.h"
 #include "ospcommon/utility/getEnvVar.h"
-#include "render/Renderer.h"
 #include "render/RenderTask.h"
+#include "render/Renderer.h"
 #include "volume/Volume.h"
 
 // std
@@ -534,7 +534,7 @@ namespace ospray {
       fb->unmap(mapped);
     }
 
-    /*! create a new model */
+    /*! create a new world */
     OSPWorld MPIOffloadDevice::newWorld()
     {
       ObjectHandle handle = allocateHandle();
@@ -543,25 +543,11 @@ namespace ospray {
       return (OSPWorld)(int64)handle;
     }
 
-    /*! finalize a newly specified model */
+    /*! finalize a newly specified world */
     void MPIOffloadDevice::commit(OSPObject _object)
     {
       const ObjectHandle handle = (const ObjectHandle &)_object;
       work::CommitObject work(handle);
-      processWork(work);
-    }
-
-    /*! add a new geometry to a model */
-    void MPIOffloadDevice::addGeometry(OSPWorld _model, OSPGeometry _geometry)
-    {
-      work::AddGeometry work(_model, _geometry);
-      processWork(work);
-    }
-
-    /*! add a new volume to a model */
-    void MPIOffloadDevice::addVolume(OSPWorld _model, OSPVolume _volume)
-    {
-      work::AddVolume work(_model, _volume);
       processWork(work);
     }
 
@@ -720,13 +706,6 @@ namespace ospray {
       return (OSPPixelOp)(int64)handle;
     }
 
-    /*! set a frame buffer's pixel op object */
-    void MPIOffloadDevice::setPixelOp(OSPFrameBuffer _fb, OSPPixelOp _op)
-    {
-      work::SetPixelOp work(_fb, _op);
-      processWork(work);
-    }
-
     /*! create a new renderer object (out of list of registered renderers) */
     OSPRenderer MPIOffloadDevice::newRenderer(const char *type)
     {
@@ -798,21 +777,6 @@ namespace ospray {
       processWork(work);
     }
 
-    /*! remove an existing geometry from a model */
-    void MPIOffloadDevice::removeGeometry(OSPWorld _model,
-                                          OSPGeometry _geometry)
-    {
-      work::RemoveGeometry work(_model, _geometry);
-      processWork(work);
-    }
-
-    /*! remove an existing volume from a model */
-    void MPIOffloadDevice::removeVolume(OSPWorld _model, OSPVolume _volume)
-    {
-      work::RemoveVolume work(_model, _volume);
-      processWork(work);
-    }
-
     /*! call a renderer to render a frame buffer */
     float MPIOffloadDevice::renderFrame(OSPFrameBuffer _fb,
                                         OSPRenderer _renderer,
@@ -833,7 +797,8 @@ namespace ospray {
       // calling MPI at all, so in this case we don't need to worry about
       // hitting issues with thread multiple vs. thread serialized
       ObjectHandle futureHandle = allocateHandle();
-      work::RenderFrameAsync work(_fb, _renderer, _camera, _world, futureHandle);
+      work::RenderFrameAsync work(
+          _fb, _renderer, _camera, _world, futureHandle);
       processWork(work, true);
       return (OSPFuture)(int64)futureHandle;
     }
@@ -889,11 +854,10 @@ namespace ospray {
       processWork(work);
     }
 
-    //! assign given material to given geometry
-    void MPIOffloadDevice::setMaterial(OSPGeometry _geometry,
+    void MPIOffloadDevice::setMaterial(OSPGeometryInstance _instance,
                                        OSPMaterial _material)
     {
-      work::SetMaterial work((ObjectHandle &)_geometry, _material);
+      work::SetMaterial work((ObjectHandle &)_instance, _material);
       processWork(work);
     }
 
@@ -904,6 +868,22 @@ namespace ospray {
       work::NewTexture work(type, handle);
       processWork(work);
       return (OSPTexture)(int64)handle;
+    }
+
+    OSPGeometryInstance MPIOffloadDevice::newGeometryInstance(OSPGeometry geom)
+    {
+      ObjectHandle handle = allocateHandle();
+      work::NewGeometryInstance work(handle, (ObjectHandle &)geom);
+      processWork(work);
+      return (OSPGeometryInstance)(int64)handle;
+    }
+
+    OSPVolumeInstance MPIOffloadDevice::newVolumeInstance(OSPVolume volume)
+    {
+      ObjectHandle handle = allocateHandle();
+      work::NewVolumeInstance work(handle, (ObjectHandle &)volume);
+      processWork(work);
+      return (OSPVolumeInstance)(int64)handle;
     }
 
     int MPIOffloadDevice::getString(OSPObject _object,

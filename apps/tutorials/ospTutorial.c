@@ -91,7 +91,7 @@ int main(int argc, const char **argv) {
 
   // create and setup camera
   OSPCamera camera = ospNewCamera("perspective");
-  ospSetf(camera, "aspect", imgSize.x/(float)imgSize.y);
+  ospSet1f(camera, "aspect", imgSize.x/(float)imgSize.y);
   ospSet3fv(camera, "pos", cam_pos);
   ospSet3fv(camera, "dir", cam_view);
   ospSet3fv(camera, "up",  cam_up);
@@ -117,10 +117,15 @@ int main(int argc, const char **argv) {
 
   ospCommit(mesh);
 
+  OSPGeometryInstance instance = ospNewGeometryInstance(mesh);
+  ospCommit(instance);
+  ospRelease(mesh); // we are done using this handle
 
   OSPWorld world = ospNewWorld();
-  ospAddGeometry(world, mesh);
-  ospRelease(mesh); // we are done using this handle
+  OSPData geometryInstances = ospNewData(1, OSP_OBJECT, &instance, 0);
+  ospSetObject(world, "geometries", geometryInstances);
+  ospRelease(instance);
+  ospRelease(geometryInstances);
   ospCommit(world);
 
 

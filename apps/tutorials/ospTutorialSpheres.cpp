@@ -26,7 +26,9 @@
 
 using namespace ospcommon;
 
-OSPGeometry createGroundPlaneGeometry()
+static std::string renderer_type = "pathtracer";
+
+OSPGeometryInstance createGroundPlane()
 {
   OSPGeometry planeGeometry = ospNewGeometry("quads");
 
@@ -148,14 +150,18 @@ OSPGeometry createGroundPlaneGeometry()
   ospSetData(planeGeometry, "vertex.color", colorData);
   ospSetData(planeGeometry, "index", indexData);
 
-  // create and assign a material to the geometry
-  OSPMaterial material = ospNewMaterial("pathtracer", "OBJMaterial");
-  ospCommit(material);
-
-  ospSetMaterial(planeGeometry, material);
-
   // finally, commit the geometry
   ospCommit(planeGeometry);
+
+  OSPGeometryInstance planeInstance = ospNewGeometryInstance(planeGeometry);
+
+  ospRelease(planeGeometry);
+
+  // create and assign a material to the geometry
+  OSPMaterial material = ospNewMaterial(renderer_type.c_str(), "OBJMaterial");
+  ospCommit(material);
+
+  ospSetMaterial(planeInstance, material);
 
   // release handles we no longer need
   ospRelease(positionData);
@@ -164,7 +170,9 @@ OSPGeometry createGroundPlaneGeometry()
   ospRelease(indexData);
   ospRelease(material);
 
-  return planeGeometry;
+  ospCommit(planeInstance);
+
+  return planeInstance;
 }
 
 int main(int argc, const char **argv)
@@ -176,9 +184,11 @@ int main(int argc, const char **argv)
   if (initError != OSP_NO_ERROR)
     return initError;
 
-  // we must load the testing library explicitly on Windows to look up
-  // object creation functions
-  loadLibrary("ospray_testing");
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "-r" || arg == "--renderer")
+      renderer_type = argv[++i];
+  }
 
   // set an error callback to catch any OSPRay errors and exit the application
   ospDeviceSetErrorFunc(
@@ -190,19 +200,33 @@ int main(int argc, const char **argv)
   // create the world which will contain all of our geometries
   OSPWorld world = ospNewWorld();
 
+  std::vector<OSPGeometryInstance> instanceHandles;
+
   // add in spheres geometry
-  OSPTestingGeometry spheres = ospTestingNewGeometry("spheres", "pathtracer");
-  ospAddGeometry(world, spheres.geometry);
+  OSPTestingGeometry spheres =
+      ospTestingNewGeometry("spheres", renderer_type.c_str());
+  instanceHandles.push_back(spheres.instance);
   ospRelease(spheres.geometry);
 
   // add in a ground plane geometry
-  ospAddGeometry(world, createGroundPlaneGeometry());
+  OSPGeometryInstance planeInstance = createGroundPlane();
+  ospCommit(planeInstance);
+  instanceHandles.push_back(planeInstance);
+
+  OSPData geomInstances =
+      ospNewData(instanceHandles.size(), OSP_OBJECT, instanceHandles.data());
+
+  ospSetData(world, "geometries", geomInstances);
+  ospRelease(geomInstances);
+
+  for (auto inst : instanceHandles)
+    ospRelease(inst);
 
   // commit the world
   ospCommit(world);
 
   // create OSPRay renderer
-  OSPRenderer renderer = ospNewRenderer("pathtracer");
+  OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   OSPData lightsData = ospTestingNewLights("ambient_only");
   ospSetData(renderer, "lights", lightsData);
@@ -216,20 +240,8 @@ int main(int argc, const char **argv)
       std::unique_ptr<GLFWOSPRayWindow>(new GLFWOSPRayWindow(
           vec2i{1024, 768}, box3f(vec3f(-1.f), vec3f(1.f)), world, renderer));
 
-  glfwOSPRayWindow->registerImGuiCallback([&]() {
-    static int spp = 1;
-    if (ImGui::SliderInt("spp", &spp, 1, 64)) {
-      ospSet1i(renderer, "spp", spp);
-      glfwOSPRayWindow->addObjectToCommit(renderer);
-    }
-  });
-
   // start the GLFW main loop, which will continuously render
   glfwOSPRayWindow->mainLoop();
-
-  // cleanup remaining objects
-  ospRelease(world);
-  ospRelease(renderer);
 
   // cleanly shut OSPRay down
   ospShutdown();

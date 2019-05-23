@@ -20,41 +20,48 @@
 #include "Curves.h"
 #include "common/Data.h"
 #include "common/World.h"
-#include "ospcommon/utility/DataView.h"
 // ispc-generated files
 #include "Curves_ispc.h"
 
 namespace ospray {
 
-  enum curveType { ROUND, FLAT, RIBBON };
-  enum curveBasis { LINEAR, BEZIER, BSPLINE, HERMITE };
+  enum curveType
+  {
+    ROUND,
+    FLAT,
+    RIBBON
+  };
 
-  static RTCGeometryType curveMap[4][3] =
-    {
+  enum curveBasis
+  {
+    LINEAR,
+    BEZIER,
+    BSPLINE,
+    HERMITE
+  };
+
+  static RTCGeometryType curveMap[4][3] = {
       {
-        (RTCGeometryType)-1,
-        RTC_GEOMETRY_TYPE_FLAT_LINEAR_CURVE,
-        (RTCGeometryType)-1,
+          (RTCGeometryType)-1,
+          RTC_GEOMETRY_TYPE_FLAT_LINEAR_CURVE,
+          (RTCGeometryType)-1,
       },
 
       {
-        RTC_GEOMETRY_TYPE_ROUND_BEZIER_CURVE,
-        RTC_GEOMETRY_TYPE_FLAT_BEZIER_CURVE,
-        RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_BEZIER_CURVE,
+          RTC_GEOMETRY_TYPE_ROUND_BEZIER_CURVE,
+          RTC_GEOMETRY_TYPE_FLAT_BEZIER_CURVE,
+          RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_BEZIER_CURVE,
       },
 
       {
-        RTC_GEOMETRY_TYPE_ROUND_BSPLINE_CURVE,
-        RTC_GEOMETRY_TYPE_FLAT_BSPLINE_CURVE,
-        RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_BSPLINE_CURVE,
+          RTC_GEOMETRY_TYPE_ROUND_BSPLINE_CURVE,
+          RTC_GEOMETRY_TYPE_FLAT_BSPLINE_CURVE,
+          RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_BSPLINE_CURVE,
       },
 
-      {
-        RTC_GEOMETRY_TYPE_ROUND_HERMITE_CURVE,
-        RTC_GEOMETRY_TYPE_FLAT_HERMITE_CURVE,
-        RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_HERMITE_CURVE
-      }
-    };
+      {RTC_GEOMETRY_TYPE_ROUND_HERMITE_CURVE,
+       RTC_GEOMETRY_TYPE_FLAT_HERMITE_CURVE,
+       RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_HERMITE_CURVE}};
 
   static curveType curveTypeForString(const std::string &s)
   {
@@ -90,31 +97,34 @@ namespace ospray {
     return "ospray::Curves";
   }
 
-  void Curves::finalize(World *model)
+  void Curves::commit()
   {
-    Geometry::finalize(model);
+    Geometry::commit();
 
-    vertexData = getParamData("vertex",nullptr);
+    vertexData = getParamData("vertex", nullptr);
     if (!vertexData)
       throw std::runtime_error("curves must have 'vertex' array");
     if (vertexData->type != OSP_FLOAT4)
       throw std::runtime_error("curves 'vertex' must be type OSP_FLOAT4");
-    auto vertex = (vec4f*)vertexData->data;
+    auto vertex      = (vec4f *)vertexData->data;
     auto numVertices = vertexData->numItems;
 
-    indexData  = getParamData("index",nullptr);
+    indexData = getParamData("index", nullptr);
     if (!indexData)
       throw std::runtime_error("curves must have 'index' array");
     if (indexData->type != OSP_INT)
       throw std::runtime_error("curves 'index' array must be type OSP_INT");
-    auto index = (uint32*)indexData->data;
-    auto numSegments = indexData->numItems;
+    const auto index       = (uint32 *)indexData->data;
+    const auto numSegments = indexData->numItems;
 
-    normalData = getParamData("vertex.normal", nullptr);
+    normalData  = getParamData("vertex.normal", nullptr);
     tangentData = getParamData("vertex.tangent", nullptr);
 
-    auto basis = curveBasisForString(getParamString("curveBasis", "unspecified"));
-    auto type = curveTypeForString(getParamString("curveType", "unspecified"));
+    curveBasis = getParamString("curveBasis", "unspecified");
+    curveType  = getParamString("curveType", "unspecified");
+
+    const auto type  = curveTypeForString(curveType);
+    const auto basis = curveBasisForString(curveBasis);
 
     if (type == RIBBON && !normalData)
       throw std::runtime_error("ribbon curve must have 'normal' array");
@@ -126,7 +136,8 @@ namespace ospray {
     if (normalData && normalData->type != OSP_FLOAT3)
       throw std::runtime_error("curves 'normal' array must be type OSP_FLOAT3");
     if (tangentData && tangentData->type != OSP_FLOAT3)
-      throw std::runtime_error("curves 'tangent' array must be type OSP_FLOAT3");
+      throw std::runtime_error(
+          "curves 'tangent' array must be type OSP_FLOAT3");
 
     postStatusMsg(2) << "#osp: creating curves geometry, "
                      << "#verts=" << numVertices << ", "
@@ -147,19 +158,81 @@ namespace ospray {
       }
     }
 
+    embreeCurveType = curveMap[basis][type];
+
+    createEmbreeGeometry();
+
     ispc::Curves_set(getIE(),
-                     model->getIE(),
-                     (ispc::RTCGeometryType)curveMap[basis][type],
-                     (const ispc::vec4f*)vertexData->data,
-                     vertexData->numItems,
-                     (const uint32_t*)indexData->data,
-                     indexData->numItems,
-                     normalData ? (const ispc::vec3f*)normalData->data : nullptr,
-                     normalData ? normalData->numItems : 0,
-                     tangentData ? (const ispc::vec3f*)tangentData->data : nullptr,
-                     tangentData ? tangentData->numItems : 0);
+                     (ispc::RTCGeometryType)embreeCurveType,
+                     geomID,
+                     indexData->numItems);
   }
 
-  OSP_REGISTER_GEOMETRY(Curves,curves);
+  size_t Curves::numPrimitives() const
+  {
+    const bool haveIndices = indexData;
 
-} // ::ospray
+    if (!haveIndices)
+      return 0;
+
+    const auto basis = curveBasisForString(curveBasis);
+
+    uint32_t numVerts = 4;
+    if (basis == LINEAR || basis == HERMITE)
+      numVerts = 2;
+
+    return indexData->numItems / numVerts;
+  }
+
+  void Curves::createEmbreeGeometry()
+  {
+    if (embreeGeometry)
+      rtcReleaseGeometry(embreeGeometry);
+
+    RTCGeometry geom = rtcNewGeometry(ispc_embreeDevice(), embreeCurveType);
+
+    rtcSetSharedGeometryBuffer(geom,
+                               RTC_BUFFER_TYPE_VERTEX,
+                               0,
+                               RTC_FORMAT_FLOAT4,
+                               vertexData->data,
+                               0,
+                               sizeof(vec4f),
+                               vertexData->numItems);
+
+    rtcSetSharedGeometryBuffer(geom,
+                               RTC_BUFFER_TYPE_INDEX,
+                               0,
+                               RTC_FORMAT_UINT,
+                               indexData->data,
+                               0,
+                               sizeof(int),
+                               indexData->numItems);
+
+    if (normalData)
+      rtcSetSharedGeometryBuffer(geom,
+                                 RTC_BUFFER_TYPE_NORMAL,
+                                 0,
+                                 RTC_FORMAT_FLOAT3,
+                                 normalData->data,
+                                 0,
+                                 sizeof(vec3f),
+                                 normalData->numItems);
+
+    if (tangentData)
+      rtcSetSharedGeometryBuffer(geom,
+                                 RTC_BUFFER_TYPE_TANGENT,
+                                 0,
+                                 RTC_FORMAT_FLOAT3,
+                                 tangentData->data,
+                                 0,
+                                 sizeof(vec3f),
+                                 tangentData->numItems);
+
+    rtcCommitGeometry(geom);
+    embreeGeometry = geom;
+  }
+
+  OSP_REGISTER_GEOMETRY(Curves, curves);
+
+}  // namespace ospray

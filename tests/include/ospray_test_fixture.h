@@ -16,208 +16,265 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
-#include <tuple>
 #include <cmath>
 #include <cstring>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <vector>
 
-#include <ospray/ospray.h>
 #include <gtest/gtest.h>
+#include <ospray/ospray.h>
 
 #include "ospray_environment.h"
 #include "ospray_test_tools.h"
 
 namespace OSPRayTestScenes {
 
-// Base class for all test fixtures.
-// Deriving classes can call CreateEmptyScene() to set up model, renderer, camera etc.
-// Behaviour of this method can be changed by modifying fields rendererType, frames and
-// samplesPerPixel beforehand.
-class Base {
- protected:
-  osp::vec2i imgSize;
-  std::string testName;
-  std::string rendererType;
-  int frames;
-  int samplesPerPixel;
+  // Base class for all test fixtures.
+  // Deriving classes can call CreateEmptyScene() to set up model, renderer,
+  // camera etc. Behaviour of this method can be changed by modifying fields
+  // rendererType, frames and samplesPerPixel beforehand.
+  class Base
+  {
+   protected:
+    osp::vec2i imgSize;
+    std::string testName;
+    std::string rendererType;
+    int frames;
+    int samplesPerPixel;
 
-  OSPFrameBuffer framebuffer;
-  OSPRenderer renderer;
-  OSPCamera camera;
-  OSPWorld world;
-  OSPData lights;
-  OSPFrameBufferFormat frameBufferFormat = OSP_FB_SRGBA;
+    OSPFrameBuffer framebuffer{nullptr};
+    OSPRenderer renderer{nullptr};
+    OSPCamera camera{nullptr};
+    OSPWorld world{nullptr};
+    OSPData lights{nullptr};
+    OSPFrameBufferFormat frameBufferFormat = OSP_FB_SRGBA;
 
-  OSPImageTools *imageTool;
-  std::vector<OSPLight> lightsList;
+    std::unique_ptr<OSPImageTools> imageTool;
+    std::vector<OSPLight> lightsList;
 
-public:
-  Base();
-  ~Base();
+    std::vector<OSPGeometryInstance> geometryInstances;
+    std::vector<OSPVolumeInstance> volumeInstances;
 
-  virtual void SetUp();
-  Base& operator=(const Base&) = delete;
-  Base(const Base&) = delete;
+   public:
+    Base();
+    ~Base();
 
-  void AddLight(OSPLight new_light);
-  void AddGeometry(OSPGeometry new_geometry);
-  void AddVolume(OSPVolume new_volume);
+    virtual void SetUp();
+    Base &operator=(const Base &) = delete;
+    Base(const Base &)            = delete;
 
-  void PerformRenderTest();
+    void AddLight(OSPLight new_light);
+    void AddInstance(OSPGeometryInstance new_geometry);
+    void AddInstance(OSPVolumeInstance new_volume);
 
-  osp::vec2i GetImgSize() const { return imgSize; }
-  std::string GetTestName() const { return testName; }
+    void PerformRenderTest();
 
-protected:
-  void CreateEmptyScene();
-  void SetCamera();
-  void SetWorld();
-  void SetLights();
-  void SetRenderer();
-  void SetFramebuffer();
-  void SetImageTool();
+    osp::vec2i GetImgSize() const
+    {
+      return imgSize;
+    }
+    std::string GetTestName() const
+    {
+      return testName;
+    }
 
-  OSPMaterial CreateMaterial(std::string type);
+   protected:
+    void CreateEmptyScene();
+    void SetCamera();
+    void SetWorld();
+    void SetLights();
+    void SetRenderer();
+    void SetFramebuffer();
+    void SetImageTool();
 
-  void RenderFrame();
-};
+    OSPMaterial CreateMaterial(std::string type);
 
-// Fixture class for tests parametrized with renderer type and material type, intended for
-// rendering scenes with a single object.
-class SingleObject : public Base, public ::testing::TestWithParam<std::tuple<const char*, const char*>> {
-protected:
-  std::string materialType;
-  OSPMaterial material;
+    void RenderFrame();
+  };
 
-public:
-  SingleObject();
-  virtual void SetUp();
-  OSPMaterial GetMaterial() const { return material; }
+  // Fixture class for tests parametrized with renderer type and material type,
+  // intended for rendering scenes with a single object.
+  class SingleObject
+      : public Base,
+        public ::testing::TestWithParam<std::tuple<const char *, const char *>>
+  {
+   protected:
+    std::string materialType;
+    OSPMaterial material{nullptr};
 
-protected:
-  void SetMaterial();
-};
+   public:
+    SingleObject();
+    virtual void SetUp();
+    OSPMaterial GetMaterial() const
+    {
+      return material;
+    }
 
-// Fixture class to test cornercases of intersection precision and epsilon handling;
-// parametrized with renderer, sphere radius, distance factor, and whether the sphere is in origin
-// TODO generalize for other geometries as well, reusing SingleObject
-class SpherePrecision : public Base, public ::testing::TestWithParam<std::tuple<float /*radius*/, float/*factor*/, bool/*move_cam*/, const char* /*renderer*/>> {
-public:
-  SpherePrecision();
-  virtual void SetUp();
-protected:
-  float dist;
-  float radius;
-  bool move_cam;
-};
+   protected:
+    void SetMaterial();
+  };
 
-// Fixture class that renders a fixed scene depicting a Cornell Box with a cuboid and a sphere.
-// It is parametrized with two types of materials.
-class Box : public Base, public ::testing::TestWithParam<std::tuple<const char*, const char*>> {
-protected:
-  std::string cuboidMaterialType;
-  std::string sphereMaterialType;
-  OSPMaterial cuboidMaterial;
-  OSPMaterial sphereMaterial;
+  // Fixture class to test cornercases of intersection precision and epsilon
+  // handling; parametrized with renderer, sphere radius, distance factor, and
+  // whether the sphere is in origin
+  // TODO generalize for other geometries as well, reusing SingleObject
+  class SpherePrecision
+      : public Base,
+        public ::testing::TestWithParam<std::tuple<float /*radius*/,
+                                                   float /*factor*/,
+                                                   bool /*move_cam*/,
+                                                   const char * /*renderer*/>>
+  {
+   public:
+    SpherePrecision();
+    virtual void SetUp();
 
-public:
-  Box();
-  virtual void SetUp();
+   protected:
+    float dist;
+    float radius;
+    bool move_cam;
+  };
 
-protected:
-  void SetMaterials();
-  OSPMaterial GetMaterial(std::string);
-};
+  // Fixture class that renders a fixed scene depicting a Cornell Box with a
+  // cuboid and a sphere. It is parametrized with two types of materials.
+  class Box
+      : public Base,
+        public ::testing::TestWithParam<std::tuple<const char *, const char *>>
+  {
+   protected:
+    std::string cuboidMaterialType;
+    std::string sphereMaterialType;
+    OSPMaterial cuboidMaterial{nullptr};
+    OSPMaterial sphereMaterial{nullptr};
 
-// Fixture class that renders a Sierpinski tetrahedron using volumes or isosurfaces. It is
-// parametrized with renderer type, boolean value that controls whether volumes of isosurfaces
-// should be used (false and true respectively) and number of steps taken to generate the fractal.
-class Sierpinski : public Base, public ::testing::TestWithParam<std::tuple<const char*, bool, int>> {
-protected:
-  int level;
-  bool renderIsosurface;
-public:
-  Sierpinski();
-  virtual void SetUp();
-private:
-  std::vector<unsigned char> volumetricData;
-};
+   public:
+    Box();
+    virtual void SetUp();
 
-// Fixture class used for tests that generates two isosurfaces, one in shape of a torus.
-// It's parametrized with type of the renderer.
-class Torus : public Base, public ::testing::TestWithParam<const char*> {
-public:
-  Torus();
-  virtual void SetUp();
-private:
-  std::vector<float> volumetricData;
-};
+   protected:
+    void SetMaterials();
+    OSPMaterial GetMaterial(std::string);
+  };
 
-// Fixture for test that renders three cuts of a cubic volume.
-class SlicedCube : public Base, public ::testing::Test {
-public:
-  SlicedCube();
-  virtual void SetUp();
-private:
-  std::vector<float> volumetricData;
-};
+  // Fixture class that renders a Sierpinski tetrahedron using volumes or
+  // isosurfaces. It is parametrized with renderer type, boolean value that
+  // controls whether volumes of isosurfaces should be used (false and true
+  // respectively) and number of steps taken to generate the fractal.
+  class Sierpinski
+      : public Base,
+        public ::testing::TestWithParam<std::tuple<const char *, bool, int>>
+  {
+   protected:
+    int level;
+    bool renderIsosurface;
 
-// Fixture class for testing materials of type "OBJMaterial". The rendered scene is composed of
-// two quads and a luminous sphere. Parameters of this tests are passed to a new "OBJMaterial"
-// material as "Kd", "Ks", "Ns", "d" and "Tf" and said material is used by the quads.
-class MTLMirrors : public Base, public ::testing::TestWithParam<std::tuple<osp::vec3f, osp::vec3f, float, float, osp::vec3f>> {
-public:
-  MTLMirrors();
-  virtual void SetUp();
-private:
-  osp::vec3f Kd;
-  osp::vec3f Ks;
-  float Ns;
-  float d;
-  osp::vec3f Tf;
-};
+   public:
+    Sierpinski();
+    virtual void SetUp();
 
-// Fixture for tests rendering few connected cylinder segments. It's parametrized with type of
-// material used and radius of the segments.
-class Pipes : public Base, public ::testing::TestWithParam<std::tuple<const char*, const char*, float>> {
-public:
-  Pipes();
-  virtual void SetUp();
-private:
-  float radius;
-  std::string materialType;
-};
+   private:
+    std::vector<unsigned char> volumetricData;
+  };
 
-// Test a texture colored by a volume.  Creates a sphere colored by the torus volume
-// It's parametrized with type of the renderer.
-class TextureVolume : public Base, public ::testing::TestWithParam<const char*> {
-public:
-  TextureVolume();
-  virtual void SetUp();
-private:
-  std::vector<float> volumetricData;
-};
+  // Fixture class used for tests that generates two isosurfaces, one in shape
+  // of a torus. It's parametrized with type of the renderer.
+  class Torus : public Base, public ::testing::TestWithParam<const char *>
+  {
+   public:
+    Torus();
+    virtual void SetUp();
 
-// Test a texture colored by a volume.  Creates a sphere colored by the torus volume
-// It's parametrized with type of the renderer.
-class DepthCompositeVolume : public Base, public ::testing::TestWithParam<const char*> {
-public:
-  DepthCompositeVolume();
-  virtual void SetUp();
-private:
-  std::vector<float> volumetricData;
-};
+   private:
+    std::vector<float> volumetricData;
+  };
 
-// Fixture for tests rendering a Subdivision mesh. It's parametrized with type of
-// material used.
-class Subdivision : public Base, public ::testing::TestWithParam<std::tuple<const char*, const char*>> {
-public:
-  Subdivision();
-  virtual void SetUp();
-private:
-  std::string materialType;
-};
+  // Fixture for test that renders three cuts of a cubic volume.
+  class SlicedCube : public Base, public ::testing::Test
+  {
+   public:
+    SlicedCube();
+    virtual void SetUp();
 
-} // namespace OSPRayTestScenes
+   private:
+    std::vector<float> volumetricData;
+  };
 
+  // Fixture class for testing materials of type "OBJMaterial". The rendered
+  // scene is composed of two quads and a luminous sphere. Parameters of this
+  // tests are passed to a new "OBJMaterial" material as "Kd", "Ks", "Ns", "d"
+  // and "Tf" and said material is used by the quads.
+  class MTLMirrors
+      : public Base,
+        public ::testing::TestWithParam<
+            std::tuple<osp::vec3f, osp::vec3f, float, float, osp::vec3f>>
+  {
+   public:
+    MTLMirrors();
+    virtual void SetUp();
+
+   private:
+    osp::vec3f Kd;
+    osp::vec3f Ks;
+    float Ns;
+    float d;
+    osp::vec3f Tf;
+  };
+
+  // Fixture for tests rendering few connected cylinder segments. It's
+  // parametrized with type of material used and radius of the segments.
+  class Pipes : public Base,
+                public ::testing::TestWithParam<
+                    std::tuple<const char *, const char *, float>>
+  {
+   public:
+    Pipes();
+    virtual void SetUp();
+
+   private:
+    float radius;
+    std::string materialType;
+  };
+
+  // Test a texture colored by a volume.  Creates a sphere colored by the torus
+  // volume It's parametrized with type of the renderer.
+  class TextureVolume : public Base,
+                        public ::testing::TestWithParam<const char *>
+  {
+   public:
+    TextureVolume();
+    virtual void SetUp();
+
+   private:
+    std::vector<float> volumetricData;
+  };
+
+  // Test a texture colored by a volume.  Creates a sphere colored by the torus
+  // volume It's parametrized with type of the renderer.
+  class DepthCompositeVolume : public Base,
+                               public ::testing::TestWithParam<const char *>
+  {
+   public:
+    DepthCompositeVolume();
+    virtual void SetUp();
+
+   private:
+    std::vector<float> volumetricData;
+  };
+
+  // Fixture for tests rendering a Subdivision mesh. It's parametrized with type
+  // of material used.
+  class Subdivision
+      : public Base,
+        public ::testing::TestWithParam<std::tuple<const char *, const char *>>
+  {
+   public:
+    Subdivision();
+    virtual void SetUp();
+
+   private:
+    std::string materialType;
+  };
+
+}  // namespace OSPRayTestScenes

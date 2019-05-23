@@ -14,8 +14,6 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#undef NDEBUG
-
 // ospray
 #include "Isosurfaces.h"
 #include "common/Data.h"
@@ -35,22 +33,39 @@ namespace ospray {
     return "ospray::Isosurfaces";
   }
 
-  void Isosurfaces::finalize(World *model)
+  void Isosurfaces::commit()
   {
+    Geometry::commit();
+
     isovaluesData = getParamData("isovalues", nullptr);
-    volume        = (Volume *)getParamObject("volume", nullptr);
+    volume        = (VolumeInstance *)getParamObject("volume", nullptr);
+    numIsovalues  = isovaluesData->numItems;
+    isovalues     = (float *)isovaluesData->data;
 
-    Assert(isovaluesData);
-    Assert(isovaluesData->numItems > 0);
-    Assert(volume);
+    createEmbreeGeometry();
 
-    numIsovalues = isovaluesData->numItems;
-    isovalues    = (float*)isovaluesData->data;
+    ispc::Isosurfaces_set(getIE(),
+                          embreeGeometry,
+                          geomID,
+                          numIsovalues,
+                          isovalues,
+                          volume->getIE());
+  }
 
-    ispc::Isosurfaces_set(getIE(), model->getIE(), numIsovalues,
-                          isovalues, volume->getIE());
+  size_t Isosurfaces::numPrimitives() const
+  {
+    return numIsovalues;
+  }
+
+  void Isosurfaces::createEmbreeGeometry()
+  {
+    if (embreeGeometry)
+      rtcReleaseGeometry(embreeGeometry);
+
+    embreeGeometry =
+        rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_USER);
   }
 
   OSP_REGISTER_GEOMETRY(Isosurfaces, isosurfaces);
 
-} // ::ospray
+}  // namespace ospray

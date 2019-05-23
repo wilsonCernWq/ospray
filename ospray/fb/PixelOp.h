@@ -41,48 +41,24 @@ namespace ospray {
   */
   struct OSPRAY_SDK_INTERFACE PixelOp : public ManagedObject
   {
-    struct OSPRAY_SDK_INTERFACE Instance : public RefCount
-    {
-      virtual ~Instance() {} // "= default;" causes linker problems with icc15
-      /*! gets called every time the frame buffer got 'commit'ted */
-      virtual void  commitNotify() {}
+      virtual ~PixelOp() override = default;
       /*! gets called once at the beginning of the frame */
       virtual void beginFrame() {}
       /*! gets called once at the end of the frame */
       virtual void endFrame() {}
-
-      /*! called whenever a new tile comes in from a renderer, but
-          _before_ the tile gets written/accumulated into the frame
-          buffer. this way we can, for example, fill in missing
-          samples; however, the tile will _not_ yet contain the
-          previous frame's contributions from the accum buffer
-          etcpp. In distriubuted mode, it is undefined if this op gets
-          executed on the node that _produces_ the tile, or on the
-          node that _owns_ the tile (and its accum buffer data)  */
-      virtual void preAccum(Tile &tile) { UNUSED(tile); }
 
       /*! called right after the tile got accumulated; i.e., the
           tile's RGBA values already contain the accu-buffer blended
           values (assuming an accubuffer exists), and this function
           defines how these pixels are being processed before written
           into the color buffer */
-      virtual void postAccum(Tile &tile) { UNUSED(tile); }
+      virtual void postAccum(FrameBuffer *, Tile &) {}
 
       //! \brief common function to help printf-debugging
       /*! Every derived class should override this! */
-      virtual std::string toString() const;
+      virtual std::string toString() const override;
 
-      // Data members //
-
-      FrameBuffer *fb;
-    };
-
-    virtual ~PixelOp() override = default;
-
-    //! \brief create an instance of this pixel op
-    virtual Instance *createInstance(FrameBuffer *fb, PixelOp::Instance *prev) = 0;
-
-    static PixelOp *createInstance(const char *identifier);
+      static PixelOp *createInstance(const char *type);
   };
 
   /*! \brief registers a internal ospray::<ClassName> renderer under
@@ -90,9 +66,9 @@ namespace ospray {
 
       \internal This currently works by defining a extern "C" function
       with a given predefined name that creates a new instance of this
-      renderer. By having this symbol in the shared lib ospray can
-      lateron always get a handle to this fct and create an instance
-      of this renderer.
+      pixelop. By having this symbol in the shared lib ospray can
+      later on always get a handle to this fct and create an instance
+      of this pixelop.
   */
 #define OSP_REGISTER_PIXEL_OP(InternalClass, external_name) \
   OSP_REGISTER_OBJECT(PixelOp, pixel_op, InternalClass, external_name)

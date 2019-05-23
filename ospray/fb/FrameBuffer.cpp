@@ -37,6 +37,11 @@ namespace ospray {
     Assert(size.x > 0 && size.y > 0);
   }
 
+  void FrameBuffer::commit()
+  {
+    pixelOpData = getParamData("pixelOperations", nullptr);
+  }
+
   vec2i FrameBuffer::getTileSize() const
   {
     return vec2i(TILE_SIZE);

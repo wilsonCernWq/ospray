@@ -114,7 +114,8 @@ inline varying vec3f StructuredVolume_computeGradient(const void *uniform _volum
 }
 
 // ray.time is set to interval length of intersected sample
-inline void StructuredVolume_stepRay(const void *uniform _volume, varying Ray &ray, const varying float samplingRate)
+inline void StructuredVolume_stepRay(const void *uniform _volume, TransferFunction *uniform tfn,
+                                     varying Ray &ray, const varying float samplingRate)
 {
   // Cast to the actual Volume subtype.
   const StructuredVolume *uniform volume = (const StructuredVolume *uniform) _volume;
@@ -123,7 +124,7 @@ inline void StructuredVolume_stepRay(const void *uniform _volume, varying Ray &r
   const varying float step = volume->super.samplingStep / samplingRate;
 
   // Compute the next hit point using a spatial acceleration structure.
-  GridAccelerator_stepRay(volume->accelerator, step, ray);
+  GridAccelerator_stepRay(volume->accelerator, tfn, step, ray);
 }
 
 inline void StructuredVolume_intersectIsosurface(const void *uniform _volume,
@@ -233,19 +234,11 @@ void StructuredVolume_Constructor(StructuredVolume *uniform volume,
   volume->super.intersectIsosurface = StructuredVolume_intersectIsosurface;
 }
 
-export void StructuredVolume_setGridOrigin(void *uniform _self, const uniform vec3f &value)
+export void StructuredVolume_set(void *uniform _self, const uniform vec3f &origin, const uniform vec3f &spacing)
 {
   uniform StructuredVolume *uniform self = (uniform StructuredVolume *uniform)_self;
-  self->gridOrigin = value;
-
-  // Update bounding box for new grid definition.
-  self->super.boundingBox = make_box3f(self->gridOrigin, self->gridOrigin + make_vec3f(self->dimensions - 1) * self->gridSpacing);
-}
-
-export void StructuredVolume_setGridSpacing(void *uniform _self, const uniform vec3f &value)
-{
-  uniform StructuredVolume *uniform self = (uniform StructuredVolume *uniform)_self;
-  self->gridSpacing = value;
+  self->gridOrigin  = origin;
+  self->gridSpacing = spacing;
 
   // Update nominal sampling step size for new grid definition.
   self->super.samplingStep = reduce_min(self->gridSpacing);

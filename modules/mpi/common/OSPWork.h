@@ -120,11 +120,6 @@ namespace ospray {
         int64 handleID{-1};
       };
 
-      /*! All of the simple CMD_NEW_* can be implemented with the same
-       template. The more unique ones like NEW_DATA, NEW_TEXTURE2D or
-       render specific objects like lights and materials require some
-       more special treatment to handle sending the data or other
-       params around as well. */
       template <typename T>
       struct NewObjectT : public Work
       {
@@ -186,8 +181,8 @@ namespace ospray {
       {
         NewMaterial() = default;
         NewMaterial(const char *renderer_type,
-                     const char *material_type,
-                     ObjectHandle handle)
+                    const char *material_type,
+                    ObjectHandle handle)
             : rendererType(renderer_type),
               materialType(material_type),
               handle(handle)
@@ -209,6 +204,54 @@ namespace ospray {
         std::string rendererType;
         std::string materialType;
         ObjectHandle handle;
+      };
+
+      struct NewGeometryInstance : public Work
+      {
+        NewGeometryInstance() = default;
+        NewGeometryInstance(ObjectHandle handle, ObjectHandle geometry_handle)
+            : handle(handle), geometryHandle(geometry_handle)
+        {
+        }
+
+        void run() override;
+
+        void serialize(WriteStream &b) const override
+        {
+          b << (int64)handle << (int64)geometryHandle;
+        }
+
+        void deserialize(ReadStream &b) override
+        {
+          b >> handle.i64 >> geometryHandle.i64;
+        }
+
+        ObjectHandle handle;
+        ObjectHandle geometryHandle;
+      };
+
+      struct NewVolumeInstance : public Work
+      {
+        NewVolumeInstance() = default;
+        NewVolumeInstance(ObjectHandle handle, ObjectHandle volume_handle)
+            : handle(handle), volumeHandle(volume_handle)
+        {
+        }
+
+        void run() override;
+
+        void serialize(WriteStream &b) const override
+        {
+          b << (int64)handle << (int64)volumeHandle;
+        }
+
+        void deserialize(ReadStream &b) override
+        {
+          b >> handle.i64 >> volumeHandle.i64;
+        }
+
+        ObjectHandle handle;
+        ObjectHandle volumeHandle;
       };
 
       struct NewLight : public Work
@@ -364,126 +407,6 @@ namespace ospray {
         ObjectHandle futureHandle;
       };
 
-      struct AddVolume : public Work
-      {
-        AddVolume() = default;
-        AddVolume(OSPWorld model, const OSPVolume &t)
-            : modelHandle((const ObjectHandle &)model),
-              objectHandle((const ObjectHandle &)t)
-        {
-        }
-
-        void run() override;
-
-        /*! serializes itself on the given serial buffer - will write
-          all data into this buffer in a way that it can afterwards
-          un-serialize itself 'on the other side'*/
-        void serialize(WriteStream &b) const override
-        {
-          b << (int64)modelHandle << (int64)objectHandle;
-        }
-
-        /*! de-serialize from a buffer that an object of this type has
-          serialized itself in */
-        void deserialize(ReadStream &b) override
-        {
-          b >> modelHandle.i64 >> objectHandle.i64;
-        }
-
-        ObjectHandle modelHandle;
-        ObjectHandle objectHandle;
-      };
-
-      struct AddGeometry : public Work
-      {
-        AddGeometry() = default;
-        AddGeometry(OSPWorld model, const OSPGeometry &t)
-            : modelHandle((const ObjectHandle &)model),
-              objectHandle((const ObjectHandle &)t)
-        {
-        }
-
-        void run() override;
-
-        /*! serializes itself on the given serial buffer - will write
-          all data into this buffer in a way that it can afterwards
-          un-serialize itself 'on the other side'*/
-        void serialize(WriteStream &b) const override
-        {
-          b << (int64)modelHandle << (int64)objectHandle;
-        }
-
-        /*! de-serialize from a buffer that an object of this type has
-          serialized itself in */
-        void deserialize(ReadStream &b) override
-        {
-          b >> modelHandle.i64 >> objectHandle.i64;
-        }
-
-        ObjectHandle modelHandle;
-        ObjectHandle objectHandle;
-      };
-
-      struct RemoveGeometry : public Work
-      {
-        RemoveGeometry() = default;
-        RemoveGeometry(OSPWorld model, const OSPGeometry &t)
-            : modelHandle((const ObjectHandle &)model),
-              objectHandle((const ObjectHandle &)t)
-        {
-        }
-
-        void run() override;
-
-        /*! serializes itself on the given serial buffer - will write
-          all data into this buffer in a way that it can afterwards
-          un-serialize itself 'on the other side'*/
-        void serialize(WriteStream &b) const override
-        {
-          b << (int64)modelHandle << (int64)objectHandle;
-        }
-
-        /*! de-serialize from a buffer that an object of this type has
-          serialized itself in */
-        void deserialize(ReadStream &b) override
-        {
-          b >> modelHandle.i64 >> objectHandle.i64;
-        }
-
-        ObjectHandle modelHandle;
-        ObjectHandle objectHandle;
-      };
-
-      struct RemoveVolume : public Work
-      {
-        RemoveVolume() = default;
-        RemoveVolume(OSPWorld model, const OSPVolume &t)
-            : modelHandle((const ObjectHandle &)model),
-              objectHandle((const ObjectHandle &)t)
-        {
-        }
-
-        void run() override;
-
-        /*! serializes itself on the given serial buffer - will write
-          all data into this buffer in a way that it can afterwards
-          un-serialize itself 'on the other side'*/
-        void serialize(WriteStream &b) const override
-        {
-          b << (int64)modelHandle << (int64)objectHandle;
-        }
-
-        /*! de-serialize from a buffer that an object of this type has
-          serialized itself in */
-        void deserialize(ReadStream &b) override
-        {
-          b >> modelHandle.i64 >> objectHandle.i64;
-        }
-
-        ObjectHandle modelHandle;
-        ObjectHandle objectHandle;
-      };
-
       struct CreateFrameBuffer : public Work
       {
         CreateFrameBuffer() = default;
@@ -577,8 +500,6 @@ namespace ospray {
         SetMaterial(ObjectHandle handle, OSPMaterial val)
             : handle(handle), material((ObjectHandle &)val)
         {
-          Assert(handle != nullHandle);
-          Assert(material != nullHandle);
         }
 
         void run() override;
@@ -664,26 +585,6 @@ namespace ospray {
 
         ObjectHandle handle;
         std::string name;
-      };
-
-      struct SetPixelOp : public Work
-      {
-        SetPixelOp() = default;
-        SetPixelOp(OSPFrameBuffer fb, OSPPixelOp op);
-
-        void run() override;
-
-        /*! serializes itself on the given serial buffer - will write
-          all data into this buffer in a way that it can afterwards
-          un-serialize itself 'on the other side'*/
-        void serialize(WriteStream &b) const override;
-
-        /*! de-serialize from a buffer that an object of this type has
-          serialized itself in */
-        void deserialize(ReadStream &b) override;
-
-        ObjectHandle fbHandle;
-        ObjectHandle poHandle;
       };
 
       struct CommandRelease : public Work

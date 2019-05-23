@@ -16,12 +16,13 @@
 
 #pragma once
 
-#include <string>
-#include <vector>
 #include <gtest/gtest.h>
 #include <ospray/ospray.h>
+#include <string>
+#include <vector>
 
-class OSPRayEnvironment : public ::testing::Environment {
+class OSPRayEnvironment : public ::testing::Environment
+{
  private:
   bool dumpImg;
   std::string rendererType;
@@ -33,24 +34,30 @@ class OSPRayEnvironment : public ::testing::Environment {
 
  public:
   OSPRayEnvironment(int argc, char **argv);
-  ~OSPRayEnvironment();
+  ~OSPRayEnvironment() = default;
 
-  bool GetDumpImg() const {
+  bool GetDumpImg() const
+  {
     return dumpImg;
   }
-  std::string GetRendererType() const {
+  std::string GetRendererType() const
+  {
     return rendererType;
   }
-  osp::vec2i GetImgSize() const {
+  osp::vec2i GetImgSize() const
+  {
     return imgSize;
   }
-  std::string GetDeviceType() const {
+  std::string GetDeviceType() const
+  {
     return deviceType;
   }
-  std::string GetBaselineDir() const {
+  std::string GetBaselineDir() const
+  {
     return baselineDir;
   }
-  std::string GetFailedDir() const {
+  std::string GetFailedDir() const
+  {
     return failedDir;
   }
 

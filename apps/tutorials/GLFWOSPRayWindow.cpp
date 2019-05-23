@@ -34,18 +34,20 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
       world(world),
       renderer(renderer)
 {
-  if (activeWindow != nullptr)
+  if (activeWindow != nullptr) {
     throw std::runtime_error("Cannot create more than one GLFWOSPRayWindow!");
+  }
 
   activeWindow = this;
 
   // initialize GLFW
-  if (!glfwInit())
+  if (!glfwInit()) {
     throw std::runtime_error("Failed to initialize GLFW!");
+  }
 
   // create GLFW window
   glfwWindow = glfwCreateWindow(
-      windowSize.x, windowSize.y, "OSPRay Tutorial", NULL, NULL);
+      windowSize.x, windowSize.y, "OSPRay Tutorial", nullptr, nullptr);
 
   if (!glfwWindow) {
     glfwTerminate();
@@ -76,8 +78,9 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
 
   glfwSetCursorPosCallback(glfwWindow, [](GLFWwindow *, double x, double y) {
     ImGuiIO &io = ImGui::GetIO();
-    if (!io.WantCaptureMouse)
+    if (!io.WantCaptureMouse) {
       activeWindow->motion(ospcommon::vec2f{float(x), float(y)});
+    }
   });
 
   glfwSetKeyCallback(glfwWindow,
@@ -94,7 +97,32 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
                        }
                      });
 
-  // OSPRay setup
+  glfwSetMouseButtonCallback(
+      glfwWindow, [](GLFWwindow *, int button, int action, int /*mods*/) {
+        auto &w = *activeWindow;
+        if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
+          auto mouse      = activeWindow->previousMouse;
+          auto windowSize = activeWindow->windowSize;
+          const ospcommon::vec2f pos(
+              mouse.x / static_cast<float>(windowSize.x),
+              1.f - mouse.y / static_cast<float>(windowSize.y));
+
+          OSPPickResult res;
+          ospPick(&res,
+                  w.framebuffer,
+                  w.renderer,
+                  w.camera,
+                  w.world,
+                  (const osp_vec2f &)pos);
+
+          if (res.hasHit) {
+            std::cout << "Hit geometry instance [id: " << res.geometryInstance
+                      << ", prim: " << res.primID << "]" << std::endl;
+          }
+        }
+      });
+
+  // OSPRay setup //
 
   // create the arcball camera model
   arcballCamera = std::unique_ptr<ArcballCamera>(
@@ -102,7 +130,7 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
 
   // create camera
   camera = ospNewCamera("perspective");
-  ospSetf(camera, "aspect", windowSize.x / float(windowSize.y));
+  ospSet1f(camera, "aspect", windowSize.x / float(windowSize.y));
 
   ospSet3f(camera,
            "pos",
@@ -152,6 +180,13 @@ void GLFWOSPRayWindow::setWorld(OSPWorld newWorld)
   world = newWorld;
 }
 
+void GLFWOSPRayWindow::setPixelOps(OSPData ops)
+{
+  pixelOps = ops;
+  ospSetData(framebuffer, "pixelOperations", pixelOps);
+  addObjectToCommit(framebuffer);
+}
+
 void GLFWOSPRayWindow::resetAccumulation()
 {
   ospResetAccumulation(framebuffer);
@@ -185,6 +220,11 @@ void GLFWOSPRayWindow::mainLoop()
   waitOnOSPRayFrame();
   if (currentFrame != nullptr)
     ospRelease(currentFrame);
+
+  ospRelease(camera);
+  ospRelease(framebuffer);
+  ospRelease(world);
+  ospRelease(renderer);
 }
 
 void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
@@ -192,13 +232,20 @@ void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
   windowSize = newWindowSize;
 
   // release the current frame buffer, if it exists
-  if (framebuffer)
+  if (framebuffer) {
     ospRelease(framebuffer);
+  }
 
   // create new frame buffer
   framebuffer = ospNewFrameBuffer(reinterpret_cast<osp_vec2i &>(windowSize),
                                   OSP_FB_SRGBA,
-                                  OSP_FB_COLOR | OSP_FB_ACCUM);
+                                  OSP_FB_COLOR | OSP_FB_ACCUM | OSP_FB_ALBEDO);
+
+  if (pixelOps) {
+    ospSetData(framebuffer, "pixelOperations", pixelOps);
+  }
+
+  ospCommit(framebuffer);
 
   // reset OpenGL viewport and orthographic projection
   glViewport(0, 0, windowSize.x, windowSize.y);
@@ -210,14 +257,12 @@ void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
   // update camera
   arcballCamera->updateWindowSize(windowSize);
 
-  ospSetf(camera, "aspect", windowSize.x / float(windowSize.y));
+  ospSet1f(camera, "aspect", windowSize.x / float(windowSize.y));
   ospCommit(camera);
 }
 
 void GLFWOSPRayWindow::motion(const ospcommon::vec2f &position)
 {
-  static ospcommon::vec2f previousMouse(-1);
-
   const ospcommon::vec2f mouse(position.x, position.y);
   if (previousMouse != ospcommon::vec2f(-1)) {
     const bool leftDown =
@@ -245,7 +290,7 @@ void GLFWOSPRayWindow::motion(const ospcommon::vec2f &position)
     }
 
     if (cameraChanged) {
-      ospSetf(camera, "aspect", windowSize.x / float(windowSize.y));
+      ospSet1f(camera, "aspect", windowSize.x / float(windowSize.y));
       ospSet3f(camera,
                "pos",
                arcballCamera->eyePos().x,
@@ -271,18 +316,28 @@ void GLFWOSPRayWindow::motion(const ospcommon::vec2f &position)
 
 void GLFWOSPRayWindow::display()
 {
-  // clock used to compute frame rate
   static auto displayStart = std::chrono::high_resolution_clock::now();
 
-  if (showUi && uiCallback) {
+  if (showUi) {
     ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize;
     ImGui::Begin(
         "Tutorial Controls (press 'g' to hide / show)", nullptr, flags);
-    uiCallback();
+
+    static int spp = 1;
+    if (ImGui::SliderInt("spp", &spp, 1, 64)) {
+      ospSet1i(renderer, "spp", spp);
+      addObjectToCommit(renderer);
+    }
+
+    ImGui::Checkbox("show albedo", &showAlbedo);
+
+    if (uiCallback) {
+      ImGui::Separator();
+      uiCallback();
+    }
     ImGui::End();
   }
 
-  // if a display callback has been registered, call it
   if (displayCallback) {
     displayCallback(this);
   }
@@ -304,17 +359,18 @@ void GLFWOSPRayWindow::display()
 
     waitOnOSPRayFrame();
 
-    uint32_t *fb = (uint32_t *)ospMapFrameBuffer(framebuffer, OSP_FB_COLOR);
+    auto *fb = ospMapFrameBuffer(framebuffer,
+                                 showAlbedo ? OSP_FB_ALBEDO : OSP_FB_COLOR);
 
     glBindTexture(GL_TEXTURE_2D, framebufferTexture);
     glTexImage2D(GL_TEXTURE_2D,
                  0,
-                 GL_RGBA,
+                 showAlbedo ? GL_RGB : GL_RGBA,
                  windowSize.x,
                  windowSize.y,
                  0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
+                 showAlbedo ? GL_RGB : GL_RGBA,
+                 showAlbedo ? GL_FLOAT : GL_UNSIGNED_BYTE,
                  fb);
 
     ospUnmapFrameBuffer(fb, framebuffer);
@@ -352,7 +408,7 @@ void GLFWOSPRayWindow::display()
 
   glEnd();
 
-  if (showUi && uiCallback) {
+  if (showUi) {
     ImGui::Render();
   }
 

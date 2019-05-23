@@ -17,8 +17,8 @@
 #pragma once
 
 // ospray stuff
-#include "geometry/Geometry.h"
-#include "volume/Volume.h"
+#include "geometry/GeometryInstance.h"
+#include "volume/VolumeInstance.h"
 
 // stl
 #include <vector>
@@ -46,16 +46,12 @@ namespace ospray {
 
     // Data members //
 
-    using GeometryVector = std::vector<Ref<Geometry>>;
-    using VolumeVector   = std::vector<Ref<Volume>>;
-
-    //! \brief vector of all geometries used in this model
-    GeometryVector geometry;
-    //! \brief vector of all volumes used in this model
-    VolumeVector volume;
+    Ref<Data> geometryInstances;
+    Ref<Data> volumeInstances;
 
     //! \brief the embree scene handle for this geometry
-    RTCScene embreeSceneHandle {nullptr};
+    RTCScene embreeSceneHandleGeometries{nullptr};
+    RTCScene embreeSceneHandleVolumes{nullptr};
     box3f bounds;
 
     bool useEmbreeDynamicSceneFlag{true};
@@ -63,4 +59,4 @@ namespace ospray {
     bool useEmbreeRobustSceneFlag{false};
   };
 
-} // ::ospray
+}  // namespace ospray

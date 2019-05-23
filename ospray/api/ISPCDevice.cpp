@@ -23,7 +23,7 @@
 #include "common/Util.h"
 #include "common/World.h"
 #include "fb/LocalFB.h"
-#include "geometry/TriangleMesh.h"
+#include "geometry/GeometryInstance.h"
 #include "lights/Light.h"
 #include "render/LoadBalancer.h"
 #include "render/RenderTask.h"
@@ -31,7 +31,7 @@
 #include "texture/Texture.h"
 #include "texture/Texture2D.h"
 #include "transferFunction/TransferFunction.h"
-#include "volume/Volume.h"
+#include "volume/VolumeInstance.h"
 // stl
 #include <algorithm>
 
@@ -126,50 +126,6 @@ namespace ospray {
     {
       ManagedObject *object = (ManagedObject *)_object;
       object->commit();
-    }
-
-    void ISPCDevice::addGeometry(OSPWorld _model, OSPGeometry _geometry)
-    {
-      World *model       = (World *)_model;
-      Geometry *geometry = (Geometry *)_geometry;
-      model->geometry.push_back(geometry);
-    }
-
-    void ISPCDevice::removeGeometry(OSPWorld _model, OSPGeometry _geometry)
-    {
-      World *model       = (World *)_model;
-      Geometry *geometry = (Geometry *)_geometry;
-
-      auto it = std::find_if(
-          model->geometry.begin(),
-          model->geometry.end(),
-          [&](const Ref<ospray::Geometry> &g) { return geometry == &*g; });
-
-      if (it != model->geometry.end()) {
-        model->geometry.erase(it);
-      }
-    }
-
-    void ISPCDevice::addVolume(OSPWorld _model, OSPVolume _volume)
-    {
-      World *model   = (World *)_model;
-      Volume *volume = (Volume *)_volume;
-      model->volume.push_back(volume);
-    }
-
-    void ISPCDevice::removeVolume(OSPWorld _model, OSPVolume _volume)
-    {
-      World *model   = (World *)_model;
-      Volume *volume = (Volume *)_volume;
-
-      auto it = std::find_if(
-          model->volume.begin(),
-          model->volume.end(),
-          [&](const Ref<ospray::Volume> &g) { return volume == &*g; });
-
-      if (it != model->volume.end()) {
-        model->volume.erase(it);
-      }
     }
 
     OSPData ISPCDevice::newData(size_t nitems,
@@ -290,13 +246,6 @@ namespace ospray {
       return (OSPPixelOp)PixelOp::createInstance(type);
     }
 
-    void ISPCDevice::setPixelOp(OSPFrameBuffer _fb, OSPPixelOp _op)
-    {
-      FrameBuffer *fb = (FrameBuffer *)_fb;
-      PixelOp *po     = (PixelOp *)_op;
-      fb->pixelOp     = po->createInstance(fb, fb->pixelOp.ptr);
-    }
-
     OSPRenderer ISPCDevice::newRenderer(const char *type)
     {
       return (OSPRenderer)Renderer::createInstance(type);
@@ -339,6 +288,20 @@ namespace ospray {
       return (OSPTexture)Texture::createInstance(type);
     }
 
+    OSPGeometryInstance ISPCDevice::newGeometryInstance(OSPGeometry _geom)
+    {
+      auto *geom     = (Geometry *)_geom;
+      auto *instance = new GeometryInstance(geom);
+      return (OSPGeometryInstance)instance;
+    }
+
+    OSPVolumeInstance ISPCDevice::newVolumeInstance(OSPVolume _volume)
+    {
+      auto *volume   = (Volume *)_volume;
+      auto *instance = new VolumeInstance(volume);
+      return (OSPVolumeInstance)instance;
+    }
+
     int ISPCDevice::loadModule(const char *name)
     {
       return loadLocalModule(name);
@@ -351,6 +314,7 @@ namespace ospray {
     {
       auto f = renderFrameAsync(_fb, _renderer, _camera, _world);
       wait(f, OSP_FRAME_FINISHED);
+      release(f);
       return getVariance(_fb);
     }
 
@@ -410,11 +374,12 @@ namespace ospray {
       obj->refDec();
     }
 
-    void ISPCDevice::setMaterial(OSPGeometry _geometry, OSPMaterial _material)
+    void ISPCDevice::setMaterial(OSPGeometryInstance _instance,
+                                 OSPMaterial _material)
     {
-      Geometry *geometry = (Geometry *)_geometry;
-      Material *material = (Material *)_material;
-      geometry->setMaterial(material);
+      auto *instance = (GeometryInstance *)_instance;
+      auto *material = (Material *)_material;
+      instance->setMaterial(material);
     }
 
     OSPPickResult ISPCDevice::pick(OSPFrameBuffer _fb,
@@ -428,15 +393,6 @@ namespace ospray {
       Camera *camera     = (Camera *)_camera;
       World *world       = (World *)_world;
       return renderer->pick(fb, camera, world, screenPos);
-    }
-
-    void ISPCDevice::sampleVolume(float **results,
-                                  OSPVolume _volume,
-                                  const vec3f *worldCoordinates,
-                                  const size_t &count)
-    {
-      Volume *volume = (Volume *)_volume;
-      volume->computeSamples(results, worldCoordinates, count);
     }
 
     OSP_REGISTER_DEVICE(ISPCDevice, local_device);

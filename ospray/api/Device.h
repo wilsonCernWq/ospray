@@ -62,18 +62,6 @@ namespace ospray {
       /*! commit the given object's outstanding changes */
       virtual void commit(OSPObject object) = 0;
 
-      /*! add a new geometry to a model */
-      virtual void addGeometry(OSPWorld _model, OSPGeometry _geometry) = 0;
-
-      /*! remove an existing geometry from a model */
-      virtual void removeGeometry(OSPWorld _model, OSPGeometry _geometry) = 0;
-
-      /*! add a new volume to a model */
-      virtual void addVolume(OSPWorld _model, OSPVolume _volume) = 0;
-
-      /*! remove an existing volume from a model */
-      virtual void removeVolume(OSPWorld _model, OSPVolume _volume) = 0;
-
       /*! create a new data buffer */
       virtual OSPData newData(size_t nitems,
                               OSPDataType format,
@@ -150,9 +138,6 @@ namespace ospray {
       /*! create a new pixelOp object (out of list of registered pixelOps) */
       virtual OSPPixelOp newPixelOp(const char *type) = 0;
 
-      /*! set a frame buffer's pixel op object */
-      virtual void setPixelOp(OSPFrameBuffer _fb, OSPPixelOp _op) = 0;
-
       /*! create a new geometry object (out of list of registered geometries) */
       virtual OSPGeometry newGeometry(const char *type) = 0;
 
@@ -175,6 +160,10 @@ namespace ospray {
 
       /*! have given renderer create a new Light */
       virtual OSPLight newLight(const char *light_type) = 0;
+
+      virtual OSPGeometryInstance newGeometryInstance(OSPGeometry geom) = 0;
+
+      virtual OSPVolumeInstance newVolumeInstance(OSPVolume volume) = 0;
 
       virtual void resetAccumulation(OSPFrameBuffer _fb) = 0;
 
@@ -212,31 +201,12 @@ namespace ospray {
       virtual void release(OSPObject _obj) = 0;
 
       //! assign given material to given geometry
-      virtual void setMaterial(OSPGeometry _geom, OSPMaterial _mat) = 0;
-
-      /*! \brief create a new instance geometry that instantiates another
-        model.  the resulting geometry still has to be added to another
-        model via ospAddGeometry */
-      virtual OSPGeometry newInstance(OSPWorld modelToInstantiate,
-                                      const osp_affine3f &xfm)
-      {
-        UNUSED(modelToInstantiate, xfm);
-        NOT_IMPLEMENTED;
-      }
+      virtual void setMaterial(OSPGeometryInstance _inst, OSPMaterial _mat) = 0;
 
       /*! perform a pick operation */
       virtual OSPPickResult pick(
           OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld, const vec2f &)
       {
-        NOT_IMPLEMENTED;
-      }
-
-      virtual void sampleVolume(float **results,
-                                OSPVolume volume,
-                                const vec3f *worldCoordinates,
-                                const size_t &count)
-      {
-        UNUSED(results, volume, worldCoordinates, count);
         NOT_IMPLEMENTED;
       }
 

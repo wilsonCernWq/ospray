@@ -41,11 +41,6 @@ namespace ospray {
                   const vec3i &target_index,
                   const vec3i &source_count) override;
 
-    //! Compute samples at the given world coordinates.
-    void computeSamples(float **results,
-                        const vec3f *worldCoordinates,
-                        const size_t &count) override;
-
    private:
 
     // Helper functions for getting data array parameter
@@ -56,7 +51,8 @@ namespace ospray {
 
     // Read 32/64-bit integer value from given array
     inline uint64_t readInteger(const uint32_t* array,
-      bool is32Bit, uint64_t id) const
+                                bool is32Bit,
+                                uint64_t id) const
     {
       if (!is32Bit) id <<= 1;
       uint64_t value = *((const uint64_t*)(array + id));
@@ -70,10 +66,33 @@ namespace ospray {
     inline uint64_t getVertexId(uint64_t id) const
       { return readInteger(index, index32Bit, id); }
 
-    box4f getCellBBox(size_t id);
+    // Calculate all normals for arbitrary polyhedron
+    // based on given vertices order
+    inline void calculateCellNormals(
+      const uint64_t cellId,
+      const uint32_t faces[6][3],
+      const uint32_t facesCount)
+    {
+      // Get cell offset in the vertex indices array
+      uint64_t cOffset = getCellOffset(cellId);
 
-    //! Complete volume initialization (only on first commit).
-    void finish() override;
+      // Iterate through all faces
+      for (uint32_t i = 0; i < facesCount; i++) {
+
+        // Retrieve vertex positions
+        uint64_t vId0 = getVertexId(cOffset + faces[i][0]);
+        uint64_t vId1 = getVertexId(cOffset + faces[i][1]);
+        uint64_t vId2 = getVertexId(cOffset + faces[i][2]);
+        const vec3f& v0 = vertex[vId0];
+        const vec3f& v1 = vertex[vId1];
+        const vec3f& v2 = vertex[vId2];
+
+        // Calculate normal
+        faceNormals[cellId * 6 + i] = normalize(cross(v0 - v1, v2 - v1));
+      }
+    }
+
+    box4f getCellBBox(size_t id);
 
     void buildBvhAndCalculateBounds();
     void calculateFaceNormals();
@@ -106,8 +125,6 @@ namespace ospray {
     Data* cellValuePrev{nullptr};
 
     std::vector<vec3f> faceNormals;
-
-    box3f bbox;
 
     MinMaxBVH2 bvh;
 

@@ -19,7 +19,6 @@
 
 #include "render/pathtracer/materials/Medium.ih"
 #include "render/pathtracer/materials/Material.ih"
-#include "geometry/Instance.ih"
 #include "math/random.ih"
 #include "fb/LocalFB.ih"
 #include "bsdfs/MicrofacetAlbedoTables.ih"
@@ -252,14 +251,9 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer* uniform self,
     foreach_unique(m in material)
       if (m != NULL && reduce_max(m->emission) > 0.f) {
         float areaPdf;
-        // XXX same hack as in World.ih; to get areaPDF of hit geometry instance
-        if (ray.instID < 0) { // a regular geometry
-          areaPdf = self->areaPDF[ray.geomID];
-        } else { // an instance
-          foreach_unique(instID in ray.instID) {
-            Instance *uniform inst = (Instance *uniform)world->geometry[instID];
-            areaPdf = inst->areaPDF[ray.geomID];
-          }
+        foreach_unique(instID in ray.instID) {
+          GeometryInstance *uniform inst = (GeometryInstance *uniform)world->geometryInstances[instID];
+          areaPdf = inst->areaPDF;
         }
 
         // convert pdf wrt. area to pdf wrt. solid angle
@@ -500,7 +494,6 @@ export void PathTracer_set(void *uniform _self
     , void **uniform lights
     , const uniform uint32 numLights
     , const uniform uint32 numGeoLights
-    , void *uniform areaPDF
     )
 {
   PathTracer *uniform self = (PathTracer *uniform)_self;
@@ -518,7 +511,6 @@ export void PathTracer_set(void *uniform _self
   self->lights = (const uniform Light *uniform *uniform)lights;
   self->numLights = numLights;
   self->numGeoLights = numGeoLights;
-  self->areaPDF = (float *uniform)areaPDF;
 }
 
 export void* uniform PathTracer_create(void *uniform cppE)
@@ -527,7 +519,7 @@ export void* uniform PathTracer_create(void *uniform cppE)
   Renderer_Constructor(&self->super, cppE);
   self->super.renderTile = PathTracer_renderTile;
 
-  PathTracer_set(self, 5, inf, NULL, make_vec4f(0.f), NULL, 0, 0, NULL);
+  PathTracer_set(self, 5, inf, NULL, make_vec4f(0.f), NULL, 0, 0);
 
   precomputeMicrofacetAlbedoTables();
   precomputeZOrder();

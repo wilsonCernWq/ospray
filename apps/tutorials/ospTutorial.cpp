@@ -118,9 +118,16 @@ int main(int argc, const char **argv) {
 
   mesh.commit();
 
-  ospray::cpp::World world;
-  world.addGeometry(mesh);
+  ospray::cpp::GeometryInstance instance(mesh);
+  instance.commit();
   mesh.release(); // we are done using this handle
+
+  ospray::cpp::World world;
+  auto instanceHandle = instance.handle();
+  data = ospray::cpp::Data(1, OSP_OBJECT, &instanceHandle);
+  world.set("geometries", data);
+  instance.release(); // we are done using this handle
+  data.release(); // we are done using this handle
   world.commit();
 
   // create renderer

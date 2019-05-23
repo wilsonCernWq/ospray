@@ -41,6 +41,8 @@ class GLFWOSPRayWindow
   OSPWorld getWorld();
   void setWorld(OSPWorld newWorld);
 
+  void setPixelOps(OSPData ops);
+
   void resetAccumulation();
 
   void registerDisplayCallback(
@@ -68,9 +70,12 @@ class GLFWOSPRayWindow
   static GLFWOSPRayWindow *activeWindow;
 
   ospcommon::vec2i windowSize;
+  ospcommon::vec2f previousMouse{-1.f};
   ospcommon::box3f worldBounds;
   OSPWorld world       = nullptr;
   OSPRenderer renderer = nullptr;
+
+  bool showAlbedo{false};
 
   // GLFW window instance
   GLFWwindow *glfwWindow = nullptr;
@@ -82,6 +87,7 @@ class GLFWOSPRayWindow
   OSPCamera camera           = nullptr;
   OSPFrameBuffer framebuffer = nullptr;
   OSPFuture currentFrame     = nullptr;
+  OSPData pixelOps           = nullptr;
 
   // List of OSPRay handles to commit before the next frame
   ospcommon::TransactionalBuffer<OSPObject> objectsToCommit;

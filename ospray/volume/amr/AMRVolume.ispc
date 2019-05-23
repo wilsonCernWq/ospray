@@ -24,8 +24,6 @@
 #include "ospray/common/Ray.ih"
 #include "ospray/geometry/Geometry.ih"
 #include "ospray/transferFunction/LinearTransferFunction.ih"
-// embree
-#include "embree3/rtcore.isph"
 
 // ------------------------------------------------------------------
 //! The current level at the given sample location in world coordinates.
@@ -70,6 +68,7 @@ static varying vec3f AMR_gradient(const void *uniform _self, const varying vec3f
 // current AMR level cell size.
 // ray.time is set to interval length of intersected sample
 inline void AMR_stepRay(const void *uniform _volume,
+                        TransferFunction *uniform /*tfn*/,
                         varying Ray &ray,
                         const varying float samplingRate)
 {

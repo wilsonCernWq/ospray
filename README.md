@@ -1,13 +1,14 @@
 OSPRay
 ======
 
-This is release v2.0.0 (devel) of OSPRay. For changes and new features
-see the [changelog](CHANGELOG.md). Visit http://www.ospray.org for more
+This is release v2.0.0 (devel) of Intel® OSPRay. For changes and new
+features see the [changelog](CHANGELOG.md). Visit http://www.ospray.org
+for more information.
 
 OSPRay Overview
 ===============
 
-Intel® OSPRay is an **o**pen source, **s**calable, and **p**ortable
+Intel OSPRay is an **o**pen source, **s**calable, and **p**ortable
 **ray** tracing engine for high-performance, high-fidelity visualization
 on Intel Architecture CPUs. OSPRay is part of the [Intel Rendering
 Framework](https://software.intel.com/en-us/rendering-framework) and is
@@ -239,9 +240,9 @@ Documentation
 =============
 
 The following [API
-documentation](http://www.sdvis.org/ospray/download/OSPRay_readme.pdf "OSPRay Documentation")
+documentation](http://www.sdvis.org/ospray/download/OSPRay_readme_devel.pdf "OSPRay Documentation")
 of OSPRay can also be found as a [pdf
-document](http://www.sdvis.org/ospray/download/OSPRay_readme.pdf "OSPRay Documentation").
+document](http://www.sdvis.org/ospray/download/OSPRay_readme_devel.pdf "OSPRay Documentation").
 
 For a deeper explanation of the concepts, design, features and
 performance of OSPRay also have a look at the IEEE Vis 2016 paper
@@ -642,9 +643,9 @@ void ospSetObject(OSPObject, const char *id, OSPObject object);
 void ospSetVoidPtr(OSPObject, const char *id, void *v);
 
 // add scalar and vector integer and float parameters
-void ospSetf  (OSPObject, const char *id, float x);
+void ospSet1b (OSPObject, const char *id, int x);
 void ospSet1f (OSPObject, const char *id, float x);
-void ospSet1i (OSPObject, const char *id, int32_t x);
+void ospSet1i (OSPObject, const char *id, int x);
 void ospSet2f (OSPObject, const char *id, float x, float y);
 void ospSet2fv(OSPObject, const char *id, const float *xy);
 void ospSet2i (OSPObject, const char *id, int x, int y);
@@ -655,13 +656,6 @@ void ospSet3i (OSPObject, const char *id, int x, int y, int z);
 void ospSet3iv(OSPObject, const char *id, const int *xyz);
 void ospSet4f (OSPObject, const char *id, float x, float y, float z, float w);
 void ospSet4fv(OSPObject, const char *id, const float *xyzw);
-
-// additional functions to pass vector integer and float parameters in C++
-void ospSetVec2f(OSPObject, const char *id, const vec2f &v);
-void ospSetVec2i(OSPObject, const char *id, const vec2i &v);
-void ospSetVec3f(OSPObject, const char *id, const vec3f &v);
-void ospSetVec3i(OSPObject, const char *id, const vec3i &v);
-void ospSetVec4f(OSPObject, const char *id, const vec4f &v);
 ```
 
 Users can also remove parameters that have been explicitly set via an
@@ -709,7 +703,7 @@ the table below.
 | OSP\_MATERIAL           | material object reference                                         |
 | OSP\_TEXTURE            | texture object reference                                          |
 | OSP\_RENDERER           | renderer object reference                                         |
-| OSP\_MODEL              | model object reference                                            |
+| OSP\_WORLD              | world object reference                                            |
 | OSP\_GEOMETRY           | geometry object reference                                         |
 | OSP\_VOLUME             | volume object reference                                           |
 | OSP\_TRANSFER\_FUNCTION | transfer function object reference                                |
@@ -878,8 +872,8 @@ anymore, but has to be transferred to OSPRay via
 
 ``` {.cpp}
 OSPError ospSetRegion(OSPVolume, void *source,
-                      const vec3i &regionCoords,
-                      const vec3i &regionSize);
+                      osp_vec3i regionCoords,
+                      osp_vec3i regionSize);
 ```
 
 The voxel data pointed to by `source` is copied into the given volume
@@ -1090,11 +1084,12 @@ like the structured volume equivalent, but they only modify the root
 ### Unstructured Volumes
 
 Unstructured volumes can have its topology and geometry freely defined.
-Geometry can be composed of tetrahedral, wedge, or hexahedral cell
-types. Data format optinally matches VTK and consists from multiple
-arrays: vertex positions and values, vertex indices, cell start indices,
-cell types, and cell values. An unstructured volume type is created by
-passing the type string “`unstructured_volume`” to `ospNewVolume`.
+Geometry can be composed of tetrahedral, hexahedral, wedge or pyramid
+cell types. Used data format is compatible with VTK and consists from
+multiple arrays: vertex positions and values, vertex indices, cell start
+indices, cell types, and cell values. An unstructured volume type is
+created by passing the type string “`unstructured_volume`” to
+`ospNewVolume`.
 
 Sampled cell values can be specified either per-vertex (`vertex.value`)
 or per-cell (`cell.value`). If both arrays are set, `cell.value` takes
@@ -1106,14 +1101,19 @@ will be used for sampling when rendering, if specified. The index order
 for a tetrahedron is the same as `VTK_TETRA`: bottom triangle
 counterclockwise, then the top vertex.
 
+For hexahedral cells, each hexahedron is formed by a group of eight
+indices into the vertices and data values. Vertex ordering is the same
+as `VTK_HEXAHEDRON`: four bottom vertices counterclockwise, then top
+four counterclockwise.
+
 For wedge cells, each wedge is formed by a group of six indices into the
-vertices and data value. Vertex ordering is the same as `VTK_WEDGE`:
+vertices and data values. Vertex ordering is the same as `VTK_WEDGE`:
 three bottom vertices counterclockwise, then top three counterclockwise.
 
-For hexahedral cells, each hexahedron is formed by a group of eight
-indices into the vertices and data value. Vertex ordering is the same as
-`VTK_HEXAHEDRON`: four bottom vertices counterclockwise, then top four
-counterclockwise.
+For pyramid cells, each cell is formed by a group of five indices into
+the vertices and data values. Vertex ordering is the same as
+`VTK_PYRAMID`: four bottom vertices counterclockwise, then the top
+vertex.
 
 To maintain VTK data compatibility an index array may be specified via
 `indexPrefixed` array that allow vertex indices to be interleaved with
@@ -1182,8 +1182,8 @@ $n, id_1, ..., id_n, m, id_1, ..., id_m$.
 <tr class="even">
 <td style="text-align: left;">string</td>
 <td style="text-align: left;">hexMethod</td>
-<td style="text-align: left;">planar</td>
-<td style="text-align: left;">“planar” (faster, assumes planar sides) or “nonplanar”</td>
+<td style="text-align: left;">fast</td>
+<td style="text-align: left;">hexahedron interpolation method, “fast” (rendering inaccuracies may appear if hex is not parallelepiped) or “iterative”</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">bool</td>
@@ -1659,16 +1659,80 @@ function](#transfer-function).
 
 : Parameters defining a slices geometry.
 
-### Instances
+GeometryInstances
+-----------------
 
-OSPRay supports instancing via a special type of geometry. Instances are
-created by transforming another given [model](#model)
-`modelToInstantiate` with the given affine transformation `transform` by
-calling
+Geometries in OSPRay are instantiated in a World to give them a
+world-space transform and addition appearance information. To create a
+geometry instance, call
 
 ``` {.cpp}
-OSPGeometry ospNewInstance(OSPModel modelToInstantiate, const affine3f &transform);
+OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geometry);
 ```
+
+<table style="width:98%;">
+<caption>Parameters understood by GeometryInstance.</caption>
+<colgroup>
+<col style="width: 22%" />
+<col style="width: 22%" />
+<col style="width: 12%" />
+<col style="width: 40%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Type</th>
+<th style="text-align: left;">Name</th>
+<th style="text-align: left;">Default</th>
+<th style="text-align: left;">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">vec3f</td>
+<td style="text-align: left;">xfm.l.vx</td>
+<td style="text-align: left;">(1,0,0)</td>
+<td style="text-align: left;">First row of the world-space transformation matrix</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">vec3f</td>
+<td style="text-align: left;">xfm.l.vy</td>
+<td style="text-align: left;">(0,1,0)</td>
+<td style="text-align: left;">Second row of the world-space transformation matrix</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">vec3f</td>
+<td style="text-align: left;">xfm.l.vz</td>
+<td style="text-align: left;">(0,0,1)</td>
+<td style="text-align: left;">Third row of the world-space transformation matrix</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">vec3f</td>
+<td style="text-align: left;">xfm.p</td>
+<td style="text-align: left;">(0,0,0)</td>
+<td style="text-align: left;">Fourth row of the world-space transformation matrix</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">vec4f[]</td>
+<td style="text-align: left;">color</td>
+<td style="text-align: left;">NULL</td>
+<td style="text-align: left;"><a href="#data">data</a> array of per-primitive colors</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">uint32[]</td>
+<td style="text-align: left;">prim.materialID</td>
+<td style="text-align: left;">NULL</td>
+<td style="text-align: left;"><a href="#data">data</a> array of per-primitive colors</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">OSPMaterial[]</td>
+<td style="text-align: left;">materialList</td>
+<td style="text-align: left;">NULL</td>
+<td style="text-align: left;"><a href="#data">data</a> array of per-primitive materials, which overrides any single material set by ’ospSetMaterial`. This is also the list optionally indexed by “prim.materialID” (otherwise it is per-primitive)</td>
+</tr>
+</tbody>
+</table>
+
+: Parameters understood by GeometryInstance.
 
 Renderer
 --------
@@ -1702,18 +1766,6 @@ all renderers are
 </tr>
 </thead>
 <tbody>
-<tr class="odd">
-<td style="text-align: left;">OSPModel</td>
-<td style="text-align: left;">model</td>
-<td style="text-align: right;"></td>
-<td style="text-align: left;">the <a href="#model">model</a> to render</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">OSPCamera</td>
-<td style="text-align: left;">camera</td>
-<td style="text-align: right;"></td>
-<td style="text-align: left;">the <a href="#cameras">camera</a> to be used for rendering</td>
-</tr>
 <tr class="odd">
 <td style="text-align: left;">OSPLight[]</td>
 <td style="text-align: left;">lights</td>
@@ -1900,38 +1952,37 @@ The path tracer requires that [materials](#materials) are assigned to
 [geometries](#geometries), otherwise surfaces are treated as completely
 black.
 
-### Model
+### World
 
-Models are a container of scene data. They can hold the different
+Worlds are a container of scene data. They can hold the different
 [geometries](#geometries) and [volumes](#volumes) as well as references
-to (and [instances](#instances) of) other models. A model is associated
-with a single logical acceleration structure. To create an (empty) model
-call
+to (and \[instances\] of) other worlds. A world is associated with a
+single logical acceleration structure. To create an (empty) world call
 
 ``` {.cpp}
-OSPModel ospNewModel();
+OSPWorld ospNewWorld();
 ```
 
-The call returns an `OSPModel` handle to the created model. To add an
-already created geometry or volume to a model use
+The call returns an `OSPWorld` handle to the created world. To add an
+already created geometry instance or volume to a world use
 
 ``` {.cpp}
-void ospAddGeometry(OSPModel, OSPGeometry);
-void ospAddVolume(OSPModel, OSPVolume);
+void ospAddGeometryInstance(OSPWorld, OSPGeometryInstance);
+void ospAddVolume(OSPWorld, OSPVolume);
 ```
 
-An existing geometry or volume can be removed from a model with
+An existing geometry or volume can be removed from a world with
 
 ``` {.cpp}
-void ospRemoveGeometry(OSPModel, OSPGeometry);
-void ospRemoveVolume(OSPModel, OSPVolume);
+void ospRemoveGeometryInstance(OSPWorld, OSPGeometryInstance);
+void ospRemoveVolume(OSPWorld, OSPVolume);
 ```
 
-Finally, Models can be configured with parameters for making various
+Finally, Worlds can be configured with parameters for making various
 feature/performance trade-offs:
 
 <table style="width:97%;">
-<caption>Parameters understood by Models</caption>
+<caption>Parameters understood by Worlds</caption>
 <colgroup>
 <col style="width: 17%" />
 <col style="width: 20%" />
@@ -1968,14 +2019,14 @@ feature/performance trade-offs:
 </tbody>
 </table>
 
-: Parameters understood by Models
+: Parameters understood by Worlds
 
 ### Lights
 
 To create a new light source of given type `type` use
 
 ``` {.cpp}
-OSPLight ospNewLight3(const char *type);
+OSPLight ospNewLight(const char *type);
 ```
 
 The call returns `NULL` if that type of light is not known by the
@@ -1997,7 +2048,7 @@ The following light types are supported by most OSPRay renderers.
 The distant light (or traditionally the directional light) is thought to
 be far away (outside of the scene), thus its light arrives (almost) as
 parallel rays. It is created by passing the type string “`distant`” to
-`ospNewLight3`. In addition to the [general parameters](#lights)
+`ospNewLight`. In addition to the [general parameters](#lights)
 understood by all lights the distant light supports the following
 special parameters:
 
@@ -2017,7 +2068,7 @@ about 0.53°.
 
 The sphere light (or the special case point light) is a light emitting
 uniformly in all directions. It is created by passing the type string
-“`sphere`” to `ospNewLight3`. In addition to the [general
+“`sphere`” to `ospNewLight`. In addition to the [general
 parameters](#lights) understood by all lights the sphere light supports
 the following special parameters:
 
@@ -2035,7 +2086,7 @@ tracer](#path-tracer)).
 #### Spotlight
 
 The spotlight is a light emitting into a cone of directions. It is
-created by passing the type string “`spot`” to `ospNewLight3`. In
+created by passing the type string “`spot`” to `ospNewLight`. In
 addition to the [general parameters](#lights) understood by all lights
 the spotlight supports the special parameters listed in the table.
 
@@ -2095,7 +2146,7 @@ tracer](#path-tracer)).
 
 The quad[^6] light is a planar, procedural area light source emitting
 uniformly on one side into the half-space. It is created by passing the
-type string “`quad`” to `ospNewLight3`. In addition to the [general
+type string “`quad`” to `ospNewLight`. In addition to the [general
 parameters](#lights) understood by all lights the quad light supports
 the following special parameters:
 
@@ -2120,7 +2171,7 @@ shadows.
 
 The HDRI light is a textured light source surrounding the scene and
 illuminating it from infinity. It is created by passing the type string
-“`hdri`” to `ospNewLight3`. In addition to the [parameter
+“`hdri`” to `ospNewLight`. In addition to the [parameter
 `intensity`](#lights) the HDRI light supports the following special
 parameters:
 
@@ -2170,7 +2221,7 @@ the HDRI light.
 The ambient light surrounds the scene and illuminates it from infinity
 with constant radiance (determined by combining the [parameters `color`
 and `intensity`](#lights)). It is created by passing the type string
-“`ambient`” to `ospNewLight3`.
+“`ambient`” to `ospNewLight`.
 
 Note that the [SciVis renderer](#scivis-renderer) uses ambient lights to
 control the color and intensity of the computed ambient occlusion (AO).
@@ -2188,7 +2239,7 @@ their distinctive look. To let the given renderer create a new material
 of given type `type` call
 
 ``` {.cpp}
-OSPMaterial ospNewMaterial2(const char *renderer_type, const char *material_type);
+OSPMaterial ospNewMaterial(const char *renderer_type, const char *material_type);
 ```
 
 The call returns `NULL` if the material type is not known by the
@@ -2197,7 +2248,7 @@ The handle can then be used to assign the material to a given geometry
 with
 
 ``` {.cpp}
-void ospSetMaterial(OSPGeometry, OSPMaterial);
+void ospSetMaterial(OSPGeometryInstance, OSPMaterial);
 ```
 
 #### OBJ Material
@@ -2208,7 +2259,7 @@ offers widely used common properties like diffuse and specular
 reflection and is based on the [MTL material
 format](http://paulbourke.net/dataformats/mtl/) of Lightwave’s OBJ scene
 files. To create an OBJ material pass the type string “`OBJMaterial`” to
-`ospNewMaterial2`. Its main parameters are
+`ospNewMaterial`. Its main parameters are
 
 | Type       | Name      |    Default| Description                                        |
 |:-----------|:----------|----------:|:---------------------------------------------------|
@@ -2238,11 +2289,9 @@ below).
 <img src="https://ospray.github.io/images/diffuse_rooms.png" alt="Comparison of diffuse rooms with 100% reflecting white paint (left) and realistic 80% reflecting white paint (right), which leads to higher overall contrast. Note that exposure has been adjusted to achieve similar brightness levels." width="80.0%" /><figcaption>Comparison of diffuse rooms with 100% reflecting white paint (left) and realistic 80% reflecting white paint (right), which leads to higher overall contrast. Note that exposure has been adjusted to achieve similar brightness levels.</figcaption>
 </figure>
 
-
-
-If present, the color component of [geometries](#geometries) is also
-used for the diffuse color `Kd` and the alpha component is also used for
-the opacity `d`.
+If present, the color component of [geometries](#geometries) is
+also used for the diffuse color `Kd` and the alpha component is also
+used for the opacity `d`.
 
 Note that currently only the path tracer implements colored transparency
 with `Tf`.
@@ -2264,8 +2313,6 @@ invert its green channel.
 <img src="https://ospray.github.io/images/normalmap_frustum.png" alt="Normal map representing an exalted square pyramidal frustum." width="60.0%" /><figcaption>Normal map representing an exalted square pyramidal frustum.</figcaption>
 </figure>
 
-
-
 All parameters (except `Tf`) can be textured by passing a
 [texture](#texture) handle, prefixed with “`map_`”. The fetched texels
 are multiplied by the respective parameter value. Texturing requires
@@ -2280,8 +2327,6 @@ textures support [texture transformations](#texture2d-transformations).
 <img src="https://ospray.github.io/images/material_OBJ.jpg" alt="Rendering of a OBJ material with wood textures." width="60.0%" /><figcaption>Rendering of a OBJ material with wood textures.</figcaption>
 </figure>
 
-
-
 #### Principled
 
 The Principled material is the most complex material offered by the
@@ -2291,7 +2336,7 @@ multiple different layers and lobes. It uses the GGX microfacet
 distribution with approximate multiple scattering for dielectrics and
 metals, uses the Oren-Nayar model for diffuse reflection, and is energy
 conserving. To create a Principled material, pass the type string
-“`Principled`” to `ospNewMaterial2`. Its parameters are listed in the
+“`Principled`” to `ospNewMaterial`. Its parameters are listed in the
 table below.
 
 <table style="width:98%;">
@@ -2492,14 +2537,12 @@ transformations](#texture2d-transformations) are supported as well.
 <img src="https://ospray.github.io/images/material_Principled.jpg" alt="Rendering of a Principled coated brushed metal material with textured anisotropic rotation and a dust layer (sheen) on top." width="60.0%" /><figcaption>Rendering of a Principled coated brushed metal material with textured anisotropic rotation and a dust layer (sheen) on top.</figcaption>
 </figure>
 
-
-
 #### CarPaint
 
 The CarPaint material is a specialized version of the Principled
 material for rendering different types of car paints. To create a
 CarPaint material, pass the type string “`CarPaint`” to
-`ospNewMaterial2`. Its parameters are listed in the table below.
+`ospNewMaterial`. Its parameters are listed in the table below.
 
 <table style="width:98%;">
 <caption>Parameters of the CarPaint material.</caption>
@@ -2627,13 +2670,11 @@ transformations](#texture2d-transformations) are supported as well.
 <img src="https://ospray.github.io/images/material_CarPaint.jpg" alt="Rendering of a pearlescent CarPaint material." width="60.0%" /><figcaption>Rendering of a pearlescent CarPaint material.</figcaption>
 </figure>
 
-
-
 #### Metal
 
 The [path tracer](#path-tracer) offers a physical metal, supporting
 changing roughness and realistic color shifts at edges. To create a
-Metal material pass the type string “`Metal`” to `ospNewMaterial2`. Its
+Metal material pass the type string “`Metal`” to `ospNewMaterial`. Its
 parameters are
 
 <table style="width:97%;">
@@ -2715,14 +2756,12 @@ create notable edging effects.
 <img src="https://ospray.github.io/images/material_Metal.jpg" alt="Rendering of golden Metal material with textured roughness." width="60.0%" /><figcaption>Rendering of golden Metal material with textured roughness.</figcaption>
 </figure>
 
-
-
 #### Alloy
 
 The [path tracer](#path-tracer) offers an alloy material, which behaves
 similar to [Metal](#metal), but allows for more intuitive and flexible
 control of the color. To create an Alloy material pass the type string
-“`Alloy`” to `ospNewMaterial2`. Its parameters are
+“`Alloy`” to `ospNewMaterial`. Its parameters are
 
 | Type  | Name      |    Default| Description                                 |
 |:------|:----------|----------:|:--------------------------------------------|
@@ -2746,14 +2785,12 @@ transformations](#texture2d-transformations) are supported as well.
 <img src="https://ospray.github.io/images/material_Alloy.jpg" alt="Rendering of a fictional Alloy material with textured color." width="60.0%" /><figcaption>Rendering of a fictional Alloy material with textured color.</figcaption>
 </figure>
 
-
-
 #### Glass
 
 The [path tracer](#path-tracer) offers a realistic a glass material,
 supporting refraction and volumetric attenuation (i.e., the transparency
 color varies with the geometric thickness). To create a Glass material
-pass the type string “`Glass`” to `ospNewMaterial2`. Its parameters are
+pass the type string “`Glass`” to `ospNewMaterial`. Its parameters are
 
 | Type  | Name                |  Default| Description                        |
 |:------|:--------------------|--------:|:-----------------------------------|
@@ -2772,8 +2809,6 @@ trough a glass of thickness `attenuationDistance`.
 <img src="https://ospray.github.io/images/material_Glass.jpg" alt="Rendering of a Glass material with orange attenuation." width="60.0%" /><figcaption>Rendering of a Glass material with orange attenuation.</figcaption>
 </figure>
 
-
-
 #### ThinGlass
 
 The [path tracer](#path-tracer) offers a thin glass material useful for
@@ -2783,7 +2818,7 @@ surface is parallel to the real geometric surface. The implementation
 accounts for multiple internal reflections between the interfaces
 (including attenuation), but neglects parallax effects due to its
 (virtual) thickness. To create a such a thin glass material pass the
-type string “`ThinGlass`” to `ospNewMaterial2`. Its parameters are
+type string “`ThinGlass`” to `ospNewMaterial`. Its parameters are
 
 | Type  | Name                |  Default| Description                        |
 |:------|:--------------------|--------:|:-----------------------------------|
@@ -2809,20 +2844,16 @@ attenuation and thus the material appearance.
 <img src="https://ospray.github.io/images/material_ThinGlass.jpg" alt="Rendering of a ThinGlass material with red attenuation." width="60.0%" /><figcaption>Rendering of a ThinGlass material with red attenuation.</figcaption>
 </figure>
 
-
-
 <figure>
 <img src="https://ospray.github.io/images/ColoredWindow.jpg" alt="Example image of a colored window made with textured attenuation of the ThinGlass material." width="60.0%" /><figcaption>Example image of a colored window made with textured attenuation of the ThinGlass material.</figcaption>
 </figure>
-
-
 
 #### MetallicPaint
 
 The [path tracer](#path-tracer) offers a metallic paint material,
 consisting of a base coat with optional flakes and a clear coat. To
 create a MetallicPaint material pass the type string “`MetallicPaint`”
-to `ospNewMaterial2`. Its parameters are listed in the table below.
+to `ospNewMaterial`. Its parameters are listed in the table below.
 
 | Type  | Name        |    Default| Description                       |
 |:------|:------------|----------:|:----------------------------------|
@@ -2850,22 +2881,18 @@ average, thus individual flakes are not visible.
 <img src="https://ospray.github.io/images/material_MetallicPaint.jpg" alt="Rendering of a MetallicPaint material." width="60.0%" /><figcaption>Rendering of a MetallicPaint material.</figcaption>
 </figure>
 
-
-
 #### Luminous
 
 The [path tracer](#path-tracer) supports the Luminous material which
 emits light uniformly in all directions and which can thus be used to
 turn any geometric object into a light source. It is created by passing
-the type string “`Luminous`” to `ospNewMaterial2`. The amount of
-constant radiance that is emitted is determined by combining the general
+the type string “`Luminous`” to `ospNewMaterial`. The amount of constant
+radiance that is emitted is determined by combining the general
 parameters of lights: [`color` and `intensity`](#lights).
 
 <figure>
 <img src="https://ospray.github.io/images/material_Luminous.jpg" alt="Rendering of a yellow Luminous material." width="60.0%" /><figcaption>Rendering of a yellow Luminous material.</figcaption>
 </figure>
-
-
 
 ### Texture
 
@@ -3079,19 +3106,13 @@ images below.
 <img src="https://ospray.github.io/images/camera_perspective.jpg" alt="Example image created with the perspective camera, featuring depth of field." width="60.0%" /><figcaption>Example image created with the perspective camera, featuring depth of field.</figcaption>
 </figure>
 
-
-
 <figure>
 <img src="https://ospray.github.io/images/camera_architectural.jpg" alt="Enabling the architectural flag corrects the perspective projection distortion, resulting in parallel vertical edges." width="60.0%" /><figcaption>Enabling the <code>architectural</code> flag corrects the perspective projection distortion, resulting in parallel vertical edges.</figcaption>
 </figure>
 
-
-
 <figure>
 <img src="https://ospray.github.io/images/camera_stereo.jpg" alt="Example 3D stereo image using stereoMode side-by-side." width="90.0%" /><figcaption>Example 3D stereo image using <code>stereoMode</code> side-by-side.</figcaption>
 </figure>
-
-
 
 #### Orthographic Camera
 
@@ -3119,8 +3140,6 @@ and `imageEnd`, and both methods can be combined. In any case, the
 <img src="https://ospray.github.io/images/camera_orthographic.jpg" alt="Example image created with the orthographic camera." width="60.0%" /><figcaption>Example image created with the orthographic camera.</figcaption>
 </figure>
 
-
-
 #### Panoramic Camera
 
 The panoramic camera implements a simple camera without support for
@@ -3134,23 +3153,28 @@ by using the [general parameters](#cameras) understood by all cameras.
 <img src="https://ospray.github.io/images/camera_panoramic.jpg" alt="Latitude / longitude map created with the panoramic camera." width="90.0%" /><figcaption>Latitude / longitude map created with the panoramic camera.</figcaption>
 </figure>
 
-
-
 ### Picking
 
 To get the world-space position of the geometry (if any) seen at \[0–1\]
 normalized screen-space pixel coordinates `screenPos` use
 
 ``` {.cpp}
-void ospPick(OSPPickResult*, OSPRenderer, const vec2f &screenPos);
+void ospPick(OSPPickResult *,
+             OSPFrameBuffer,
+             OSPRenderer,
+             OSPCamera,
+             OSPWorld,
+             osp_vec2f screenPos);
 ```
 
 The result is returned in the provided `OSPPickResult` struct:
 
 ``` {.cpp}
 typedef struct {
-    vec3f position; // the position of the hit point (in world-space)
-    bool hit;       // whether or not a hit actually occurred
+    int hasHit;
+    osp_vec3f worldPosition;
+    OSPGeometryInstance geometryInstance;
+    uint32_t primID;
 } OSPPickResult;
 ```
 
@@ -3167,9 +3191,9 @@ information associated with pixels). To create a new framebuffer object
 of given size `size` (in pixels), color format, and channels use
 
 ``` {.cpp}
-OSPFrameBuffer ospNewFrameBuffer(const vec2i &size,
-                                 const OSPFrameBufferFormat format = OSP_FB_SRGBA,
-                                 const uint32_t frameBufferChannels = OSP_FB_COLOR);
+OSPFrameBuffer ospNewFrameBuffer(osp_vec2i size,
+                                 OSPFrameBufferFormat format = OSP_FB_SRGBA,
+                                 uint32_t frameBufferChannels = OSP_FB_COLOR);
 ```
 
 The parameter `format` describes the format the color buffer has *on the
@@ -3227,7 +3251,7 @@ access the stored pixel information – via
 
 ``` {.cpp}
 const void *ospMapFrameBuffer(OSPFrameBuffer,
-                              const OSPFrameBufferChannel = OSP_FB_COLOR);
+                              OSPFrameBufferChannel = OSP_FB_COLOR);
 ```
 
 Note that `OSP_FB_ACCUM` or `OSP_FB_VARIANCE` cannot be mapped. The
@@ -3265,6 +3289,17 @@ Note this value is only updated after synchronizing with
 `OSP_FRAME_FINISHED`, as further described in [asynchronous
 rendering](#asynchronous-rendering).
 
+The framebuffer takes a list of pixel operations to be applied to the
+image in sequence as an `OSPData`. The pixel operations will be run in
+the order they are in the array.
+
+| Type           | Name            | Default | Description                            |
+|:---------------|:----------------|:--------|:---------------------------------------|
+| OSPPixelOp\[\] | pixelOperations | NULL    | The ordered sequence of pixel          |
+|                |                 |         | operations to apply to rendered tiles. |
+
+: Parameters accepted by the framebuffer.
+
 ### Pixel Operation {#pixel-operation .unnumbered}
 
 Pixel operations are functions that are applied to every pixel that gets
@@ -3278,12 +3313,6 @@ OSPPixelOp ospNewPixelOp(const char *type);
 
 The call returns `NULL` if that type is not known, or else an
 `OSPPixelOp` handle to the created pixel operation.
-
-To set a pixel operation to the given framebuffer use
-
-``` {.cpp}
-void ospSetPixelOp(OSPFrameBuffer, OSPPixelOp);
-```
 
 #### Tone Mapper {#tone-mapper .unnumbered}
 
@@ -3375,20 +3404,18 @@ Rendering
 To render a frame into the given framebuffer with the given renderer use
 
 ``` {.cpp}
-float ospRenderFrame(OSPFrameBuffer, OSPRenderer,
-                     const uint32_t frameBufferChannels = OSP_FB_COLOR);
+float ospRenderFrame(OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld);
 ```
 
-The third parameter specifies what channel(s) of the framebuffer is
-written to[^8]. What to render and how to render it depends on the
-renderer’s parameters. If the framebuffer supports accumulation (i.e.,
-it was created with `OSP_FB_ACCUM`) then successive calls to
-`ospRenderFrame` will progressively refine the rendered image. If
-additionally the framebuffer has an `OSP_FB_VARIANCE` channel then
-`ospRenderFrame` returns an estimate of the current variance of the
-rendered image, otherwise `inf` is returned. The estimated variance can
-be used by the application as a quality indicator and thus to decide
-whether to stop or to continue progressive rendering.
+What to render and how to render it depends on the renderer’s
+parameters. If the framebuffer supports accumulation (i.e., it was
+created with `OSP_FB_ACCUM`) then successive calls to `ospRenderFrame`
+will progressively refine the rendered image. If additionally the
+framebuffer has an `OSP_FB_VARIANCE` channel then `ospRenderFrame`
+returns an estimate of the current variance of the rendered image,
+otherwise `inf` is returned. The estimated variance can be used by the
+application as a quality indicator and thus to decide whether to stop or
+to continue progressive rendering.
 
 ### Asynchronous Rendering
 
@@ -3398,7 +3425,8 @@ the above synchronous version. To start an asynchronous render, use
 ``` {.cpp}
 OSPFuture ospRenderFrameAsync(OSPFrameBuffer,
                               OSPRenderer,
-                              const uint32_t);
+                              OSPCamera,
+                              OSPWorld);
 ```
 
 This version returns an `OSPFuture` handle, which can be used to
@@ -3442,6 +3470,16 @@ The following are values which can be synchronized with the application
 Currently only rendering can be invoked asynchronously. However, future
 releases of OSPRay may add more asynchronous versions of API calls (and
 thus return `OSPFuture`).
+
+Applications can query whether particular events are complete with
+
+``` {.cpp}
+int ospIsReady(OSPFuture, OSPSyncEvent = OSP_TASK_FINISHED);
+```
+
+As the given running task runs (as tracked by the `OSPFuture`),
+applications can query a boolean \[0,1\] result if the passed event has
+been completed.
 
 ### Asynchronous Rendering and ospCommit()
 
@@ -3533,7 +3571,7 @@ have its own limitations on the topology of the data (i.e., overlapping
 data regions, concave data, etc.), but the API calls will only differ
 for scene objects. Thus all other calls (i.e., setting camera, creating
 framebuffer, rendering frame, etc.) will all be assumed to be identical,
-but only rendering a frame and committing the model must be in
+but only rendering a frame and committing the world must be in
 lock-step. This mode targets using all available aggregate memory for
 huge scenes and for “in-situ” visualization where the data is already
 distributed by a simulation app.
@@ -3636,14 +3674,14 @@ can create a communicator with one rank per-node to then run OSPRay on
 one process per-node. The remaining ranks on each node can then
 aggregate their data to the OSPRay process for rendering.
 
-The model used by the distributed device takes three additional
+The world used by the distributed device takes three additional
 parameters, to allow users to express their data distribution to OSPRay.
-All models should be disjoint to ensure correct sort-last compositing.
+All worlds should be disjoint to ensure correct sort-last compositing.
 Geometries used in the distributed MPI renderer can make use of the
 [SciVis renderer](#scivis-renderer)’s [OBJ material](#obj-material).
 
 <table style="width:98%;">
-<caption>Parameters for the distributed <code>OSPModel</code>.</caption>
+<caption>Parameters for the distributed <code>OSPWorld</code>.</caption>
 <colgroup>
 <col style="width: 8%" />
 <col style="width: 17%" />
@@ -3660,31 +3698,31 @@ Geometries used in the distributed MPI renderer can make use of the
 <tr class="odd">
 <td style="text-align: left;">int</td>
 <td style="text-align: left;">id</td>
-<td style="text-align: left;">An integer that uniquely identifies this piece of distributed data. For example, in a common case of one sub-brick per-rank, this would just be the region’s MPI rank. Multiple ranks can specify models with the same ID, in which case the rendering work for the model will be shared among them.</td>
+<td style="text-align: left;">An integer that uniquely identifies this piece of distributed data. For example, in a common case of one sub-brick per-rank, this would just be the region’s MPI rank. Multiple ranks can specify worlds with the same ID, in which case the rendering work for the world will be shared among them.</td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">vec3f</td>
 <td style="text-align: left;">region.lower</td>
-<td style="text-align: left;">Override the original model geometry + volume bounds with a custom lower bound position. This can be used to clip geometry in the case the objects cross over to another region owned by a different node. For example, rendering a set of spheres with radius.</td>
+<td style="text-align: left;">Override the original world geometry + volume bounds with a custom lower bound position. This can be used to clip geometry in the case the objects cross over to another region owned by a different node. For example, rendering a set of spheres with radius.</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">vec3f</td>
 <td style="text-align: left;">region.upper</td>
-<td style="text-align: left;">Override the original model geometry + volume bounds with a custom upper bound position.</td>
+<td style="text-align: left;">Override the original world geometry + volume bounds with a custom upper bound position.</td>
 </tr>
 </tbody>
 </table>
 
-: Parameters for the distributed `OSPModel`.
+: Parameters for the distributed `OSPWorld`.
 
 The renderer supported when using the distributed device is the
 `mpi_raycast` renderer. This renderer is an experimental renderer and
 currently only supports ambient occlusion (on the local data only, with
 optional ghost data). To compute correct ambient occlusion across the
 distributed data the application is responsible for replicating ghost
-data and specifying the ghost models and models as described above. Note
+data and specifying the ghost worlds and worlds as described above. Note
 that shadows and ambient occlusion are computed on the local geometries,
-in the `model` and the corresponding `ghostModel` in the ghost model
+in the `world` and the corresponding `ghostModel` in the ghost model
 array, if any where set.
 
 <table style="width:98%;">
@@ -3705,16 +3743,16 @@ array, if any where set.
 </thead>
 <tbody>
 <tr class="odd">
-<td style="text-align: left;">OSPModel/OSPModel[]</td>
+<td style="text-align: left;">OSPWorld/OSPWorld[]</td>
 <td style="text-align: left;">model</td>
 <td style="text-align: right;">NULL</td>
-<td style="text-align: left;">the <a href="#model">model</a> to render, can optionally be a <a href="#data">data</a> array of multiple models</td>
+<td style="text-align: left;">the <a href="#world">world</a> to render, can optionally be a <a href="#data">data</a> array of multiple worlds</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">OSPModel/OSPModel[]</td>
+<td style="text-align: left;">OSPWorld/OSPWorld[]</td>
 <td style="text-align: left;">ghostModel</td>
 <td style="text-align: right;">NULL</td>
-<td style="text-align: left;">the optional <a href="#model">model</a> containing the ghost geometry for ambient occlusion; when setting a <a href="#data">data</a> array for both <code>model</code> and <code>ghostModel</code>, each individual ghost model shadows only its corresponding model</td>
+<td style="text-align: left;">the optional <a href="#world">world</a> containing the ghost geometry for ambient occlusion; when setting a <a href="#data">data</a> array for both <code>model</code> and <code>ghostModel</code>, each individual ghost world shadows only its corresponding world</td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;">OSPLight[]</td>
@@ -3911,7 +3949,7 @@ Simple Tutorial
 ---------------
 
 A minimal working example demonstrating how to use OSPRay can be found
-at `apps/ospTutorial.c`[^9]. On Linux build it in the build directory
+at `apps/ospTutorial.c`[^8]. On Linux build it in the build directory
 with
 
     gcc -std=c99 ../apps/ospTutorial.c -I ../ospray/include -I .. \
@@ -4132,9 +4170,6 @@ page.
 
 [^7]: respectively $(127, 127, 255)$ for 8 bit textures
 
-[^8]: This is currently not implemented, i.e., all channels of the
-    framebuffer are always updated.
-
-[^9]: A C++ version that uses the C++ convenience wrappers of OSPRay’s
+[^8]: A C++ version that uses the C++ convenience wrappers of OSPRay’s
     C99 API via `include/ospray/ospray_cpp.h` is available at
     `apps/ospTutorial.cpp`.

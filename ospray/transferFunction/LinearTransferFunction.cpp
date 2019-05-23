@@ -35,8 +35,8 @@ namespace ospray {
     // Retrieve the color and opacity values.
     colorValues   = getParamData("colors", nullptr);
     opacityValues = getParamData("opacities", nullptr);
-    ispc::LinearTransferFunction_setPreIntegration(ispcEquivalent,
-                                               getParam1i("preIntegration", 0));
+    ispc::LinearTransferFunction_setPreIntegration(
+        ispcEquivalent, getParam1b("preIntegration", false));
 
     // Set the color values.
     if (colorValues) {
@@ -52,7 +52,7 @@ namespace ospray {
                                                     (float *)opacityValues->data);
     }
 
-    if (getParam1i("preIntegration", 0) && colorValues && opacityValues)
+    if (getParam1b("preIntegration", false) && colorValues && opacityValues)
       ispc::LinearTransferFunction_precomputePreIntegratedValues(ispcEquivalent);
 
     TransferFunction::commit();

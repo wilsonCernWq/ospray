@@ -26,7 +26,9 @@
 
 using namespace ospcommon;
 
-OSPGeometry createGroundPlaneGeometry()
+static std::string renderer_type = "scivis";
+
+OSPGeometryInstance createGroundPlane()
 {
   OSPGeometry planeGeometry = ospNewGeometry("quads");
 
@@ -148,14 +150,18 @@ OSPGeometry createGroundPlaneGeometry()
   ospSetData(planeGeometry, "vertex.color", colorData);
   ospSetData(planeGeometry, "index", indexData);
 
-  // create and assign a material to the geometry
-  OSPMaterial material = ospNewMaterial("scivis", "OBJMaterial");
-  ospCommit(material);
-
-  ospSetMaterial(planeGeometry, material);
-
   // finally, commit the geometry
   ospCommit(planeGeometry);
+
+  OSPGeometryInstance planeInstance = ospNewGeometryInstance(planeGeometry);
+
+  ospRelease(planeGeometry);
+
+  // create and assign a material to the geometry
+  OSPMaterial material = ospNewMaterial(renderer_type.c_str(), "OBJMaterial");
+  ospCommit(material);
+
+  ospSetMaterial(planeInstance, material);
 
   // release handles we no longer need
   ospRelease(positionData);
@@ -164,7 +170,9 @@ OSPGeometry createGroundPlaneGeometry()
   ospRelease(indexData);
   ospRelease(material);
 
-  return planeGeometry;
+  ospCommit(planeInstance);
+
+  return planeInstance;
 }
 
 int main(int argc, const char **argv)
@@ -176,9 +184,11 @@ int main(int argc, const char **argv)
   if (initError != OSP_NO_ERROR)
     return initError;
 
-  // we must load the testing library explicitly on Windows to look up
-  // object creation functions
-  loadLibrary("ospray_testing");
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg == "-r" || arg == "--renderer")
+      renderer_type = argv[++i];
+  }
 
   // set an error callback to catch any OSPRay errors and exit the application
   ospDeviceSetErrorFunc(
@@ -190,19 +200,33 @@ int main(int argc, const char **argv)
   // create the world which will contain all of our geometries
   OSPWorld world = ospNewWorld();
 
+  std::vector<OSPGeometryInstance> instanceHandles;
+
   // add in subdivision geometry
   OSPTestingGeometry subdivisionGeometry =
-      ospTestingNewGeometry("subdivision_cube", "scivis");
-  ospAddGeometry(world, subdivisionGeometry.geometry);
+      ospTestingNewGeometry("subdivision_cube", renderer_type.c_str());
+  instanceHandles.push_back(subdivisionGeometry.instance);
+  ospRelease(subdivisionGeometry.geometry);
 
   // add in a ground plane geometry
-  ospAddGeometry(world, createGroundPlaneGeometry());
+  OSPGeometryInstance planeInstance = createGroundPlane();
+  ospCommit(planeInstance);
+  instanceHandles.push_back(planeInstance);
+
+  OSPData geomInstances =
+      ospNewData(instanceHandles.size(), OSP_OBJECT, instanceHandles.data());
+
+  ospSetData(world, "geometries", geomInstances);
+  ospRelease(geomInstances);
+
+  for (auto inst : instanceHandles)
+    ospRelease(inst);
 
   // commit the world
   ospCommit(world);
 
   // create OSPRay renderer
-  OSPRenderer renderer = ospNewRenderer("scivis");
+  OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   OSPData lightsData = ospTestingNewLights("ambient_and_directional");
   ospSetData(renderer, "lights", lightsData);
@@ -221,6 +245,7 @@ int main(int argc, const char **argv)
     if (ImGui::SliderInt("tessellation level", &tessellationLevel, 1, 10)) {
       ospSet1f(subdivisionGeometry.geometry, "level", tessellationLevel);
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
+      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.instance);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
 
@@ -244,6 +269,7 @@ int main(int argc, const char **argv)
       ospRelease(vertexCreaseWeightsData);
 
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
+      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.instance);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
 
@@ -266,17 +292,13 @@ int main(int argc, const char **argv)
       ospRelease(edgeCreaseWeightsData);
 
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
+      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.instance);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
   });
 
   // start the GLFW main loop, which will continuously render
   glfwOSPRayWindow->mainLoop();
-
-  // cleanup remaining objects
-  ospRelease(subdivisionGeometry.geometry);
-  ospRelease(world);
-  ospRelease(renderer);
 
   // cleanly shut OSPRay down
   ospShutdown();

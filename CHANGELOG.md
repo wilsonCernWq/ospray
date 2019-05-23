@@ -1,6 +1,29 @@
 Version History
 ---------------
 
+### Changes in v1.8.5:
+
+-   Fix float precision cornercase (`NaN`s) in sphere light sampling
+-   Fix CMake bug that assumed `.git` was a directory, which is not true
+    when using OSPRay as a git submodule
+-   Fix CMake warning
+-   Fix `DLL_EXPORT` issue with `ospray_testing` helper library on
+    Windows
+
+### Changes in v1.8.4:
+
+-   Add location of `libospray` to paths searched to find modules
+
+### Changes in v1.8.3:
+
+-   Fix bug where parameters set by `ospSet1b()` were being ignored
+-   Fix bug in box intersection tests possibly creating `NaN`s
+-   Fix issue with client applications calling `find_package(ospray)`
+    more than once
+-   Fix bug in cylinder intersection when ray and cylinder are
+    perpendicular
+-   Fix rare crash in path tracer / MultiBSDF
+
 ### Changes in v1.8.2:
 
 -   CMake bug fix where external users of OSPRay needed CMake newer than
