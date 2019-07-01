@@ -26,7 +26,7 @@ struct Isosurfaces
 {
   Geometry super;  //!< inherited geometry fields
   float *isovalues;
-  VolumeInstance *volumeInstance;
+  VolumetricModel *volumetricModel;
 };
 
 unmasked void Isosurfaces_bounds(const RTCBoundsFunctionArguments *uniform args)
@@ -36,7 +36,7 @@ unmasked void Isosurfaces_bounds(const RTCBoundsFunctionArguments *uniform args)
   uniform int primID = args->primID;
 
   box3fa *uniform out = (box3fa * uniform) args->bounds_o;
-  *out                = make_box3fa(self->volumeInstance->volume->boundingBox);
+  *out                = make_box3fa(self->volumetricModel->volume->boundingBox);
 }
 
 void Isosurfaces_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
@@ -53,7 +53,7 @@ void Isosurfaces_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
   // this assumes that the args->rayhit is actually a pointer toa varying ray!
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-  Volume *uniform volume = self->volumeInstance->volume;
+  Volume *uniform volume = self->volumetricModel->volume;
 
   float hit_t;
   vec3f hit_Ng;
@@ -74,11 +74,8 @@ void Isosurfaces_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
   //             here,
   setRay(tmpRay, ray->org, ray->dir, ray->t0, ray->t);
 
-  volume->intersectIsosurface(volume,
-                              self->isovalues,
-                              self->super.numPrimitives,
-                              self->super.geomID,
-                              tmpRay);
+  volume->intersectIsosurface(
+      volume, self->isovalues, self->super.numPrimitives, 0, tmpRay);
 
   if (hadHit(tmpRay)) {
     if (isOcclusionTest) {
@@ -111,13 +108,12 @@ unmasked void Isosurfaces_occluded(
 }
 
 static void Isosurfaces_postIntersect(const Geometry *uniform geometry,
-                                      const World *uniform model,
                                       varying DifferentialGeometry &dg,
                                       const varying Ray &ray,
                                       uniform int64 flags)
 {
   Isosurfaces *uniform self = (Isosurfaces * uniform) geometry;
-  Volume *uniform volume    = self->volumeInstance->volume;
+  Volume *uniform volume    = self->volumetricModel->volume;
 
   if (flags & DG_NS) {
     dg.Ns = volume->computeGradient(volume, dg.P);
@@ -132,7 +128,7 @@ static void Isosurfaces_postIntersect(const Geometry *uniform geometry,
   dg.epsilon = reduce_max(abs(ray.dir)) * ray.u;
 
   if (flags & DG_COLOR) {
-    TransferFunction *uniform xf = self->volumeInstance->transferFunction;
+    TransferFunction *uniform xf = self->volumetricModel->transferFunction;
     const vec3f sampleColor =
         xf->getColorForValue(xf, self->isovalues[ray.primID]);
     dg.color = make_vec4f(sampleColor.x, sampleColor.y, sampleColor.z, 1.f);
@@ -142,27 +138,23 @@ static void Isosurfaces_postIntersect(const Geometry *uniform geometry,
 export void *uniform Isosurfaces_create(void *uniform cppEquivalent)
 {
   uniform Isosurfaces *uniform isosurfaces = uniform new uniform Isosurfaces;
-
   Geometry_Constructor(
-      &isosurfaces->super, cppEquivalent, Isosurfaces_postIntersect, NULL, 0);
-
+      &isosurfaces->super, cppEquivalent, Isosurfaces_postIntersect, NULL);
   return isosurfaces;
 }
 
 export void *uniform Isosurfaces_set(void *uniform _self,
                                      void *uniform _embreeGeometry,
-                                     uniform uint32 geomID,
                                      int32 uniform numIsovalues,
                                      uniform float *uniform isovalues,
                                      void *uniform _volume)
 {
-  Isosurfaces *uniform self      = (Isosurfaces * uniform) _self;
-  VolumeInstance *uniform volume = (VolumeInstance * uniform) _volume;
+  Isosurfaces *uniform self       = (Isosurfaces * uniform) _self;
+  VolumetricModel *uniform volume = (VolumetricModel * uniform) _volume;
 
-  self->super.geomID        = geomID;
   self->super.numPrimitives = numIsovalues;
   self->isovalues           = isovalues;
-  self->volumeInstance      = volume;
+  self->volumetricModel     = volume;
 
   RTCGeometry geom = (RTCGeometry)_embreeGeometry;
 

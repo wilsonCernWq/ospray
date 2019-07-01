@@ -305,19 +305,19 @@ adding various types of parameters with name `id` to a given object:
     void ospSetVoidPtr(OSPObject, const char *id, void *v);
 
     // add scalar and vector integer and float parameters
-    void ospSet1b (OSPObject, const char *id, int x);
-    void ospSet1f (OSPObject, const char *id, float x);
-    void ospSet1i (OSPObject, const char *id, int x);
-    void ospSet2f (OSPObject, const char *id, float x, float y);
-    void ospSet2fv(OSPObject, const char *id, const float *xy);
-    void ospSet2i (OSPObject, const char *id, int x, int y);
-    void ospSet2iv(OSPObject, const char *id, const int *xy);
-    void ospSet3f (OSPObject, const char *id, float x, float y, float z);
-    void ospSet3fv(OSPObject, const char *id, const float *xyz);
-    void ospSet3i (OSPObject, const char *id, int x, int y, int z);
-    void ospSet3iv(OSPObject, const char *id, const int *xyz);
-    void ospSet4f (OSPObject, const char *id, float x, float y, float z, float w);
-    void ospSet4fv(OSPObject, const char *id, const float *xyzw);
+    void ospSetBool (OSPObject, const char *id, int x);
+    void ospSetFloat (OSPObject, const char *id, float x);
+    void ospSetInt (OSPObject, const char *id, int x);
+    void ospSetVec2f (OSPObject, const char *id, float x, float y);
+    void ospSetVec2fv(OSPObject, const char *id, const float *xy);
+    void ospSetVec2i (OSPObject, const char *id, int x, int y);
+    void ospSetVec2iv(OSPObject, const char *id, const int *xy);
+    void ospSetVec3f (OSPObject, const char *id, float x, float y, float z);
+    void ospSetVec3fv(OSPObject, const char *id, const float *xyz);
+    void ospSetVec3i (OSPObject, const char *id, int x, int y, int z);
+    void ospSetVec3iv(OSPObject, const char *id, const int *xyz);
+    void ospSetVec4f (OSPObject, const char *id, float x, float y, float z, float w);
+    void ospSetVec4fv(OSPObject, const char *id, const float *xyzw);
 
 Users can also remove parameters that have been explicitly set via an
 ospSet call. Any parameters which have been removed will go back to
@@ -368,20 +368,24 @@ the table below.
   OSP_STRING             C-style zero-terminated character string
   OSP_CHAR               8\ bit signed character scalar
   OSP_UCHAR              8\ bit unsigned character scalar
-  OSP_UCHAR[234]         ... and [234]-element vector
+  OSP_VEC[234]UC         ... and [234]-element vector
   OSP_USHORT             16\ bit unsigned integer scalar
   OSP_INT                32\ bit signed integer scalar
-  OSP_INT[234]           ... and [234]-element vector
+  OSP_VEC[234]I          ... and [234]-element vector
   OSP_UINT               32\ bit unsigned integer scalar
-  OSP_UINT[234]          ... and [234]-element vector
+  OSP_VEC[234]UI         ... and [234]-element vector
   OSP_LONG               64\ bit signed integer scalar
-  OSP_LONG[234]          ... and [234]-element vector
+  OSP_VEC[234]L          ... and [234]-element vector
   OSP_ULONG              64\ bit unsigned integer scalar
-  OSP_ULONG[234]         ... and [234]-element vector
+  OSP_VEC[234]UL         ... and [234]-element vector
   OSP_FLOAT              32\ bit single precision floating-point scalar
-  OSP_FLOAT[234]         ... and [234]-element vector
-  OSP_FLOAT3A            ... and 3-element vector with padding (same size as an OSP_FLOAT4)
+  OSP_VEC[234]F          ... and [234]-element vector
+  OSP_VEC3FA             ... and 3-element vector with padding (same size as an OSP_VEC4F)
   OSP_DOUBLE             64\ bit double precision floating-point scalar
+  OSP_BOX[1234]I         32\ bit integer box (lower + upper bounds)
+  OSP_BOX[1234]F         32\ bit single precision floating-point box (lower + upper bounds)
+  OSP_LINEAR[234]F       32\ bit single precision floating-point linear transform
+  OSP_AFFINE[234]F       32\ bit single precision floating-point affine transform
   ---------------------- -----------------------------------------------
   : Valid named constants for `OSPDataType`.
 
@@ -446,8 +450,9 @@ rearrangement of voxel data it cannot be shared the with the application
 anymore, but has to be transferred to OSPRay via
 
     OSPError ospSetRegion(OSPVolume, void *source,
-                          osp_vec3i regionCoords,
-                          osp_vec3i regionSize);
+                          const int *regionCoords, // single vec3i
+                          const int *regionSize // single vec3i
+                          );
 
 The voxel data pointed to by `source` is copied into the given volume
 starting at position `regionCoords`, must be of size `regionSize` and be
@@ -648,31 +653,18 @@ to `ospNewTransferFunction` and it is controlled by these parameters:
   : Parameters accepted by the linear transfer function.
 
 
-VolumeInstances
+VolumetricModels
 -----------------
 
-Volumes in OSPRay are instantiated in a World to give them a world-space
-transform and addition appearance information. To create a volume instance,
-call
+Volumes in OSPRay are given volume rendering apperance information through
+VolumetricModels. To create a volume instance, call
 
-    OSPVolumeInstance ospNewVolumeInstance(OSPVolume volume);
+    OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume);
 
   -------------------- ----------------------- ---------- --------------------------------------
   Type                 Name                    Default    Description
   -------------------- ----------------------- ---------- --------------------------------------
   OSPTransferFunction  transferFunction                   [transfer function] to use
-
-  vec3f                xfm.l.vx                   (1,0,0) First row of the world-space
-                                                          transformation matrix
-
-  vec3f                xfm.l.vy                   (0,1,0) Second row of the world-space
-                                                          transformation matrix
-
-  vec3f                xfm.l.vz                   (0,0,1) Third row of the world-space
-                                                          transformation matrix
-
-  vec3f                xfm.p                      (0,0,0) Fourth row of the world-space
-                                                          transformation matrix
 
   bool                 gradientShadingEnabled       false volume is rendered with surface
                                                           shading wrt. to normalized gradient
@@ -698,14 +690,14 @@ call
   vec3f                specular                  gray 0.3 specular color for shading
 
   -------------------- ------------------------ --------- ---------------------------------------
-  : Parameters understood by VolumeInstance.
+  : Parameters understood by VolumetricModel.
 
 
 Geometries
 ----------
 
-Geometries in OSPRay are objects that describe surfaces. To create a
-new geometry object of given type `type` use
+Geometries in OSPRay are objects that describe intersectable surfaces. To
+create a new geometry object of given type `type` use
 
     OSPGeometry ospNewGeometry(const char *type);
 
@@ -810,30 +802,6 @@ array:
                                                           "float radius" within the `spheres`
                                                           array (`-1` means disabled and use `radius`)
 
-  int          offset_colorID                         -1  offset (in bytes) of each sphere's
-                                                          "int colorID" within the `spheres`
-                                                          array (`-1` means disabled and use
-                                                          the shared material color)
-
-  vec4f[] /    color                                NULL  [data] array of colors (RGBA/RGB),
-  vec3f(a)[] /                                            color is constant for each sphere
-  vec4uc
-
-  int          color_offset                           0   offset (in bytes) to the start of
-                                                          the color data in `color`
-
-  int          color_format             `color.data_type`  the format of the color data.
-                                                          Can be one of:
-                                                          `OSP_FLOAT4`, `OSP_FLOAT3`,
-                                                          `OSP_FLOAT3A` or `OSP_UCHAR4`. Defaults
-                                                          to the type of data in `color`
-
-  int          color_stride      `sizeof(color_format)`   stride (in bytes) between each color
-                                                          element in the `color` array.
-                                                          Defaults to the size of a single
-                                                          element of type `color_format`
-
-
   vec2f[]      texcoord                             NULL  [data] array of texture coordinates,
                                                           coordinate is constant for each sphere
   ---------- ----------------- -------------------------  ---------------------------------------
@@ -876,9 +844,6 @@ below.
                                            "float radius" within the `cylinders`
                                            array (`-1` means disabled and use
                                            `radius` instead)
-
-  vec4f[] /  color                   NULL  [data] array of colors (RGBA/RGB),
-  vec3f(a)[]                               color is constant for each cylinder
 
   OSPData    texcoord                NULL  [data] array of texture coordinates,
                                            in pairs (each a vec2f at vertex v0
@@ -973,6 +938,19 @@ this geometry are listed in the table below.
 
 See Embree documentation for discussion of curve types and data formatting.
 
+### Boxes
+
+OSPRay can directly render axis-aligned bounding boxes without the need
+to convert them to quads or triangles. To do so create a boxes
+geometry by calling `ospNewGeometry` with type string "`boxes`".
+
+  Type       Name       Description
+  ---------- ---------- ------------------------------------------------------
+  box3f[]    boxes      [data] array of boxes. Note this can be specified
+                        as OSP_BOX3F, (2 * OSP_VEC3F), or (6 * OSP_FLOAT)
+  ---------- ---------- ------------------------------------------------------
+  : Parameters defining a boxes geometry.
+
 ### Isosurfaces
 
 OSPRay can directly render multiple isosurfaces of a volume without
@@ -1006,30 +984,19 @@ according to the provided volume's [transfer function].
   : Parameters defining a slices geometry.
 
 
-GeometryInstances
+GeometricModels
 -----------------
 
-Geometries in OSPRay are instantiated in a World to give them a world-space
-transform and addition appearance information. To create a geometry instance,
-call
+Geometries are matched with surface appearance information through
+GeometricModels. These take a geometry, which defines the surface
+representation, and applies either full-object or per-primitive color and
+material information. To create a geometry instance, call
 
-    OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geometry);
+    OSPGeometricModel ospNewGeometricModel(OSPGeometry geometry);
 
   ------------------ --------------- --------- --------------------------------------
   Type               Name            Default   Description
   ------------------ --------------- --------- --------------------------------------
-  vec3f              xfm.l.vx          (1,0,0) First row of the world-space
-                                               transformation matrix
-
-  vec3f              xfm.l.vy          (0,1,0) Second row of the world-space
-                                               transformation matrix
-
-  vec3f              xfm.l.vz          (0,0,1) Third row of the world-space
-                                               transformation matrix
-
-  vec3f              xfm.p             (0,0,0) Fourth row of the world-space
-                                               transformation matrix
-
   vec4f[]            color                NULL [data] array of per-primitive colors
 
   uint32[]           prim.materialID      NULL [data] array of per-primitive colors
@@ -1037,12 +1004,79 @@ call
   OSPMaterial[]      materialList         NULL [data] array of per-primitive
                                                materials, which overrides any
                                                single material set by
-                                               'ospSetMaterial`. This is also the
+                                               'ospSetObject`. This is also the
                                                list optionally indexed by
                                                "prim.materialID" (otherwise it is
                                                per-primitive)
   ------------------ --------------- --------- ---------------------------------------
-  : Parameters understood by GeometryInstance.
+  : Parameters understood by GeometricModel.
+
+
+Instances
+-----------------
+
+Instances in OSPRay represent collections of GeometricModels and
+VolumetricModels which share a common world-space transform. To create
+and instance call
+
+    OSPInstance ospNewInstance();
+
+  ------------------ --------------- ---------- --------------------------------------
+  Type               Name            Default    Description
+  ------------------ --------------- ---------- --------------------------------------
+  affine3f           xfm             (identity) world-space transform for all attached
+                                                geometries and volumes
+
+  OSPData            geometries            NULL data array of OSPGeometricModel
+                                                geometry objects in the scene
+
+  OSPData            volumes               NULL data array of OSPVolumetricModel
+                                                volume objects in the scene
+  ------------------ --------------- ---------- ---------------------------------------
+  : Parameters understood by Instance
+
+### World
+
+Worlds are a container of scene data represented by [instances]. A world is
+associated with a single logical acceleration structure. To create an (empty)
+world call
+
+    OSPWorld ospNewWorld();
+
+The call returns an `OSPWorld` handle to the created world. Objects are
+placed in the world by existing in either the `geometries` or `volumes`
+data array parameters. Either array of objects is optional: in other
+words, there is no need to create empty arrays if there are no
+geometries or volumes to be rendered.
+
+Applications can query the world (axis-aligned) bounding box after the world
+has been commited. To get this information, call
+
+    OSPBounds ospGetWorldBounds(OSPWorld);
+
+Finally, Worlds can be configured with parameters for making various
+feature/performance trade-offs.
+
+  ------------- ---------------- --------  -------------------------------------
+  Type          Name              Default  Description
+  ------------- ---------------- --------  -------------------------------------
+  OSPData       instances            NULL  data array of OSPInstance scene objs
+
+  bool          dynamicScene        false  use RTC_SCENE_DYNAMIC flag (faster
+                                           BVH build, slower ray traversal),
+                                           otherwise uses RTC_SCENE_STATIC flag
+                                           (faster ray traversal, slightly
+                                           slower BVH build)
+
+  bool          compactMode         false  tell Embree to use a more compact BVH
+                                           in memory by trading ray traversal
+                                           performance
+
+  bool          robustMode          false  tell Embree to enable more robust ray
+                                           intersection code paths (slightly
+                                           slower)
+  ------------- ---------------- --------  -------------------------------------
+  : Parameters understood by Worlds
 
 
 Renderer
@@ -1166,50 +1200,6 @@ supports the following special parameters:
 
 The path tracer requires that [materials] are assigned to [geometries],
 otherwise surfaces are treated as completely black.
-
-### World
-
-Worlds are a container of scene data. They can hold the different
-[geometries] and [volumes] as well as references to (and [instances] of)
-other worlds. A world is associated with a single logical acceleration
-structure. To create an (empty) world call
-
-    OSPWorld ospNewWorld();
-
-The call returns an `OSPWorld` handle to the created world. Objects are
-placed in the world by existing in either the `geometries` or `volumes`
-data array parameters. Either array of objects is optional: in other
-words, there is no need to create empty arrays if there are no
-geometries or volumes to be rendered.
-
-Finally, Worlds can be configured with parameters for making various
-feature/performance trade-offs.
-
-  ------------- ---------------- --------  -------------------------------------
-  Type          Name              Default  Description
-  ------------- ---------------- --------  -------------------------------------
-  OSPData       geometries           NULL  data array of OSPGeometryInstance
-                                           geometry objects in the scene
-
-  OSPData       volumes              NULL  data array of OSPVolumeInstance
-                                           volume objects in the scene
-
-  bool          dynamicScene        false  use RTC_SCENE_DYNAMIC flag (faster
-                                           BVH build, slower ray traversal),
-                                           otherwise uses RTC_SCENE_STATIC flag
-                                           (faster ray traversal, slightly
-                                           slower BVH build)
-
-  bool          compactMode         false  tell Embree to use a more compact BVH
-                                           in memory by trading ray traversal
-                                           performance
-
-  bool          robustMode          false  tell Embree to enable more robust ray
-                                           intersection code paths (slightly
-                                           slower)
-  ------------- ---------------- --------  -------------------------------------
-  : Parameters understood by Worlds
-
 
 ### Lights
 
@@ -1382,7 +1372,7 @@ The call returns `NULL` if the material type is not known by the
 renderer type, or else an `OSPMaterial` handle to the created material. The
 handle can then be used to assign the material to a given geometry with
 
-    void ospSetMaterial(OSPGeometryInstance, OSPMaterial);
+    void ospSetObject(OSPGeometricModel, "material", OSPMaterial);
 
 #### OBJ Material
 
@@ -2017,7 +2007,7 @@ The result is returned in the provided `OSPPickResult` struct:
     typedef struct {
         int hasHit;
         osp_vec3f worldPosition;
-        OSPGeometryInstance geometryInstance;
+        OSPGeometricModel GeometricModel;
         uint32_t primID;
     } OSPPickResult;
 

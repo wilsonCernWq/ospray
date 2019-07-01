@@ -38,7 +38,7 @@ namespace ospray {
     Geometry::commit();
 
     isovaluesData = getParamData("isovalues", nullptr);
-    volume        = (VolumeInstance *)getParamObject("volume", nullptr);
+    volume        = (VolumetricModel *)getParamObject("volume", nullptr);
     numIsovalues  = isovaluesData->numItems;
     isovalues     = (float *)isovaluesData->data;
 
@@ -46,7 +46,6 @@ namespace ospray {
 
     ispc::Isosurfaces_set(getIE(),
                           embreeGeometry,
-                          geomID,
                           numIsovalues,
                           isovalues,
                           volume->getIE());

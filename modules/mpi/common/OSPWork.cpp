@@ -39,11 +39,12 @@ namespace ospray {
 
         registerWorkUnit<NewRenderer>(registry);
         registerWorkUnit<NewWorld>(registry);
+        registerWorkUnit<NewInstance>(registry);
         registerWorkUnit<NewGeometry>(registry);
-        registerWorkUnit<NewGeometryInstance>(registry);
+        registerWorkUnit<NewGeometricModel>(registry);
         registerWorkUnit<NewCamera>(registry);
         registerWorkUnit<NewVolume>(registry);
-        registerWorkUnit<NewVolumeInstance>(registry);
+        registerWorkUnit<NewVolumetricModel>(registry);
         registerWorkUnit<NewTransferFunction>(registry);
         registerWorkUnit<NewPixelOp>(registry);
 
@@ -64,7 +65,6 @@ namespace ospray {
 
         registerWorkUnit<SetRegion>(registry);
 
-        registerWorkUnit<SetMaterial>(registry);
         registerWorkUnit<SetParam<OSPObject>>(registry);
         registerWorkUnit<SetParam<std::string>>(registry);
         registerWorkUnit<SetParam<int>>(registry);
@@ -75,6 +75,13 @@ namespace ospray {
         registerWorkUnit<SetParam<vec3f>>(registry);
         registerWorkUnit<SetParam<vec3i>>(registry);
         registerWorkUnit<SetParam<vec4f>>(registry);
+        registerWorkUnit<SetParam<vec4i>>(registry);
+        registerWorkUnit<SetParam<box1f>>(registry);
+        registerWorkUnit<SetParam<box2f>>(registry);
+        registerWorkUnit<SetParam<box3f>>(registry);
+        registerWorkUnit<SetParam<box4f>>(registry);
+        registerWorkUnit<SetParam<linear3f>>(registry);
+        registerWorkUnit<SetParam<affine3f>>(registry);
 
         registerWorkUnit<RemoveParam>(registry);
 
@@ -248,15 +255,6 @@ namespace ospray {
         }
       }
 
-      // ospSetMaterial ///////////////////////////////////////////////////////
-
-      void SetMaterial::run()
-      {
-        auto *inst = (GeometryInstance *)handle.lookup();
-        auto *mat  = (Material *)material.lookup();
-        inst->setMaterial(mat);
-      }
-
       // ospNewRenderer ///////////////////////////////////////////////////////
 
       template <>
@@ -271,6 +269,15 @@ namespace ospray {
       void NewVolume::runOnMaster()
       {
         run();
+      }
+
+      // ospNewInstance ///////////////////////////////////////////////////////
+
+      template <>
+      void NewInstance::run()
+      {
+        auto *world = new Instance;
+        handle.assign(world);
       }
 
       // ospNewWorld //////////////////////////////////////////////////////////
@@ -291,21 +298,21 @@ namespace ospray {
         handle.assign(material);
       }
 
-      // ospNewGeometryInstance ///////////////////////////////////////////////
+      // ospNewGeometricModel ///////////////////////////////////////////////
 
-      void NewGeometryInstance::run()
+      void NewGeometricModel::run()
       {
         auto *geom     = (Geometry *)geometryHandle.lookup();
-        auto *instance = new GeometryInstance(geom);
+        auto *instance = new GeometricModel(geom);
         handle.assign(instance);
       }
 
-      // ospNewVolumeInstance ///////////////////////////////////////////////
+      // ospNewVolumetricModel ///////////////////////////////////////////////
 
-      void NewVolumeInstance::run()
+      void NewVolumetricModel::run()
       {
         auto *geom     = (Volume *)volumeHandle.lookup();
-        auto *instance = new VolumeInstance(geom);
+        auto *instance = new VolumetricModel(geom);
         handle.assign(instance);
       }
 

@@ -104,17 +104,15 @@ namespace ospray {
     vertexData = getParamData("vertex", nullptr);
     if (!vertexData)
       throw std::runtime_error("curves must have 'vertex' array");
-    if (vertexData->type != OSP_FLOAT4)
+    if (vertexData->type != OSP_VEC4F)
       throw std::runtime_error("curves 'vertex' must be type OSP_FLOAT4");
-    auto vertex      = (vec4f *)vertexData->data;
-    auto numVertices = vertexData->numItems;
+    const auto numVertices = vertexData->numItems;
 
     indexData = getParamData("index", nullptr);
     if (!indexData)
       throw std::runtime_error("curves must have 'index' array");
     if (indexData->type != OSP_INT)
       throw std::runtime_error("curves 'index' array must be type OSP_INT");
-    const auto index       = (uint32 *)indexData->data;
     const auto numSegments = indexData->numItems;
 
     normalData  = getParamData("vertex.normal", nullptr);
@@ -133,39 +131,21 @@ namespace ospray {
     if (basis == HERMITE && !tangentData)
       throw std::runtime_error("hermite curve must have 'tangent' array");
 
-    if (normalData && normalData->type != OSP_FLOAT3)
-      throw std::runtime_error("curves 'normal' array must be type OSP_FLOAT3");
-    if (tangentData && tangentData->type != OSP_FLOAT3)
-      throw std::runtime_error(
-          "curves 'tangent' array must be type OSP_FLOAT3");
+    if (normalData && normalData->type != OSP_VEC3F)
+      throw std::runtime_error("curves 'normal' array must be type OSP_VEC3F");
+    if (tangentData && tangentData->type != OSP_VEC3F)
+      throw std::runtime_error("curves 'tangent' array must be type OSP_VEC3F");
 
     postStatusMsg(2) << "#osp: creating curves geometry, "
                      << "#verts=" << numVertices << ", "
                      << "#segments=" << numSegments;
 
-    uint32_t numVerts = 4;
-    if (basis == LINEAR || basis == HERMITE)
-      numVerts = 2;
-
-    bounds = empty;
-    for (uint32_t i = 0; i < indexData->numItems; i++) {
-      const uint32_t idx = index[i];
-      for (uint32_t v = idx; v < idx + numVerts; v++) {
-        float radius = vertex[v].w;
-        vec3f vtx(vertex[v].x, vertex[v].y, vertex[v].z);
-        bounds.extend(vtx - radius);
-        bounds.extend(vtx + radius);
-      }
-    }
-
     embreeCurveType = curveMap[basis][type];
 
     createEmbreeGeometry();
 
-    ispc::Curves_set(getIE(),
-                     (ispc::RTCGeometryType)embreeCurveType,
-                     geomID,
-                     indexData->numItems);
+    ispc::Curves_set(
+        getIE(), (ispc::RTCGeometryType)embreeCurveType, indexData->numItems);
   }
 
   size_t Curves::numPrimitives() const

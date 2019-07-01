@@ -20,6 +20,8 @@
 #include "ospcommon/library.h"
 #include "ospray_testing.h"
 
+#include "tutorial_util.h"
+
 #include <imgui.h>
 
 using namespace ospcommon;
@@ -27,8 +29,8 @@ using namespace ospcommon;
 static std::string renderer_type = "scivis";
 
 namespace {
-  OSPVolumeInstance createVolumeWithTF(const char *volumeName,
-                                       const char *tfName)
+  OSPVolumetricModel createVolumeWithTF(const char *volumeName,
+                                        const char *tfName)
   {
     // create volume
     OSPTestingVolume tv = ospTestingNewVolume(volumeName);
@@ -36,15 +38,15 @@ namespace {
     // create and set transfer function
     OSPTransferFunction tfn =
         ospTestingNewTransferFunction(tv.voxelRange, tfName);
-    OSPVolumeInstance instance = ospNewVolumeInstance(tv.volume);
+    OSPVolumetricModel model = ospNewVolumetricModel(tv.volume);
 
-    ospSetObject(instance, "transferFunction", tfn);
-    ospCommit(instance);
+    ospSetObject(model, "transferFunction", tfn);
+    ospCommit(model);
     ospRelease(tfn);
     ospRelease(tv.volume);
 
     // done
-    return instance;
+    return model;
   }
 
   void setIsoValue(OSPGeometry geometry, float value)
@@ -60,12 +62,7 @@ namespace {
 
 int main(int argc, const char **argv)
 {
-  // initialize OSPRay; OSPRay parses (and removes) its commandline parameters,
-  // e.g. "--osp:debug"
-  OSPError initError = ospInit(&argc, argv);
-
-  if (initError != OSP_NO_ERROR)
-    return initError;
+  initializeOSPRay(argc, argv);
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
@@ -73,28 +70,21 @@ int main(int argc, const char **argv)
       renderer_type = argv[++i];
   }
 
-  // get OSPRay device
-  OSPDevice ospDevice = ospGetCurrentDevice();
-  if (!ospDevice)
-    return -1;
-
-  // set an error callback to catch any OSPRay errors and exit the application
-  ospDeviceSetErrorFunc(
-      ospDevice, [](OSPError error, const char *errorDetails) {
-        std::cerr << "OSPRay error: " << errorDetails << std::endl;
-        exit(error);
-      });
-
   // create the world which will contain all of our geometries / volumes
-  OSPWorld world = ospNewWorld();
+  OSPWorld world   = ospNewWorld();
+  OSPInstance inst = ospNewInstance();
+
+  OSPData instances = ospNewData(1, OSP_OBJECT, &inst);
+  ospSetData(world, "instances", instances);
+  ospRelease(instances);
 
   // create all volume variances [sharedVertices][valuesPerCell]
-  OSPVolumeInstance allVolumes[2][2];
+  OSPVolumetricModel allVolumes[2][2];
   allVolumes[0][0] = createVolumeWithTF("simple_unstructured_volume_00", "jet");
   allVolumes[0][1] = createVolumeWithTF("simple_unstructured_volume_01", "jet");
   allVolumes[1][0] = createVolumeWithTF("simple_unstructured_volume_10", "jet");
   allVolumes[1][1] = createVolumeWithTF("simple_unstructured_volume_11", "jet");
-  OSPVolumeInstance testVolume = allVolumes[0][0];
+  OSPVolumetricModel testVolume = allVolumes[0][0];
 
   // create iso geometry object and add it to the world
   OSPGeometry isoGeometry = ospNewGeometry("isosurfaces");
@@ -107,20 +97,19 @@ int main(int argc, const char **argv)
   ospSetObject(isoGeometry, "volume", testVolume);
 
   // create instance of the geometry
-  OSPGeometryInstance instance = ospNewGeometryInstance(isoGeometry);
+  OSPGeometricModel model = ospNewGeometricModel(isoGeometry);
 
   // prepare material for iso geometry
   OSPMaterial material = ospNewMaterial(renderer_type.c_str(), "OBJMaterial");
-  ospSet3f(material, "Ks", .2f, .2f, .2f);
+  ospSetVec3f(material, "Ks", .2f, .2f, .2f);
   ospCommit(material);
 
   // assign material to the geometry
-  ospSetMaterial(instance, material);
+  ospSetObject(model, "material", material);
 
   // apply changes made
   ospCommit(isoGeometry);
-  ospCommit(instance);
-  ospCommit(world);
+  ospCommit(model);
 
   // create OSPRay renderer
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
@@ -140,8 +129,8 @@ int main(int argc, const char **argv)
   bool isoSurface     = false;
 
   auto updateScene = [&]() {
-    ospRemoveParam(world, "volumes");
-    ospRemoveParam(world, "geometries");
+    ospRemoveParam(inst, "volumes");
+    ospRemoveParam(inst, "geometries");
 
     // remove current volume
     ospRemoveParam(isoGeometry, "volume");
@@ -153,17 +142,18 @@ int main(int argc, const char **argv)
     ospSetObject(isoGeometry, "volume", testVolume);
 
     if (isoSurface) {
-      OSPData geomInsts = ospNewData(1, OSP_OBJECT, &instance);
-      ospSetObject(world, "geometries", geomInsts);
-      ospRelease(geomInsts);
+      OSPData geomModels = ospNewData(1, OSP_OBJECT, &model);
+      ospSetObject(inst, "geometries", geomModels);
+      ospRelease(geomModels);
     } else {
-      OSPData volInsts = ospNewData(1, OSP_OBJECT, &testVolume);
-      ospSetObject(world, "volumes", volInsts);
-      ospRelease(volInsts);
+      OSPData volModels = ospNewData(1, OSP_OBJECT, &testVolume);
+      ospSetObject(inst, "volumes", volModels);
+      ospRelease(volModels);
     }
   };
 
   updateScene();
+  ospCommit(inst);
   ospCommit(world);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
@@ -187,13 +177,14 @@ int main(int argc, const char **argv)
         // update iso value
         setIsoValue(isoGeometry, isoValue);
         glfwOSPRayWindow->addObjectToCommit(isoGeometry);
-        glfwOSPRayWindow->addObjectToCommit(instance);
+        glfwOSPRayWindow->addObjectToCommit(model);
+        glfwOSPRayWindow->addObjectToCommit(inst);
         glfwOSPRayWindow->addObjectToCommit(world);
       }
 
       static float isoOpacity = 1.f;
       if (ImGui::SliderFloat("iso opacity", &isoOpacity, 0.f, 1.f)) {
-        ospSet1f(material, "d", isoOpacity);
+        ospSetFloat(material, "d", isoOpacity);
         glfwOSPRayWindow->addObjectToCommit(material);
       }
     }
@@ -201,6 +192,7 @@ int main(int argc, const char **argv)
     if (updateWorld) {
       updateScene();
       glfwOSPRayWindow->addObjectToCommit(isoGeometry);
+      glfwOSPRayWindow->addObjectToCommit(inst);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
   });
@@ -214,7 +206,8 @@ int main(int argc, const char **argv)
   ospRelease(allVolumes[1][0]);
   ospRelease(allVolumes[1][1]);
   ospRelease(isoGeometry);
-  ospRelease(instance);
+  ospRelease(model);
+  ospRelease(inst);
   ospRelease(material);
 
   // cleanly shut OSPRay down

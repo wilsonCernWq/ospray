@@ -29,7 +29,12 @@
 #include "ospray_environment.h"
 #include "ospray_test_tools.h"
 
+#include "ospcommon/AffineSpace.h"
+
 namespace OSPRayTestScenes {
+
+  using ospcommon::affine3f;
+  using ospcommon::one;
 
   // Base class for all test fixtures.
   // Deriving classes can call CreateEmptyScene() to set up model, renderer,
@@ -38,7 +43,7 @@ namespace OSPRayTestScenes {
   class Base
   {
    protected:
-    osp::vec2i imgSize;
+    vec2i imgSize;
     std::string testName;
     std::string rendererType;
     int frames;
@@ -54,8 +59,7 @@ namespace OSPRayTestScenes {
     std::unique_ptr<OSPImageTools> imageTool;
     std::vector<OSPLight> lightsList;
 
-    std::vector<OSPGeometryInstance> geometryInstances;
-    std::vector<OSPVolumeInstance> volumeInstances;
+    std::vector<OSPInstance> instances;
 
    public:
     Base();
@@ -66,12 +70,13 @@ namespace OSPRayTestScenes {
     Base(const Base &)            = delete;
 
     void AddLight(OSPLight new_light);
-    void AddInstance(OSPGeometryInstance new_geometry);
-    void AddInstance(OSPVolumeInstance new_volume);
+    void AddModel(OSPGeometricModel model, affine3f xfm = one);
+    void AddModel(OSPVolumetricModel model, affine3f xfm = one);
+    void AddInstance(OSPInstance instance);
 
     void PerformRenderTest();
 
-    osp::vec2i GetImgSize() const
+    vec2i GetImgSize() const
     {
       return imgSize;
     }
@@ -205,21 +210,20 @@ namespace OSPRayTestScenes {
   // scene is composed of two quads and a luminous sphere. Parameters of this
   // tests are passed to a new "OBJMaterial" material as "Kd", "Ks", "Ns", "d"
   // and "Tf" and said material is used by the quads.
-  class MTLMirrors
-      : public Base,
-        public ::testing::TestWithParam<
-            std::tuple<osp::vec3f, osp::vec3f, float, float, osp::vec3f>>
+  class MTLMirrors : public Base,
+                     public ::testing::TestWithParam<
+                         std::tuple<vec3f, vec3f, float, float, vec3f>>
   {
    public:
     MTLMirrors();
     virtual void SetUp();
 
    private:
-    osp::vec3f Kd;
-    osp::vec3f Ks;
+    vec3f Kd;
+    vec3f Ks;
     float Ns;
     float d;
-    osp::vec3f Tf;
+    vec3f Tf;
   };
 
   // Fixture for tests rendering few connected cylinder segments. It's

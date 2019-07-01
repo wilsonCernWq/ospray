@@ -17,7 +17,7 @@
 #pragma once
 
 #include "Geometry.h"
-#include "volume/VolumeInstance.h"
+#include "volume/VolumetricModel.h"
 
 namespace ospray {
 
@@ -36,7 +36,7 @@ namespace ospray {
     // Data members //
 
     Ref<Data> isovaluesData;  //!< refcounted data array for isovalues data
-    Ref<VolumeInstance> volume;
+    Ref<VolumetricModel> volume;
 
     int numIsovalues{0};
     float *isovalues{nullptr};

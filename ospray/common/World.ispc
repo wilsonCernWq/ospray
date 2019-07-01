@@ -16,19 +16,12 @@
 
 #include "World.ih"
 
-typedef Volume *uniform uniVolumePtr;
-
-typedef GeometryInstance *uniform uniGeomInstPtr;
-
-typedef VolumeInstance *uniform uniVolInstPtr;
-
 export void *uniform World_create(void *uniform cppE)
 {
   World *uniform world = uniform new World;
 
-  world->cppEquivalent     = cppE;
-  world->geometryInstances = NULL;
-  world->volumeInstances   = NULL;
+  world->cppEquivalent = cppE;
+  world->instances     = NULL;
 
   world->embreeSceneHandleGeometries = NULL;
   world->embreeSceneHandleVolumes    = NULL;
@@ -36,86 +29,18 @@ export void *uniform World_create(void *uniform cppE)
   return (void *uniform)world;
 }
 
-export void World_cleanup(void *uniform _world)
+export void World_set(void *uniform _self,
+                      void *uniform _instances,
+                      uniform int32 numInstances,
+                      void *uniform embreeGeometryScene,
+                      void *uniform embreeVolumeScene)
 {
-  uniform World *uniform world = (uniform World * uniform) _world;
-  if (world->geometryInstances)
-    delete[] world->geometryInstances;
-  if (world->volumeInstances)
-    delete[] world->volumeInstances;
-}
+  World *uniform self         = (World * uniform) _self;
+  Instance **uniform instances = (Instance ** uniform) _instances;
 
-export void World_init(void *uniform _world,
-                       void *uniform embreeDevice,
-                       uniform int32 embreeSceneFlags,
-                       uniform int32 numGeometryInstances,
-                       uniform int32 numVolumeInstances)
-{
-  uniform World *uniform world = (uniform World * uniform) _world;
-  if (world->embreeSceneHandleGeometries)
-    rtcReleaseScene(world->embreeSceneHandleGeometries);
-  if (world->embreeSceneHandleVolumes)
-    rtcReleaseScene(world->embreeSceneHandleVolumes);
+  self->instances    = instances;
+  self->numInstances = numInstances;
 
-  world->embreeSceneHandleGeometries = rtcNewScene((RTCDevice)embreeDevice);
-  world->embreeSceneHandleVolumes    = rtcNewScene((RTCDevice)embreeDevice);
-
-  rtcSetSceneFlags(world->embreeSceneHandleGeometries,
-                   (uniform RTCSceneFlags)embreeSceneFlags);
-  rtcSetSceneFlags(world->embreeSceneHandleVolumes,
-                   (uniform RTCSceneFlags)embreeSceneFlags);
-
-  if (world->geometryInstances)
-    delete[] world->geometryInstances;
-  world->geometryInstanceCount = numGeometryInstances;
-  if (numGeometryInstances > 0) {
-    world->geometryInstances = uniform new uniGeomInstPtr[numGeometryInstances];
-  } else {
-    world->geometryInstances = NULL;
-  }
-
-  if (world->volumeInstances)
-    delete[] world->volumeInstances;
-  world->volumeInstanceCount = numVolumeInstances;
-  if (numVolumeInstances > 0) {
-    world->volumeInstances = uniform new uniVolInstPtr[numVolumeInstances];
-  } else {
-    world->volumeInstances = NULL;
-  }
-}
-
-export void World_setBounds(void *uniform _world, box3f *uniform bounds)
-{
-  World *uniform world = (World * uniform) _world;
-  world->bounds        = *bounds;
-}
-
-export void *uniform World_getEmbreeSceneHandleGeometries(void *uniform _world)
-{
-  World *uniform world = (World * uniform) _world;
-  return (void *uniform)world->embreeSceneHandleGeometries;
-}
-
-export void *uniform World_getEmbreeSceneHandleVolumes(void *uniform _world)
-{
-  World *uniform world = (World * uniform) _world;
-  return (void *uniform)world->embreeSceneHandleVolumes;
-}
-
-export void World_setGeometryInstance(void *uniform _world,
-                                      uniform int32 instID,
-                                      void *uniform _instance)
-{
-  World *uniform world               = (World * uniform) _world;
-  GeometryInstance *uniform instance = (GeometryInstance * uniform) _instance;
-  world->geometryInstances[instID]   = instance;
-}
-
-export void World_setVolumeInstance(void *uniform _world,
-                                    uniform int32 instID,
-                                    void *uniform _instance)
-{
-  World *uniform world             = (World * uniform) _world;
-  VolumeInstance *uniform instance = (VolumeInstance * uniform) _instance;
-  world->volumeInstances[instID]   = instance;
+  self->embreeSceneHandleGeometries = (RTCScene)embreeGeometryScene;
+  self->embreeSceneHandleVolumes    = (RTCScene)embreeVolumeScene;
 }

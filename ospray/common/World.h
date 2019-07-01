@@ -17,8 +17,8 @@
 #pragma once
 
 // ospray stuff
-#include "geometry/GeometryInstance.h"
-#include "volume/VolumeInstance.h"
+#include "geometry/GeometricModel.h"
+#include "volume/VolumetricModel.h"
 
 // stl
 #include <vector>
@@ -40,23 +40,19 @@ namespace ospray {
     World();
     virtual ~World() override;
 
-    //! \brief common function to help printf-debugging
-    virtual std::string toString() const override;
-    virtual void commit() override;
+    std::string toString() const override;
+    void commit() override;
 
     // Data members //
 
-    Ref<Data> geometryInstances;
-    Ref<Data> volumeInstances;
+    Ref<Data> instances;
+    std::vector<void*> instanceIEs;
+    int numGeometries{0};
+    int numVolumes{0};
 
     //! \brief the embree scene handle for this geometry
     RTCScene embreeSceneHandleGeometries{nullptr};
     RTCScene embreeSceneHandleVolumes{nullptr};
-    box3f bounds;
-
-    bool useEmbreeDynamicSceneFlag{true};
-    bool useEmbreeCompactSceneFlag{false};
-    bool useEmbreeRobustSceneFlag{false};
   };
 
 }  // namespace ospray

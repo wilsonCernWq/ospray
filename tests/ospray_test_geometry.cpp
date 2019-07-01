@@ -46,17 +46,17 @@ namespace {
     // create and setup model and mesh
     OSPGeometry mesh = ospNewGeometry("triangles");
     EXPECT_TRUE(mesh);
-    OSPData data = ospNewData(vertices.size(), OSP_FLOAT3, vertices.data());
+    OSPData data = ospNewData(vertices.size(), OSP_VEC3F, vertices.data());
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(mesh, "vertex", data);
     ospRelease(data);
-    data = ospNewData(color.size(), OSP_FLOAT4, color.data());
+    data = ospNewData(color.size(), OSP_VEC4F, color.data());
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(mesh, "vertex.color", data);
     ospRelease(data);
-    data = ospNewData(indices.size(), OSP_INT3, indices.data());
+    data = ospNewData(indices.size(), OSP_VEC3I, indices.data());
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(mesh, "index", data);
@@ -74,12 +74,12 @@ namespace {
     // create and setup model and cylinder
     OSPGeometry cylinder = ospNewGeometry("cylinders");
     EXPECT_TRUE(cylinder);
-    OSPData data = ospNewData(vertex.size(), OSP_FLOAT3, vertex.data());
+    OSPData data = ospNewData(vertex.size(), OSP_VEC3F, vertex.data());
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(cylinder, "cylinders", data);
     ospRelease(data);
-    ospSet1f(cylinder, "radius", 1.0f);
+    ospSetFloat(cylinder, "radius", 1.0f);
     ospCommit(cylinder);
 
     return cylinder;
@@ -93,17 +93,17 @@ namespace {
     // create and setup model and sphere
     OSPGeometry sphere = ospNewGeometry("spheres");
     EXPECT_TRUE(sphere);
-    OSPData data = ospNewData(1, OSP_FLOAT4, &vertex);
+    OSPData data = ospNewData(1, OSP_VEC4F, &vertex);
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(sphere, "spheres", data);
     ospRelease(data);
-    data = ospNewData(1, OSP_FLOAT4, &color);
+    data = ospNewData(1, OSP_VEC4F, &color);
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(sphere, "color", data);
     ospRelease(data);
-    ospSet1f(sphere, "radius", 1.0f);
+    ospSetFloat(sphere, "radius", 1.0f);
     ospCommit(sphere);
 
     return sphere;
@@ -130,7 +130,7 @@ namespace {
 
     OSPGeometry streamlines = ospNewGeometry("streamlines");
     EXPECT_TRUE(streamlines);
-    OSPData data = ospNewData(3, OSP_FLOAT3A, vertex);
+    OSPData data = ospNewData(3, OSP_VEC3FA, vertex);
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(streamlines, "vertex", data);
@@ -142,7 +142,7 @@ namespace {
       ospSetData(streamlines, "vertex.radius", data);
       ospRelease(data);
     }
-    data = ospNewData(3, OSP_FLOAT4, color);
+    data = ospNewData(3, OSP_VEC4F, color);
     EXPECT_TRUE(data);
     ospCommit(data);
     ospSetData(streamlines, "vertex.color", data);
@@ -152,7 +152,7 @@ namespace {
     ospCommit(data);
     ospSetData(streamlines, "index", data);
     ospRelease(data);
-    ospSet1f(streamlines, "radius", 0.5f);
+    ospSetFloat(streamlines, "radius", 0.5f);
     ospCommit(streamlines);
 
     return streamlines;
@@ -172,12 +172,12 @@ TEST_P(SingleObject, simpleMesh)
 {
   OSPGeometry mesh = ::getMesh();
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(mesh);
+  OSPGeometricModel model = ospNewGeometricModel(mesh);
   ospRelease(mesh);
   auto material = GetMaterial();
-  ospSetMaterial(instance, material);
+  ospSetObject(model, "material", material);
   ospRelease(material);
-  AddInstance(instance);
+  AddModel(model);
 
   PerformRenderTest();
 }
@@ -188,18 +188,18 @@ TEST_P(SingleObject, simpleSphere)
   OSPGeometry sphere = ::getSphere();
 
   vec4f color(1.0f, 0.0f, 0.0f, 1.0f);
-  OSPData data = ospNewData(1, OSP_FLOAT4, &color);
+  OSPData data = ospNewData(1, OSP_VEC4F, &color);
   EXPECT_TRUE(data);
   ospCommit(data);
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(sphere);
+  OSPGeometricModel model = ospNewGeometricModel(sphere);
   ospRelease(sphere);
   auto material = GetMaterial();
-  ospSetMaterial(instance, material);
+  ospSetObject(model, "material", material);
   ospRelease(material);
-  ospSetData(instance, "color", data);
+  ospSetData(model, "color", data);
   ospRelease(data);
-  AddInstance(instance);
+  AddModel(model);
 
   PerformRenderTest();
 }
@@ -210,18 +210,18 @@ TEST_P(SingleObject, simpleCylinder)
   OSPGeometry cylinder = ::getCylinder();
 
   vec4f color(1.0f, 0.0f, 0.0f, 1.0f);
-  OSPData data = ospNewData(1, OSP_FLOAT4, &color);
+  OSPData data = ospNewData(1, OSP_VEC4F, &color);
   EXPECT_TRUE(data);
   ospCommit(data);
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(cylinder);
+  OSPGeometricModel model = ospNewGeometricModel(cylinder);
   ospRelease(cylinder);
   auto material = GetMaterial();
-  ospSetMaterial(instance, material);
+  ospSetObject(model, "material", material);
   ospRelease(material);
-  ospSetData(instance, "color", data);
+  ospSetData(model, "color", data);
   ospRelease(data);
-  AddInstance(instance);
+  AddModel(model);
 
   PerformRenderTest();
 }
@@ -231,12 +231,12 @@ TEST_P(SingleObject, simpleStreamlines)
 {
   OSPGeometry streamlines = ::getStreamline();
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(streamlines);
+  OSPGeometricModel model = ospNewGeometricModel(streamlines);
   ospRelease(streamlines);
   auto material = GetMaterial();
-  ospSetMaterial(instance, material);
+  ospSetObject(model, "material", material);
   ospRelease(material);
-  AddInstance(instance);
+  AddModel(model);
 
   PerformRenderTest();
 }
@@ -245,12 +245,12 @@ TEST_P(SingleObject, simpleStreamlinesVariableRadii)
 {
   OSPGeometry streamlines = ::getStreamline(false);
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(streamlines);
+  OSPGeometricModel model = ospNewGeometricModel(streamlines);
   ospRelease(streamlines);
   auto material = GetMaterial();
-  ospSetMaterial(instance, material);
+  ospSetObject(model, "material", material);
   ospRelease(material);
-  AddInstance(instance);
+  AddModel(model);
 
   PerformRenderTest();
 }

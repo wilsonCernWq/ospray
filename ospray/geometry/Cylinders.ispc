@@ -167,7 +167,6 @@ unmasked void Cylinders_occluded(
 }
 
 static void Cylinders_postIntersect(const Geometry *uniform _self,
-                                    const World *uniform model,
                                     varying DifferentialGeometry &dg,
                                     const varying Ray &ray,
                                     uniform int64 flags)
@@ -251,13 +250,12 @@ export void *uniform Cylinders_create(void *uniform cppEquivalent)
 {
   uniform Cylinders *uniform geom = uniform new uniform Cylinders;
   Geometry_Constructor(
-      &geom->super, cppEquivalent, Cylinders_postIntersect, NULL, 0);
+      &geom->super, cppEquivalent, Cylinders_postIntersect, NULL);
   return geom;
 }
 
 export void CylindersGeometry_set(void *uniform _self,
                                   void *uniform _embreeGeometry,
-                                  uniform uint32 geomID,
                                   void *uniform data,
                                   void *uniform texcoord,
                                   uniform int numCylinders,
@@ -269,7 +267,6 @@ export void CylindersGeometry_set(void *uniform _self,
 {
   Cylinders *uniform self = (Cylinders * uniform) _self;
 
-  self->super.geomID        = geomID;
   self->super.numPrimitives = numCylinders;
   self->super.getAreas      = Cylinders_getAreas;
   self->super.sampleArea    = Cylinders_sampleArea;

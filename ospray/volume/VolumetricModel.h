@@ -1,5 +1,5 @@
 // ======================================================================== //
-// Copyright 2017-2019 Intel Corporation                                    //
+// Copyright 2009-2019 Intel Corporation                                    //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -16,52 +16,38 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-#include <ospray/ospray.h>
-#include <string>
-#include <vector>
+#include "common/Data.h"
+#include "Volume.h"
 
-class OSPRayEnvironment : public ::testing::Environment
-{
- private:
-  bool dumpImg;
-  std::string rendererType;
-  std::string deviceType;
-  std::string baselineDir;
-  std::string failedDir;
-  osp::vec2i imgSize;
-  OSPDevice device;
+namespace ospray {
 
- public:
-  OSPRayEnvironment(int argc, char **argv);
-  ~OSPRayEnvironment() = default;
+  struct OSPRAY_SDK_INTERFACE VolumetricModel : public ManagedObject
+  {
+    VolumetricModel(Volume *geometry);
+    virtual ~VolumetricModel() override;
+    virtual std::string toString() const override;
 
-  bool GetDumpImg() const
-  {
-    return dumpImg;
-  }
-  std::string GetRendererType() const
-  {
-    return rendererType;
-  }
-  osp::vec2i GetImgSize() const
-  {
-    return imgSize;
-  }
-  std::string GetDeviceType() const
-  {
-    return deviceType;
-  }
-  std::string GetBaselineDir() const
-  {
-    return baselineDir;
-  }
-  std::string GetFailedDir() const
-  {
-    return failedDir;
-  }
+    virtual void commit() override;
 
-  void ParsArgs(int argc, char **argv);
-  std::string GetStrArgValue(std::string *arg) const;
-  int GetNumArgValue(std::string *arg) const;
-};
+    RTCGeometry embreeGeometryHandle() const;
+
+    box3f bounds() const;
+
+    void setGeomID(int geomID);
+
+   private:
+    // Data members //
+
+    // Volume information
+    box3f instanceBounds;
+    AffineSpace3f instanceXfm;
+    Ref<Volume> instancedVolume;
+
+    // Embree information
+    RTCScene embreeSceneHandle{nullptr};
+    RTCGeometry embreeInstanceGeometry{nullptr};
+    RTCGeometry lastEmbreeInstanceGeometryHandle{nullptr}; // to detect updates
+    int embreeID{-1};
+  };
+
+}  // namespace ospray

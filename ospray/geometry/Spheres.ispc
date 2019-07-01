@@ -47,7 +47,6 @@ struct Spheres
 };
 
 static void Spheres_postIntersect(const Geometry *uniform geometry,
-                                  const World *uniform model,
                                   varying DifferentialGeometry &dg,
                                   const varying Ray &ray,
                                   uniform int64 flags)
@@ -256,13 +255,12 @@ export void *uniform Spheres_create(void *uniform cppEquivalent)
 {
   uniform Spheres *uniform self = uniform new uniform Spheres;
   Geometry_Constructor(
-      &self->super, cppEquivalent, Spheres_postIntersect, NULL, 0);
+      &self->super, cppEquivalent, Spheres_postIntersect, NULL);
   return self;
 }
 
 export void SpheresGeometry_set(void *uniform _self,
                                 void *uniform _embreeGeometry,
-                                uniform uint32 geomID,
                                 void *uniform data,
                                 vec2f *uniform texcoord,
                                 uniform int numSpheres,
@@ -274,7 +272,6 @@ export void SpheresGeometry_set(void *uniform _self,
 {
   Spheres *uniform self = (Spheres * uniform) _self;
 
-  self->super.geomID        = geomID;
   self->super.numPrimitives = numSpheres;
   self->super.getAreas      = Spheres_getAreas;
   self->super.sampleArea    = Spheres_sampleArea;

@@ -21,14 +21,20 @@ static void Geometry_Constructor(uniform Geometry *uniform geometry,
                                  void *uniform cppEquivalent,
                                  uniform Geometry_postIntersectFct
                                      postIntersect,
-                                 RTCGeometry geom,
-                                 uniform int32 geomID)
+                                 RTCGeometry geom)
 {
   geometry->cppEquivalent = cppEquivalent;
   geometry->numPrimitives = 0;
   geometry->geom          = geom;
-  geometry->geomID        = geomID;
+  geometry->geomID        = -1;
   geometry->postIntersect = postIntersect;
   geometry->sampleArea    = NULL;
   geometry->getAreas      = NULL;
+}
+
+export void Geometry_set_geomID(void *uniform _self, uniform int32 geomID)
+{
+  Geometry *uniform self = (Geometry *uniform)_self;
+
+  self->geomID = geomID;
 }

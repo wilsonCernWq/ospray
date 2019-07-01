@@ -97,11 +97,11 @@ namespace ospray {
       OSPGeometry geometry = ospNewGeometry("subdivision");
 
       OSPData verticesData =
-          ospNewData(vertices.size(), OSP_FLOAT3, vertices.data());
+          ospNewData(vertices.size(), OSP_VEC3F, vertices.data());
       ospSetData(geometry, "vertex", verticesData);
       ospRelease(verticesData);
 
-      OSPData colorsData = ospNewData(colors.size(), OSP_FLOAT4, colors.data());
+      OSPData colorsData = ospNewData(colors.size(), OSP_VEC4F, colors.data());
       ospSetData(geometry, "color", colorsData);
       ospRelease(colorsData);
 
@@ -125,7 +125,7 @@ namespace ospray {
       ospRelease(vertexCreaseWeightsData);
 
       OSPData edgeCreaseIndicesData = ospNewData(
-          edgeCreaseIndices.size(), OSP_INT2, edgeCreaseIndices.data());
+          edgeCreaseIndices.size(), OSP_VEC2I, edgeCreaseIndices.data());
       ospSetData(geometry, "edgeCrease.index", edgeCreaseIndicesData);
       ospRelease(edgeCreaseIndicesData);
 
@@ -134,24 +134,31 @@ namespace ospray {
       ospSetData(geometry, "edgeCrease.weight", edgeCreaseWeightsData);
       ospRelease(edgeCreaseWeightsData);
 
-      ospSet1f(geometry, "level", level);
+      ospSetFloat(geometry, "level", level);
 
-      OSPGeometryInstance instance = ospNewGeometryInstance(geometry);
+      OSPGeometricModel model = ospNewGeometricModel(geometry);
 
       // create OBJ material and assign to geometry
       OSPMaterial objMaterial =
           ospNewMaterial(renderer_type.c_str(), "OBJMaterial");
-      ospSet3f(objMaterial, "Ks", 0.5f, 0.5f, 0.5f);
+      ospSetVec3f(objMaterial, "Ks", 0.5f, 0.5f, 0.5f);
       ospCommit(objMaterial);
 
-      ospSetMaterial(instance, objMaterial);
+      ospSetObject(model, "material", objMaterial);
       ospRelease(objMaterial);
 
       ospCommit(geometry);
+      ospCommit(model);
+
+      OSPInstance instance = ospNewInstance();
+      auto instances       = ospNewData(1, OSP_OBJECT, &model);
+      ospSetData(instance, "geometries", instances);
       ospCommit(instance);
+      ospRelease(instances);
 
       OSPTestingGeometry retval;
       retval.geometry = geometry;
+      retval.model    = model;
       retval.instance = instance;
       retval.bounds   = reinterpret_cast<osp_box3f &>(bounds);
 

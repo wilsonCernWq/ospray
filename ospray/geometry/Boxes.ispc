@@ -95,7 +95,6 @@ unmasked void Boxes_occluded(
 }
 
 static void Boxes_postIntersect(const Geometry *uniform geometry,
-                                const World *uniform world,
                                 varying DifferentialGeometry &dg,
                                 const varying Ray &ray,
                                 uniform int64 flags)
@@ -111,21 +110,18 @@ export void *uniform Boxes_create(void *uniform cppEquivalent)
 {
   uniform Boxes *uniform boxes = uniform new uniform Boxes;
 
-  Geometry_Constructor(
-      &boxes->super, cppEquivalent, Boxes_postIntersect, NULL, 0);
+  Geometry_Constructor(&boxes->super, cppEquivalent, Boxes_postIntersect, NULL);
 
   return boxes;
 }
 
 export void *uniform Boxes_set(void *uniform _self,
                                void *uniform _embreeGeometry,
-                               uniform uint32 geomID,
                                int32 uniform numBoxes,
                                void *uniform boxes)
 {
   Boxes *uniform self = (Boxes * uniform) _self;
 
-  self->super.geomID        = geomID;
   self->super.numPrimitives = numBoxes;
   self->boxes               = (box3f * uniform) boxes;
 

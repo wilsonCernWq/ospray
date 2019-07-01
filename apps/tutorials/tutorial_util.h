@@ -1,5 +1,5 @@
 // ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
+// Copyright 2018-2019 Intel Corporation                                    //
 //                                                                          //
 // Licensed under the Apache License, Version 2.0 (the "License");          //
 // you may not use this file except in compliance with the License.         //
@@ -16,27 +16,10 @@
 
 #pragma once
 
-#include "Geometry.ih"
-#include "math/AffineSpace.ih"
+#include "ospray/ospray.h"
 
-struct GeometryInstance
-{
-  Geometry *uniform geom;  //!< instanced Geometry
-  AffineSpace3f xfm;       //!< instantiation matrix
-  AffineSpace3f rcp_xfm;   //!< rcp(instantiation matrix)
+#include <string>
 
-  vec4f *uniform primitiveColors;
+void initializeOSPRay(int argc, const char **argv);
 
-  uint32 *prim_materialID;  // per-primitive material ID
-
-  int32 numMaterials;
-  Material *uniform *uniform materialList;
-
-  float areaPDF;
-};
-
-void GeometryInstance_postIntersect(const GeometryInstance *uniform self,
-                                    const World *uniform model,
-                                    varying DifferentialGeometry &dg,
-                                    const varying Ray &ray,
-                                    uniform int64 flags);
+OSPInstance createGroundPlane(std::string renderer_type);

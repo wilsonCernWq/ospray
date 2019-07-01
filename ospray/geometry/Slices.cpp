@@ -40,7 +40,7 @@ namespace ospray {
     Geometry::commit();
 
     planesData = getParamData("planes", nullptr);
-    volume     = (VolumeInstance *)getParamObject("volume", nullptr);
+    volume     = (VolumetricModel *)getParamObject("volume", nullptr);
 
     numPlanes = planesData->numItems;
     planes    = (vec4f *)planesData->data;
@@ -49,7 +49,6 @@ namespace ospray {
 
     ispc::Slices_set(getIE(),
                      embreeGeometry,
-                     geomID,
                      numPlanes,
                      (ispc::vec4f *)planes,
                      volume->getIE());

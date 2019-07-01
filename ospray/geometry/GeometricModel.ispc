@@ -14,40 +14,39 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
+// ospray
+#include "GeometricModel.ih"
+#include "common/Ray.ih"
+#include "math/box.ih"
+#include "math/vec.ih"
 
-#include "common/Data.h"
-#include "Volume.h"
+export void *uniform GeometricModel_create(void *uniform cppE,
+                                           void *uniform geom)
+{
+  GeometricModel *uniform self = uniform new GeometricModel;
 
-namespace ospray {
+  self->geom    = (Geometry * uniform) geom;
+  self->areaPDF = 0.f;
 
-  struct OSPRAY_SDK_INTERFACE VolumeInstance : public ManagedObject
-  {
-    VolumeInstance(Volume *geometry);
-    virtual ~VolumeInstance() override;
-    virtual std::string toString() const override;
+  return self;
+}
 
-    virtual void commit() override;
+export void GeometricModel_set(void *uniform _self,
+                               void *uniform primitiveColors,
+                               void *uniform prim_materialID)
+{
+  GeometricModel *uniform self = (GeometricModel * uniform) _self;
 
-    RTCGeometry embreeGeometryHandle() const;
+  self->primitiveColors = (vec4f * uniform) primitiveColors;
+  self->prim_materialID = (uint32 * uniform) prim_materialID;
+}
 
-    box3f bounds() const;
+export void GeometricModel_setMaterialList(void *uniform _inst,
+                                           uniform int numMaterials,
+                                           void *uniform _matList)
+{
+  GeometricModel *uniform inst = (GeometricModel * uniform) _inst;
 
-    AffineSpace3f xfm() const;
-
-   private:
-    // Data members //
-
-    // Volume information
-    box3f instanceBounds;
-    AffineSpace3f instanceXfm;
-    Ref<Volume> instancedVolume;
-
-    // Embree information
-    RTCScene embreeSceneHandle{nullptr};
-    RTCGeometry embreeInstanceGeometry{nullptr};
-    RTCGeometry lastEmbreeInstanceGeometryHandle{nullptr}; // to detect updates
-    int embreeID{-1};
-  };
-
-}  // namespace ospray
+  inst->numMaterials = numMaterials;
+  inst->materialList = (Material * uniform * uniform) _matList;
+}

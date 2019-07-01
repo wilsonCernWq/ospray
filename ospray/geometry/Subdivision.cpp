@@ -55,7 +55,7 @@ namespace ospray {
     indexLevelData = getParamData("index.level");
 
     // check for valid params
-    if (!vertexData || vertexData->type != OSP_FLOAT3)
+    if (!vertexData || vertexData->type != OSP_VEC3F)
       throw std::runtime_error(
           "subdivision must have 'vertex' array of type float3");
     if (!indexData)
@@ -69,7 +69,7 @@ namespace ospray {
       numFaces = facesData->size();
       faces    = (uint32_t *)facesData->data;
     } else {
-      if (indexData->type != OSP_INT4 && indexData->type != OSP_UINT4)
+      if (indexData->type != OSP_VEC4I && indexData->type != OSP_VEC4UI)
         throw std::runtime_error(
             "subdivision must have 'face' array or (u)int4 'index'");
       // if face is not specified and index is of type (u)int4, a quad cage mesh
@@ -79,34 +79,21 @@ namespace ospray {
       faces = generatedFacesData.data();
     }
 
-    if (colorsData && colorsData->type != OSP_FLOAT4)
+    if (colorsData && colorsData->type != OSP_VEC4F)
       throw std::runtime_error(
           "unsupported subdivision 'vertex.color' data type");
-    if (texcoordData && texcoordData->type != OSP_FLOAT2)
+    if (texcoordData && texcoordData->type != OSP_VEC2F)
       throw std::runtime_error(
           "unsupported subdivision 'vertex.texcoord' data type");
-
-    vec3f *vertex = (vec3f *)vertexData->data;
-    bounds = empty;
-    /* better bounds if some vertices are not referenced:
-    for (auto i : indexData)
-      bounds.extend(vertexData[i]); */
-    for (size_t i = 0; i < vertexData->size(); i++)
-      bounds.extend(vertex[i]);
-    // TODO: must factor in displacement into bounds....
 
     createEmbreeGeometry();
 
     postStatusMsg(2) << "  created subdivision (" << numFaces << " faces "
-                     << ", " << vertexData->size() << " vertices)\n"
-                     << "  mesh bounds " << bounds;
+                     << ", " << vertexData->size() << " vertices)\n";
 
     vec2f *texcoord = texcoordData ? (vec2f *)texcoordData->data : nullptr;
 
-    ispc::Subdivision_set(getIE(),
-                          embreeGeometry,
-                          geomID,
-                          (ispc::vec2f *)texcoord);
+    ispc::Subdivision_set(getIE(), embreeGeometry, (ispc::vec2f *)texcoord);
   }
 
   size_t Subdivision::numPrimitives() const

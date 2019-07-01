@@ -15,24 +15,25 @@
 // ======================================================================== //
 
 // ospray
-#include "VolumeInstance.h"
+#include "VolumetricModel.h"
 #include "transferFunction/TransferFunction.h"
 // ispc exports
-#include "VolumeInstance_ispc.h"
+#include "Volume_ispc.h"
+#include "VolumetricModel_ispc.h"
 
 namespace ospray {
 
-  VolumeInstance::VolumeInstance(Volume *volume)
+  VolumetricModel::VolumetricModel(Volume *volume)
   {
     if (volume == nullptr)
-      throw std::runtime_error("NULL Volume given to VolumeInstance!");
+      throw std::runtime_error("NULL Volume given to VolumetricModel!");
 
     instancedVolume = volume;
 
-    this->ispcEquivalent = ispc::VolumeInstance_create(this, volume->getIE());
+    this->ispcEquivalent = ispc::VolumetricModel_create(this, volume->getIE());
   }
 
-  VolumeInstance::~VolumeInstance()
+  VolumetricModel::~VolumetricModel()
   {
     if (embreeInstanceGeometry)
       rtcReleaseGeometry(embreeInstanceGeometry);
@@ -41,12 +42,12 @@ namespace ospray {
       rtcReleaseScene(embreeSceneHandle);
   }
 
-  std::string VolumeInstance::toString() const
+  std::string VolumetricModel::toString() const
   {
-    return "ospray::VolumeInstance";
+    return "ospray::VolumetricModel";
   }
 
-  void VolumeInstance::commit()
+  void VolumetricModel::commit()
   {
     auto *transferFunction =
         (TransferFunction *)getParamObject("transferFunction", nullptr);
@@ -56,10 +57,7 @@ namespace ospray {
 
     // Get transform information //
 
-    instanceXfm.l.vx = getParam3f("xfm.l.vx", vec3f(1.f, 0.f, 0.f));
-    instanceXfm.l.vy = getParam3f("xfm.l.vy", vec3f(0.f, 1.f, 0.f));
-    instanceXfm.l.vz = getParam3f("xfm.l.vz", vec3f(0.f, 0.f, 1.f));
-    instanceXfm.p    = getParam3f("xfm.p", vec3f(0.f, 0.f, 0.f));
+    instanceXfm = getParamAffine3f("xfm", affine3f(one));
 
     // Create Embree instanced scene, if necessary //
 
@@ -136,33 +134,33 @@ namespace ospray {
         box3f(getParam3f("volumeClippingBoxLower", vec3f(0.f)),
               getParam3f("volumeClippingBoxUpper", vec3f(0.f)));
 
-    ispc::VolumeInstance_set(ispcEquivalent,
-                             getParam1b("preIntegration", false),
-                             getParam1b("adaptiveSampling", true),
-                             getParam1f("adaptiveScalar", 15.0f),
-                             getParam1f("adaptiveMaxSamplingRate", 2.0f),
-                             getParam1f("adaptiveBacktrack", 0.03f),
-                             getParam1f("samplingRate", 0.125f),
-                             transferFunction->getIE(),
-                             (const ispc::box3f &)volumeClippingBox,
-                             (const ispc::box3f &)instanceBounds,
-                             (ispc::AffineSpace3f &)instanceXfm,
-                             (ispc::AffineSpace3f &)rcp_xfm);
+    ispc::VolumetricModel_set(ispcEquivalent,
+                              getParam1b("preIntegration", false),
+                              getParam1b("adaptiveSampling", true),
+                              getParam1f("adaptiveScalar", 15.0f),
+                              getParam1f("adaptiveMaxSamplingRate", 2.0f),
+                              getParam1f("adaptiveBacktrack", 0.03f),
+                              getParam1f("samplingRate", 0.125f),
+                              transferFunction->getIE(),
+                              (const ispc::box3f &)volumeClippingBox,
+                              (const ispc::box3f &)instanceBounds,
+                              (ispc::AffineSpace3f &)instanceXfm,
+                              (ispc::AffineSpace3f &)rcp_xfm);
   }
 
-  RTCGeometry VolumeInstance::embreeGeometryHandle() const
+  RTCGeometry VolumetricModel::embreeGeometryHandle() const
   {
     return embreeInstanceGeometry;
   }
 
-  box3f VolumeInstance::bounds() const
+  box3f VolumetricModel::bounds() const
   {
     return instanceBounds;
   }
 
-  AffineSpace3f VolumeInstance::xfm() const
+  void VolumetricModel::setGeomID(int geomID)
   {
-    return instanceXfm;
+    ispc::Volume_set_geomID(instancedVolume->getIE(), geomID);
   }
 
 }  // namespace ospray

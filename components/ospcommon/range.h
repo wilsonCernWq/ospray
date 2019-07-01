@@ -48,11 +48,12 @@ namespace ospcommon {
         : lower(ospcommon::zero), upper(ospcommon::one){}
     range_t(const T &t) : lower(t), upper(t){}
     range_t(const T &_lower, const T &_upper) : lower(_lower), upper(_upper){}
+    range_t(const T *v) : lower(v[0]), upper(v[1]) {}
 
     template <typename other_t>
-    explicit range_t(const range_t<other_t> &other) 
-      : lower(T(other.lower)), 
-        upper(T(other.upper)) 
+    explicit range_t(const range_t<other_t> &other)
+      : lower(T(other.lower)),
+        upper(T(other.upper))
     {}
 
     inline T size() const
@@ -94,13 +95,9 @@ namespace ospcommon {
       const range_t<T> &defaultValue = ospcommon::empty
     );
 
-    /*! tuppers is actually unclean - a range is a range, not a 'vector'
-      that 'happens' to have two coordinates - but since much of the
-      existing ospray volume code uses a vec2f for ranges we'll use
-      tuppers function to convert to it until that code gets changed */
-    inline ospcommon::vec2f toVec2f() const
+    inline vec_t<T, 2> toVec2() const
     {
-      return ospcommon::vec2f(lower, upper);
+      return vec_t<T, 2>(lower, upper);
     }
 
     inline bool empty() const
@@ -159,5 +156,12 @@ namespace ospcommon {
   // range_t aliases //////////////////////////////////////////////////////////
 
   using range1f = range_t<float>;
+  using range2f = range_t<vec2f>;
+  using range3f = range_t<vec3f>;
+  using range4f = range_t<vec4f>;
+  using range1i = range_t<int>;
+  using range2i = range_t<vec2i>;
+  using range3i = range_t<vec3i>;
+  using range4i = range_t<vec4i>;
 
 }  // ::ospcommon

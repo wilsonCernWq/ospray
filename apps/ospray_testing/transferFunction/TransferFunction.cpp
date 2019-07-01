@@ -34,14 +34,14 @@ namespace ospray {
       OSPTransferFunction transferFunction =
           ospNewTransferFunction("piecewise_linear");
 
-      OSPData cData = ospNewData(colors.size(), OSP_FLOAT3, colors.data());
+      OSPData cData = ospNewData(colors.size(), OSP_VEC3F, colors.data());
       OSPData oData = ospNewData(opacities.size(), OSP_FLOAT, opacities.data());
 
       ospSetData(transferFunction, "colors", cData);
       ospSetData(transferFunction, "opacities", oData);
 
       // the transfer function will apply over this volume value range
-      ospSet2f(transferFunction, "valueRange", value_range.x, value_range.y);
+      ospSetVec2f(transferFunction, "valueRange", value_range.x, value_range.y);
 
       // commit the transfer function
       ospCommit(transferFunction);

@@ -16,52 +16,45 @@
 
 #pragma once
 
-#include "common/Data.h"
 #include "Geometry.h"
+#include "common/Data.h"
 
 namespace ospray {
 
-  struct OSPRAY_SDK_INTERFACE GeometryInstance : public ManagedObject
+  struct OSPRAY_SDK_INTERFACE GeometricModel : public ManagedObject
   {
-    GeometryInstance(Geometry *geometry);
-    virtual ~GeometryInstance() override;
-    virtual std::string toString() const override;
+    GeometricModel(Geometry *geometry);
+    ~GeometricModel() override = default;
 
-    virtual void setMaterial(Material *mat);
-    virtual void setMaterialList(Data *matListData);
+    std::string toString() const override;
 
-    virtual void commit() override;
+    void commit() override;
 
     RTCGeometry embreeGeometryHandle() const;
 
-    box3f bounds() const;
-
-    AffineSpace3f xfm() const;
+    void setGeomID(int id);
 
    private:
-    // Data members //
+    // Helper functions //
 
-    // Geometry information
-    box3f instanceBounds;
-    AffineSpace3f instanceXfm;
-    Ref<Geometry> instancedGeometry;
+    void setMaterial(Material *mat);
+    void setMaterialList(Data *matListData);
 
-    // Embree information
-    RTCScene embreeSceneHandle{nullptr};
-    RTCGeometry embreeInstanceGeometry{nullptr};
-    RTCGeometry lastEmbreeInstanceGeometryHandle{nullptr}; // to detect updates
-    int embreeID {-1};
+    // Data //
 
-    // Appearance information
+    Ref<Geometry> geometry;
+
     Ref<Data> prim_materialIDData; /*!< data array for per-prim material ID
                                       (uint32) */
     Ref<Data> colorData;
     Material **materialList{nullptr};  //!< per-primitive material list
+    Ref<Material> material;
     Ref<Data> materialListData;  //!< data array for per-prim materials
     std::vector<void *>
         ispcMaterialPtrs;  //!< pointers to ISPC equivalent materials
 
-    friend struct PathTracer; // TODO: fix this!
+    friend struct PathTracer;  // TODO: fix this!
+    friend struct Renderer;
   };
 
 }  // namespace ospray

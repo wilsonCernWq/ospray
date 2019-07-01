@@ -40,102 +40,88 @@ namespace ospray {
     size_t size() const;
 
     /*! Iterator begin/end for Data arrays */
-    template<typename T>
-    T* begin();
+    template <typename T>
+    T *begin();
 
-    template<typename T>
-    T* end();
+    template <typename T>
+    T *end();
 
-    template<typename T>
-    const T* begin() const;
+    template <typename T>
+    const T *begin() const;
 
-    template<typename T>
-    const T* end() const;
+    template <typename T>
+    const T *end() const;
 
-    template<typename T>
-    T& at(size_t i);
+    template <typename T>
+    T &at(size_t i);
 
-    template<typename T>
-    const T& at(size_t i) const;
+    template <typename T>
+    const T &at(size_t i) const;
 
     // Data members //
 
-    void       *data;     /*!< pointer to data */
-    size_t      numItems; /*!< number of items */
-    size_t      numBytes; /*!< total num bytes (sizeof(type)*numItems) */
-    int         flags;    /*!< creation flags */
-    OSPDataType type;     /*!< element type */
-
-    private:
-      template<typename T>
-      typename std::enable_if<std::is_pointer<T>::value>::type
-      validateType() const;
-
-      template<typename T>
-      typename std::enable_if<!std::is_pointer<T>::value>::type
-      validateType() const;
+    void *data;       /*!< pointer to data */
+    size_t numItems;  /*!< number of items */
+    size_t numBytes;  /*!< total num bytes (sizeof(type)*numItems) */
+    int flags;        /*!< creation flags */
+    OSPDataType type; /*!< element type */
   };
 
   // Inlined definitions //////////////////////////////////////////////////////
 
-  template<typename T>
-  inline T* Data::begin()
+  template <typename T>
+  inline T *Data::begin()
   {
-    validateType<T>();
-    return static_cast<T*>(data);
+    return static_cast<T *>(data);
   }
 
-  template<typename T>
-  inline T* Data::end()
+  template <typename T>
+  inline T *Data::end()
   {
     return begin<T>() + numItems;
   }
 
-  template<typename T>
-  inline const T* Data::begin() const
+  template <typename T>
+  inline const T *Data::begin() const
   {
-    validateType<T>();
-    return static_cast<const T*>(data);
+    return static_cast<const T *>(data);
   }
 
-  template<typename T>
-  inline const T* Data::end() const
+  template <typename T>
+  inline const T *Data::end() const
   {
     return begin<const T>() + numItems;
   }
 
-  template<typename T>
-  inline T& Data::at(size_t i)
+  template <typename T>
+  inline T &Data::at(size_t i)
   {
     return *(begin<T>() + i);
   }
 
-  template<typename T>
-  inline const T& Data::at(size_t i) const
+  template <typename T>
+  inline const T &Data::at(size_t i) const
   {
     return *(begin<T>() + i);
   }
 
-  template<typename T>
-  inline typename std::enable_if<std::is_pointer<T>::value>::type
-  Data::validateType() const
+  // Helper functions /////////////////////////////////////////////////////////
+
+  inline std::vector<void *> createArrayOfIE(Data &data)
   {
-    if (type != OSP_OBJECT)
-    {
-      throw std::runtime_error("Data::validateType<T>: Invalid conversion of "
-          " non-OSP_OBJECT data");
-    }
+    if (data.type != OSP_OBJECT)
+      throw std::runtime_error("cannot createArrayOfIE() with non OSP_OBJECT!");
+
+    std::vector<void *> retval;
+    retval.resize(data.size());
+
+    auto begin = data.begin<ManagedObject *>();
+    auto end   = data.end<ManagedObject *>();
+    std::transform(begin, end, retval.begin(), [](ManagedObject *obj) {
+      return obj->getIE();
+    });
+
+    return retval;
   }
 
-  template<typename T>
-  inline typename std::enable_if<!std::is_pointer<T>::value>::type
-  Data::validateType() const
-  {
-    if (OSPTypeFor<T>::value != type)
-    {
-      throw std::runtime_error("Data::validateType<T>: Invalid conversion from "
-          + stringForType(type) + " to " + typeString<T>());
-    }
-  }
-
-} // ::ospray
+}  // namespace ospray

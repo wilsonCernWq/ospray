@@ -26,13 +26,13 @@ struct Slices
 {
   Geometry super;
   vec4f *planes;
-  VolumeInstance *volumeInstance;
+  VolumetricModel *volumetricModel;
 };
 
 unmasked void Slices_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
   Slices *uniform self   = (Slices * uniform) args->geometryUserPtr;
-  Volume *uniform volume = self->volumeInstance->volume;
+  Volume *uniform volume = self->volumetricModel->volume;
 
   uniform int primID = args->primID;
 
@@ -48,7 +48,7 @@ void Slices_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
     return;
 
   Slices *uniform self        = (Slices * uniform) args->geometryUserPtr;
-  Volume *uniform volume      = self->volumeInstance->volume;
+  Volume *uniform volume      = self->volumetricModel->volume;
   uniform unsigned int primID = args->primID;
 
   // this assumes that the args->rayhit is actually a pointer toa varying ray!
@@ -90,7 +90,6 @@ unmasked void Slices_occluded(
 }
 
 static void Slices_postIntersect(const Geometry *uniform geometry,
-                                 const World *uniform model,
                                  varying DifferentialGeometry &dg,
                                  const varying Ray &ray,
                                  uniform int64 flags)
@@ -98,10 +97,10 @@ static void Slices_postIntersect(const Geometry *uniform geometry,
   dg.Ng = dg.Ns = ray.Ng;
 
   if ((flags & DG_COLOR)) {
-    Slices *uniform self             = (Slices * uniform) geometry;
-    VolumeInstance *uniform instance = self->volumeInstance;
-    TransferFunction *uniform tfn    = instance->transferFunction;
-    Volume *uniform volume           = self->volumeInstance->volume;
+    Slices *uniform self              = (Slices * uniform) geometry;
+    VolumetricModel *uniform instance = self->volumetricModel;
+    TransferFunction *uniform tfn     = instance->transferFunction;
+    Volume *uniform volume            = self->volumetricModel->volume;
 
     const float sample      = volume->sample(volume, dg.P);
     const vec3f sampleColor = tfn->getColorForValue(tfn, sample);
@@ -116,27 +115,22 @@ static void Slices_postIntersect(const Geometry *uniform geometry,
 export void *uniform Slices_create(void *uniform cppEquivalent)
 {
   uniform Slices *uniform self = uniform new uniform Slices;
-
-  Geometry_Constructor(
-      &self->super, cppEquivalent, Slices_postIntersect, NULL, 0);
-
+  Geometry_Constructor(&self->super, cppEquivalent, Slices_postIntersect, NULL);
   return self;
 }
 
 export void *uniform Slices_set(void *uniform _self,
                                 void *uniform _embreeGeometry,
-                                uniform uint32 geomID,
                                 int32 uniform numPlanes,
                                 uniform vec4f *uniform planes,
                                 void *uniform _volume)
 {
-  Slices *uniform self           = (Slices * uniform) _self;
-  VolumeInstance *uniform volume = (VolumeInstance * uniform) _volume;
+  Slices *uniform self            = (Slices * uniform) _self;
+  VolumetricModel *uniform volume = (VolumetricModel * uniform) _volume;
 
-  self->super.geomID        = geomID;
   self->super.numPrimitives = numPlanes;
   self->planes              = planes;
-  self->volumeInstance      = volume;
+  self->volumetricModel     = volume;
 
   RTCGeometry geom = (RTCGeometry)_embreeGeometry;
 

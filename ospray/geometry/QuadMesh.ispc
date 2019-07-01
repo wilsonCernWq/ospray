@@ -53,7 +53,6 @@ __define_quad_interpolate(vec3f);
 __define_quad_interpolate(vec4f);
 
 static void QuadMesh_postIntersect(const Geometry *uniform _self,
-                                   const World *uniform model,
                                    varying DifferentialGeometry &dg,
                                    const varying Ray &ray,
                                    uniform int64 flags)
@@ -224,7 +223,6 @@ void QuadMesh_getAreas(const Geometry *const uniform _self,
 void QuadMesh_Constructor(uniform QuadMesh *uniform mesh,
                           void *uniform cppEquivalent,
                           RTCGeometry geom,
-                          uniform int32 geomID,
                           uniform int32 numQuads,
                           uniform int32 vtxSize,
                           uniform int32 norSize,
@@ -237,7 +235,7 @@ void QuadMesh_Constructor(uniform QuadMesh *uniform mesh,
                           uniform bool huge_mesh)
 {
   Geometry_Constructor(
-      &mesh->super, cppEquivalent, QuadMesh_postIntersect, geom, geomID);
+      &mesh->super, cppEquivalent, QuadMesh_postIntersect, geom);
   mesh->super.getAreas      = QuadMesh_getAreas;
   mesh->super.sampleArea    = QuadMesh_sampleArea;
   mesh->super.numPrimitives = numQuads;
@@ -261,7 +259,6 @@ export void *uniform QuadMesh_create(void *uniform cppEquivalent)
                        0,
                        0,
                        0,
-                       0,
                        NULL,
                        NULL,
                        NULL,
@@ -274,7 +271,6 @@ export void *uniform QuadMesh_create(void *uniform cppEquivalent)
 
 export void *uniform QuadMesh_set(void *uniform _mesh,
                                   RTCGeometry geom,
-                                  uniform int32 geomID,
                                   uniform int32 numQuads,
                                   uniform int32 vtxSize,
                                   uniform int32 norSize,
@@ -290,7 +286,6 @@ export void *uniform QuadMesh_set(void *uniform _mesh,
   QuadMesh_Constructor(mesh,
                        mesh->super.cppEquivalent,
                        geom,
-                       geomID,
                        numQuads,
                        vtxSize,
                        norSize,

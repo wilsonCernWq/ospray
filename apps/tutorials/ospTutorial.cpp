@@ -101,31 +101,39 @@ int main(int argc, const char **argv) {
 
   // create and setup model and mesh
   ospray::cpp::Geometry mesh("triangles");
-  ospray::cpp::Data data(4, OSP_FLOAT3A, vertex); // OSP_FLOAT3 format is also supported for vertex positions
+  ospray::cpp::Data data(4, OSP_VEC3FA, vertex); // OSP_VEC3F format is also supported for vertex positions
   data.commit();
   mesh.set("vertex", data);
   data.release(); // we are done using this handle
 
-  data = ospray::cpp::Data(4, OSP_FLOAT4, color);
+  data = ospray::cpp::Data(4, OSP_VEC4F, color);
   data.commit();
   mesh.set("vertex.color", data);
   data.release(); // we are done using this handle
 
-  data = ospray::cpp::Data(2, OSP_INT3, index); // OSP_INT4 format is also supported for triangle indices
+  data = ospray::cpp::Data(2, OSP_VEC3I, index); // OSP_VEC4I format is also supported for triangle indices
   data.commit();
   mesh.set("index", data);
   data.release(); // we are done using this handle
 
   mesh.commit();
 
-  ospray::cpp::GeometryInstance instance(mesh);
-  instance.commit();
+  ospray::cpp::GeometricModel model(mesh);
+  model.commit();
   mesh.release(); // we are done using this handle
+
+  ospray::cpp::Instance instance;
+  auto modelHandle = model.handle();
+  data = ospray::cpp::Data(1, OSP_OBJECT, &modelHandle);
+  instance.set("geometries", data);
+  model.release(); // we are done using this handle
+  data.release(); // we are done using this handle
+  instance.commit();
 
   ospray::cpp::World world;
   auto instanceHandle = instance.handle();
   data = ospray::cpp::Data(1, OSP_OBJECT, &instanceHandle);
-  world.set("geometries", data);
+  world.set("instances", data);
   instance.release(); // we are done using this handle
   data.release(); // we are done using this handle
   world.commit();

@@ -32,6 +32,7 @@
 #include "ospcommon/utility/ArrayView.h"
 
 #include "camera/Camera.h"
+#include "common/Instance.h"
 #include "common/World.h"
 #include "lights/Light.h"
 #include "render/Renderer.h"
@@ -159,6 +160,7 @@ namespace ospray {
       // NewObjectT explicit instantiations ///////////////////////////////////
 
       using NewWorld            = NewObjectT<World>;
+      using NewInstance         = NewObjectT<Instance>;
       using NewPixelOp          = NewObjectT<PixelOp>;
       using NewRenderer         = NewObjectT<Renderer>;
       using NewCamera           = NewObjectT<Camera>;
@@ -176,6 +178,9 @@ namespace ospray {
 
       template <>
       void NewWorld::run();
+
+      template <>
+      void NewInstance::run();
 
       struct NewMaterial : public Work
       {
@@ -206,10 +211,10 @@ namespace ospray {
         ObjectHandle handle;
       };
 
-      struct NewGeometryInstance : public Work
+      struct NewGeometricModel : public Work
       {
-        NewGeometryInstance() = default;
-        NewGeometryInstance(ObjectHandle handle, ObjectHandle geometry_handle)
+        NewGeometricModel() = default;
+        NewGeometricModel(ObjectHandle handle, ObjectHandle geometry_handle)
             : handle(handle), geometryHandle(geometry_handle)
         {
         }
@@ -230,10 +235,10 @@ namespace ospray {
         ObjectHandle geometryHandle;
       };
 
-      struct NewVolumeInstance : public Work
+      struct NewVolumetricModel : public Work
       {
-        NewVolumeInstance() = default;
-        NewVolumeInstance(ObjectHandle handle, ObjectHandle volume_handle)
+        NewVolumetricModel() = default;
+        NewVolumetricModel(ObjectHandle handle, ObjectHandle volume_handle)
             : handle(handle), volumeHandle(volume_handle)
         {
         }
@@ -490,38 +495,6 @@ namespace ospray {
 
       template <>
       void SetParam<std::string>::runOnMaster();
-
-      // both SetMaterial and SetObject take more different forms than the other
-      // set operations since it doesn't take a name at all so
-      // we go through a full specializations for them.
-      struct SetMaterial : public Work
-      {
-        SetMaterial() = default;
-        SetMaterial(ObjectHandle handle, OSPMaterial val)
-            : handle(handle), material((ObjectHandle &)val)
-        {
-        }
-
-        void run() override;
-
-        /*! serializes itself on the given serial buffer - will write
-          all data into this buffer in a way that it can afterwards
-          un-serialize itself 'on the other side'*/
-        void serialize(WriteStream &b) const override
-        {
-          b << (int64)handle << (int64)material;
-        }
-
-        /*! de-serialize from a buffer that an object of this type has
-          serialized itself in */
-        void deserialize(ReadStream &b) override
-        {
-          b >> handle.i64 >> material.i64;
-        }
-
-        ObjectHandle handle;
-        ObjectHandle material;
-      };
 
       template <>
       struct SetParam<OSPObject> : public Work

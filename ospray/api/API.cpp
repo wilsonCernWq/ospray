@@ -43,14 +43,14 @@ inline std::string getPidString()
   return s;
 }
 
-#define ASSERT_DEVICE()                         \
-  if (!deviceIsSet())                           \
-    throw std::runtime_error(                   \
-        "OSPRay not yet initialized "           \
-        "(most likely this means you tried to " \
-        "call an ospray API function before "   \
-        "first calling ospInit())" +            \
-        getPidString());
+#define ASSERT_DEVICE()                       \
+  if (!deviceIsSet())                         \
+  throw std::runtime_error(                   \
+      "OSPRay not yet initialized "           \
+      "(most likely this means you tried to " \
+      "call an ospray API function before "   \
+      "first calling ospInit())" +            \
+      getPidString())
 
 #define OSPRAY_CATCH_BEGIN                 \
   try {                                    \
@@ -309,18 +309,18 @@ extern "C" void ospDeviceSetString(OSPDevice _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospDeviceSet1b(OSPDevice _object,
-                               const char *id,
-                               int x) OSPRAY_CATCH_BEGIN
+extern "C" void ospDeviceSetBool(OSPDevice _object,
+                                 const char *id,
+                                 int x) OSPRAY_CATCH_BEGIN
 {
   Device *object = (Device *)_object;
   object->setParam(id, static_cast<bool>(x));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospDeviceSet1i(OSPDevice _object,
-                               const char *id,
-                               int x) OSPRAY_CATCH_BEGIN
+extern "C" void ospDeviceSetInt(OSPDevice _object,
+                                const char *id,
+                                int x) OSPRAY_CATCH_BEGIN
 {
   Device *object = (Device *)_object;
   object->setParam(id, x);
@@ -408,12 +408,12 @@ OSPRAY_CATCH_END(nullptr)
 
 extern "C" OSPError ospSetRegion(OSPVolume object,
                                  void *source,
-                                 osp_vec3i index,
-                                 osp_vec3i count) OSPRAY_CATCH_BEGIN
+                                 const int *index,
+                                 const int *count) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   return currentDevice().setRegion(
-             object, source, (const vec3i &)index, (const vec3i &)count)
+             object, source, (const vec3i &)index[0], (const vec3i &)count[0])
              ? OSP_NO_ERROR
              : OSP_UNKNOWN_ERROR;
 }
@@ -472,30 +472,37 @@ extern "C" OSPVolume ospNewVolume(const char *type) OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
+extern "C" OSPGeometricModel ospNewGeometricModel(OSPGeometry geom)
+    OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  OSPGeometricModel instance = currentDevice().newGeometricModel(geom);
+  return instance;
+}
+OSPRAY_CATCH_END(nullptr)
+
+extern "C" OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume)
+    OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  OSPVolumetricModel instance = currentDevice().newVolumetricModel(volume);
+  return instance;
+}
+OSPRAY_CATCH_END(nullptr)
+
 ///////////////////////////////////////////////////////////////////////////////
 // Instancing /////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-extern "C" OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geom)
-    OSPRAY_CATCH_BEGIN
+extern "C" OSPInstance ospNewInstance() OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
-  OSPGeometryInstance instance = currentDevice().newGeometryInstance(geom);
-  return instance;
-}
-OSPRAY_CATCH_END(nullptr)
-
-extern "C" OSPVolumeInstance ospNewVolumeInstance(OSPVolume volume)
-    OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  OSPVolumeInstance instance = currentDevice().newVolumeInstance(volume);
-  return instance;
+  return currentDevice().newInstance();
 }
 OSPRAY_CATCH_END(nullptr)
 
 ///////////////////////////////////////////////////////////////////////////////
-// Instance Meta-Data /////////////////////////////////////////////////////////
+// Model Meta-Data ////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
 extern "C" OSPMaterial ospNewMaterial(
@@ -579,27 +586,27 @@ extern "C" void ospSetData(OSPObject object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet1b(OSPObject _object,
-                         const char *id,
-                         int x) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetBool(OSPObject _object,
+                           const char *id,
+                           int x) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setBool(_object, id, static_cast<bool>(x));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet1f(OSPObject _object,
-                         const char *id,
-                         float x) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetFloat(OSPObject _object,
+                            const char *id,
+                            float x) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setFloat(_object, id, x);
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet1i(OSPObject _object,
-                         const char *id,
-                         int x) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetInt(OSPObject _object,
+                          const char *id,
+                          int x) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setInt(_object, id, x);
@@ -615,7 +622,7 @@ extern "C" void ospSeti(OSPObject _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet2f(OSPObject _object, const char *id, float x, float y)
+extern "C" void ospSetVec2f(OSPObject _object, const char *id, float x, float y)
     OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
@@ -623,16 +630,16 @@ extern "C" void ospSet2f(OSPObject _object, const char *id, float x, float y)
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet2fv(OSPObject _object,
-                          const char *id,
-                          const float *xy) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec2fv(OSPObject _object,
+                             const char *id,
+                             const float *xy) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec2f(_object, id, vec2f(xy[0], xy[1]));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet2i(OSPObject _object, const char *id, int x, int y)
+extern "C" void ospSetVec2i(OSPObject _object, const char *id, int x, int y)
     OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
@@ -640,71 +647,305 @@ extern "C" void ospSet2i(OSPObject _object, const char *id, int x, int y)
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet2iv(OSPObject _object,
-                          const char *id,
-                          const int *xy) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec2iv(OSPObject _object,
+                             const char *id,
+                             const int *xy) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec2i(_object, id, vec2i(xy[0], xy[1]));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet3f(OSPObject _object,
-                         const char *id,
-                         float x,
-                         float y,
-                         float z) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec3f(OSPObject _object,
+                            const char *id,
+                            float x,
+                            float y,
+                            float z) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec3f(_object, id, vec3f(x, y, z));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet3fv(OSPObject _object,
-                          const char *id,
-                          const float *xyz) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec3fv(OSPObject _object,
+                             const char *id,
+                             const float *xyz) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec3f(_object, id, vec3f(xyz[0], xyz[1], xyz[2]));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet3i(OSPObject _object, const char *id, int x, int y, int z)
-    OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec3i(
+    OSPObject _object, const char *id, int x, int y, int z) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec3i(_object, id, vec3i(x, y, z));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet3iv(OSPObject _object,
-                          const char *id,
-                          const int *xyz) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec3iv(OSPObject _object,
+                             const char *id,
+                             const int *xyz) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec3i(_object, id, vec3i(xyz[0], xyz[1], xyz[2]));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet4f(OSPObject _object,
-                         const char *id,
-                         float x,
-                         float y,
-                         float z,
-                         float w) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec4f(OSPObject _object,
+                            const char *id,
+                            float x,
+                            float y,
+                            float z,
+                            float w) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec4f(_object, id, vec4f(x, y, z, w));
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospSet4fv(OSPObject _object,
-                          const char *id,
-                          const float *xyzw) OSPRAY_CATCH_BEGIN
+extern "C" void ospSetVec4fv(OSPObject _object,
+                             const char *id,
+                             const float *xyzw) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().setVec4f(
       _object, id, vec4f(xyzw[0], xyzw[1], xyzw[2], xyzw[3]));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetVec4i(OSPObject _object,
+                            const char *id,
+                            int x,
+                            int y,
+                            int z,
+                            int w) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setVec4i(_object, id, vec4i(x, y, z, w));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetVec4iv(OSPObject _object,
+                             const char *id,
+                             const int *xyzw) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setVec4i(
+      _object, id, vec4i(xyzw[0], xyzw[1], xyzw[2], xyzw[3]));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox1f(OSPObject _object,
+                            const char *id,
+                            float lower_x,
+                            float upper_x) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox1f(_object, id, box1f(lower_x, upper_x));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox1fv(OSPObject _object,
+                             const char *id,
+                             const float *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox1f(_object, id, box1f(v[0], v[1]));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox1i(OSPObject _object,
+                            const char *id,
+                            int lower_x,
+                            int upper_x) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox1i(_object, id, box1i(lower_x, upper_x));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox1iv(OSPObject _object,
+                             const char *id,
+                             const int *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox1i(_object, id, box1i(v[0], v[1]));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox2f(OSPObject _object,
+                            const char *id,
+                            float lower_x,
+                            float lower_y,
+                            float upper_x,
+                            float upper_y) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox2f(
+      _object, id, box2f(vec2f(lower_x, lower_y), vec2f(upper_x, upper_y)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox2fv(OSPObject _object,
+                             const char *id,
+                             const float *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox2f(_object, id, box2f(vec2f(v), vec2f(v + 2)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox2i(OSPObject _object,
+                            const char *id,
+                            int lower_x,
+                            int lower_y,
+                            int upper_x,
+                            int upper_y) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox2i(
+      _object, id, box2i(vec2i(lower_x, lower_y), vec2i(upper_x, upper_y)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox2iv(OSPObject _object,
+                             const char *id,
+                             const int *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox2i(_object, id, box2i(vec2i(v), vec2i(v + 2)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox3f(OSPObject _object,
+                            const char *id,
+                            float lower_x,
+                            float lower_y,
+                            float lower_z,
+                            float upper_x,
+                            float upper_y,
+                            float upper_z) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox3f(_object,
+                           id,
+                           box3f(vec3f(lower_x, lower_y, lower_z),
+                                 vec3f(upper_x, upper_y, upper_z)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox3fv(OSPObject _object,
+                             const char *id,
+                             const float *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox3f(_object, id, box3f(vec3f(v), vec3f(v + 3)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox3i(OSPObject _object,
+                            const char *id,
+                            int lower_x,
+                            int lower_y,
+                            int lower_z,
+                            int upper_x,
+                            int upper_y,
+                            int upper_z) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox3i(_object,
+                           id,
+                           box3i(vec3i(lower_x, lower_y, lower_z),
+                                 vec3i(upper_x, upper_y, upper_z)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox3iv(OSPObject _object,
+                             const char *id,
+                             const int *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox3i(_object, id, box3i(vec3i(v), vec3i(v + 3)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox4f(OSPObject _object,
+                            const char *id,
+                            float lower_x,
+                            float lower_y,
+                            float lower_z,
+                            float lower_w,
+                            float upper_x,
+                            float upper_y,
+                            float upper_z,
+                            float upper_w) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox4f(_object,
+                           id,
+                           box4f(vec4f(lower_x, lower_y, lower_z, lower_w),
+                                 vec4f(upper_x, upper_y, upper_z, upper_w)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox4fv(OSPObject _object,
+                             const char *id,
+                             const float *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox4f(_object, id, box4f(vec4f(v), vec4f(v + 4)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox4i(OSPObject _object,
+                            const char *id,
+                            int lower_x,
+                            int lower_y,
+                            int lower_z,
+                            int lower_w,
+                            int upper_x,
+                            int upper_y,
+                            int upper_z,
+                            int upper_w) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox4i(_object,
+                           id,
+                           box4i(vec4i(lower_x, lower_y, lower_z, lower_w),
+                                 vec4i(upper_x, upper_y, upper_z, upper_w)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetBox4iv(OSPObject _object,
+                             const char *id,
+                             const int *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setBox4i(_object, id, box4i(vec4i(v), vec4i(v + 4)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetLinear3fv(OSPObject _object,
+                                const char *id,
+                                const float *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setLinear3f(
+      _object, id, linear3f(vec3f(v), vec3f(v + 3), vec3f(v + 6)));
+}
+OSPRAY_CATCH_END()
+
+extern "C" void ospSetAffine3fv(OSPObject _object,
+                                const char *id,
+                                const float *v) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  currentDevice().setAffine3f(
+      _object,
+      id,
+      affine3f(vec3f(v), vec3f(v + 3), vec3f(v + 6), vec3f(v + 9)));
 }
 OSPRAY_CATCH_END()
 
@@ -717,6 +958,10 @@ extern "C" void ospSetVoidPtr(OSPObject _object,
 }
 OSPRAY_CATCH_END()
 
+///////////////////////////////////////////////////////////////////////////////
+// Object + Parameter Lifetime Management /////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
 extern "C" void ospRemoveParam(OSPObject _object,
                                const char *id) OSPRAY_CATCH_BEGIN
 {
@@ -724,18 +969,6 @@ extern "C" void ospRemoveParam(OSPObject _object,
   currentDevice().removeParam(_object, id);
 }
 OSPRAY_CATCH_END()
-
-extern "C" void ospSetMaterial(OSPGeometryInstance instance,
-                               OSPMaterial material) OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  currentDevice().setMaterial(instance, material);
-}
-OSPRAY_CATCH_END()
-
-///////////////////////////////////////////////////////////////////////////////
-// Object + Parameter Lifetime Management /////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
 
 extern "C" void ospCommit(OSPObject object) OSPRAY_CATCH_BEGIN
 {
@@ -758,7 +991,8 @@ OSPRAY_CATCH_END()
 // FrameBuffer Manipulation ///////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-extern "C" OSPFrameBuffer ospNewFrameBuffer(osp_vec2i size,
+extern "C" OSPFrameBuffer ospNewFrameBuffer(int size_x,
+                                            int size_y,
                                             OSPFrameBufferFormat mode,
                                             uint32_t channels)
     OSPRAY_CATCH_BEGIN
@@ -770,7 +1004,7 @@ extern "C" OSPFrameBuffer ospNewFrameBuffer(osp_vec2i size,
   if ((channels & OSP_FB_ACCUM) == 0)
     ch &= ~OSP_FB_VARIANCE;
 
-  return currentDevice().frameBufferCreate((const vec2i &)size, mode, ch);
+  return currentDevice().frameBufferCreate(vec2i(size_x, size_y), mode, ch);
 }
 OSPRAY_CATCH_END(nullptr)
 
@@ -900,13 +1134,14 @@ extern "C" void ospPick(OSPPickResult *result,
                         OSPRenderer renderer,
                         OSPCamera camera,
                         OSPWorld world,
-                        osp_vec2f screenPos) OSPRAY_CATCH_BEGIN
+                        float screenPos_x,
+                        float screenPos_y) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   Assert2(renderer, "nullptr renderer passed to ospPick");
   if (!result)
     return;
   *result = currentDevice().pick(
-      fb, renderer, camera, world, (const vec2f &)screenPos);
+      fb, renderer, camera, world, vec2f(screenPos_x, screenPos_y));
 }
 OSPRAY_CATCH_END()

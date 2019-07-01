@@ -17,7 +17,7 @@
 #pragma once
 
 #include "Texture.h"
-#include "volume/VolumeInstance.h"
+#include "volume/VolumetricModel.h"
 
 namespace ospray {
 
@@ -30,7 +30,7 @@ namespace ospray {
 
     virtual void commit() override;
 
-    Ref<VolumeInstance> volume;
+    Ref<VolumetricModel> volume;
   };
 
 } // ::ospray

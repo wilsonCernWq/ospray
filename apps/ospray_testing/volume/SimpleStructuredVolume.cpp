@@ -81,9 +81,9 @@ namespace ospray {
       ospRelease(voxelData);
 
       ospSetString(volume, "voxelType", "float");
-      ospSet3i(volume, "dimensions", dims.x, dims.y, dims.z);
+      ospSetVec3i(volume, "dimensions", dims.x, dims.y, dims.z);
 
-      const auto range  = voxelRange.toVec2f();
+      const auto range  = voxelRange.toVec2();
       const auto bounds = box3f(vec3f(0.f), dims * spacing);
 
       OSPTestingVolume retval;

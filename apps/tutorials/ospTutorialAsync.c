@@ -35,9 +35,11 @@
 #endif
 #include "ospray/ospray.h"
 
+typedef struct { int x, y; } vec2i;
+
 // helper function to write the rendered image as PPM file
 void writePPM(const char *fileName,
-              const osp_vec2i *size,
+              const vec2i *size,
               const uint32_t *pixel)
 {
   FILE *file = fopen(fileName, "wb");
@@ -61,10 +63,10 @@ void writePPM(const char *fileName,
 }
 
 void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
-                 OSPFrameBuffer *framebuffer, osp_vec2i imgSize);
+                 OSPFrameBuffer *framebuffer, vec2i imgSize);
 
 void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
-                 OSPFrameBuffer *framebuffer, osp_vec2i imgSize);
+                 OSPFrameBuffer *framebuffer, vec2i imgSize);
 
 int main(int argc, const char **argv) {
   // initialize OSPRay; OSPRay parses (and removes) its commandline parameters, e.g. "--osp:debug"
@@ -72,7 +74,7 @@ int main(int argc, const char **argv) {
   if (init_error != OSP_NO_ERROR)
     return init_error;
 
-  osp_vec2i imgSizes[2] = {0};
+  vec2i imgSizes[2] = {0};
   imgSizes[0].x = 1024; // width
   imgSizes[0].y = 768; // height
 
@@ -154,7 +156,7 @@ int main(int argc, const char **argv) {
 }
 
 void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
-                 OSPFrameBuffer *framebuffer, osp_vec2i imgSize)
+                 OSPFrameBuffer *framebuffer, vec2i imgSize)
 {
   // camera
   float cam_pos[] = {0.f, 0.f, 0.f};
@@ -178,41 +180,48 @@ void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
 
   // create and setup camera
   *camera = ospNewCamera("perspective");
-  ospSet1f(*camera, "aspect", imgSize.x/(float)imgSize.y);
-  ospSet3fv(*camera, "pos", cam_pos);
-  ospSet3fv(*camera, "dir", cam_view);
-  ospSet3fv(*camera, "up",  cam_up);
+  ospSetFloat(*camera, "aspect", imgSize.x/(float)imgSize.y);
+  ospSetVec3fv(*camera, "pos", cam_pos);
+  ospSetVec3fv(*camera, "dir", cam_view);
+  ospSetVec3fv(*camera, "up",  cam_up);
   ospCommit(*camera); // commit each object to indicate modifications are done
 
   // create and setup model and mesh
   OSPGeometry mesh = ospNewGeometry("triangles");
-  OSPData data = ospNewData(4, OSP_FLOAT3A, vertex, 0); // OSP_FLOAT3 format is also supported for vertex positions
+  OSPData data = ospNewData(4, OSP_VEC3FA, vertex, 0); // OSP_VEC3F format is also supported for vertex positions
   ospCommit(data);
   ospSetData(mesh, "vertex", data);
   ospRelease(data); // we are done using this handle
 
-  data = ospNewData(4, OSP_FLOAT4, color, 0);
+  data = ospNewData(4, OSP_VEC4F, color, 0);
   ospCommit(data);
   ospSetData(mesh, "vertex.color", data);
   ospRelease(data); // we are done using this handle
 
-  data = ospNewData(2, OSP_INT3, index, 0); // OSP_INT4 format is also supported for triangle indices
+  data = ospNewData(2, OSP_VEC3I, index, 0); // OSP_VEC4I format is also supported for triangle indices
   ospCommit(data);
   ospSetData(mesh, "index", data);
   ospRelease(data); // we are done using this handle
 
   ospCommit(mesh);
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(mesh);
-  ospCommit(instance);
+  OSPGeometricModel model = ospNewGeometricModel(mesh);
+  ospCommit(model);
   ospRelease(mesh); // we are done using this handle
 
+  OSPInstance instance = ospNewInstance();
+  OSPData models = ospNewData(1, OSP_OBJECT, &model, 0);
+  ospSetObject(instance, "geometries", models);
+  ospCommit(instance);
+  ospRelease(model);
+  ospRelease(models);
+
   *world = ospNewWorld();
-  OSPData geometryInstances = ospNewData(1, OSP_OBJECT, &instance, 0);
-  ospSetObject(*world, "geometries", geometryInstances);
-  ospRelease(instance);
-  ospRelease(geometryInstances);
+  OSPData instances = ospNewData(1, OSP_OBJECT, &instance, 0);
+  ospSetObject(*world, "instances", instances);
   ospCommit(*world);
+  ospRelease(instance);
+  ospRelease(instances);
 
   // create renderer
   *renderer = ospNewRenderer("scivis"); // choose Scientific Visualization renderer
@@ -224,8 +233,8 @@ void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   ospCommit(lights);
 
   // complete setup of renderer
-  ospSet1i(*renderer, "aoSamples", 1);
-  ospSet1f(*renderer, "bgColor", 1.0f); // white, transparent
+  ospSetInt(*renderer, "aoSamples", 1);
+  ospSetFloat(*renderer, "bgColor", 1.0f); // white, transparent
   ospSetObject(*renderer, "lights", lights);
   ospCommit(*renderer);
 
@@ -233,11 +242,11 @@ void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   ospRelease(lights);
 
   // create and setup framebuffer
-  *framebuffer = ospNewFrameBuffer(imgSize, OSP_FB_SRGBA, OSP_FB_COLOR | /*OSP_FB_DEPTH |*/ OSP_FB_ACCUM);
+  *framebuffer = ospNewFrameBuffer(imgSize.x, imgSize.y, OSP_FB_SRGBA, OSP_FB_COLOR | /*OSP_FB_DEPTH |*/ OSP_FB_ACCUM);
 }
 
 void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
-                 OSPFrameBuffer *framebuffer, osp_vec2i imgSize)
+                 OSPFrameBuffer *framebuffer, vec2i imgSize)
 {
   // camera
   float cam_pos[] = {2.0f, -1.f, -4.f};
@@ -261,41 +270,48 @@ void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
 
   // create and setup camera
   *camera = ospNewCamera("perspective");
-  ospSet1f(*camera, "aspect", imgSize.x/(float)imgSize.y);
-  ospSet3fv(*camera, "pos", cam_pos);
-  ospSet3fv(*camera, "dir", cam_view);
-  ospSet3fv(*camera, "up",  cam_up);
+  ospSetFloat(*camera, "aspect", imgSize.x/(float)imgSize.y);
+  ospSetVec3fv(*camera, "pos", cam_pos);
+  ospSetVec3fv(*camera, "dir", cam_view);
+  ospSetVec3fv(*camera, "up",  cam_up);
   ospCommit(*camera); // commit each object to indicate modifications are done
 
   // create and setup model and mesh
   OSPGeometry mesh = ospNewGeometry("triangles");
-  OSPData data = ospNewData(4, OSP_FLOAT3A, vertex, 0); // OSP_FLOAT3 format is also supported for vertex positions
+  OSPData data = ospNewData(4, OSP_VEC3FA, vertex, 0); // OSP_VEC3F format is also supported for vertex positions
   ospCommit(data);
   ospSetData(mesh, "vertex", data);
   ospRelease(data); // we are done using this handle
 
-  data = ospNewData(4, OSP_FLOAT4, color, 0);
+  data = ospNewData(4, OSP_VEC4F, color, 0);
   ospCommit(data);
   ospSetData(mesh, "vertex.color", data);
   ospRelease(data); // we are done using this handle
 
-  data = ospNewData(2, OSP_INT3, index, 0); // OSP_INT4 format is also supported for triangle indices
+  data = ospNewData(2, OSP_VEC3I, index, 0); // OSP_VEC4I format is also supported for triangle indices
   ospCommit(data);
   ospSetData(mesh, "index", data);
   ospRelease(data); // we are done using this handle
 
   ospCommit(mesh);
 
-  OSPGeometryInstance instance = ospNewGeometryInstance(mesh);
-  ospCommit(instance);
+  OSPGeometricModel model = ospNewGeometricModel(mesh);
+  ospCommit(model);
   ospRelease(mesh); // we are done using this handle
 
+  OSPInstance instance = ospNewInstance();
+  OSPData models = ospNewData(1, OSP_OBJECT, &model, 0);
+  ospSetObject(instance, "geometries", models);
+  ospCommit(instance);
+  ospRelease(model);
+  ospRelease(models);
+
   *world = ospNewWorld();
-  OSPData geometryInstances = ospNewData(1, OSP_OBJECT, &instance, 0);
-  ospSetObject(*world, "geometries", geometryInstances);
-  ospRelease(instance);
-  ospRelease(geometryInstances);
+  OSPData instances = ospNewData(1, OSP_OBJECT, &instance, 0);
+  ospSetObject(*world, "instances", instances);
   ospCommit(*world);
+  ospRelease(instances);
+  ospRelease(instance);
 
   // create renderer
   *renderer = ospNewRenderer("scivis"); // choose Scientific Visualization renderer
@@ -307,8 +323,8 @@ void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   ospCommit(lights);
 
   // complete setup of renderer
-  ospSet1i(*renderer, "aoSamples", 4);
-  ospSet1f(*renderer, "bgColor", 0.2f); // gray, transparent
+  ospSetInt(*renderer, "aoSamples", 4);
+  ospSetFloat(*renderer, "bgColor", 0.2f); // gray, transparent
   ospSetObject(*renderer, "lights", lights);
   ospCommit(*renderer);
 
@@ -316,6 +332,6 @@ void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   ospRelease(lights);
 
   // create and setup framebuffer
-  *framebuffer = ospNewFrameBuffer(imgSize, OSP_FB_SRGBA, OSP_FB_COLOR | /*OSP_FB_DEPTH |*/ OSP_FB_ACCUM);
+  *framebuffer = ospNewFrameBuffer(imgSize.x, imgSize.y, OSP_FB_SRGBA, OSP_FB_COLOR | /*OSP_FB_DEPTH |*/ OSP_FB_ACCUM);
 }
 

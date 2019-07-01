@@ -643,19 +643,19 @@ void ospSetObject(OSPObject, const char *id, OSPObject object);
 void ospSetVoidPtr(OSPObject, const char *id, void *v);
 
 // add scalar and vector integer and float parameters
-void ospSet1b (OSPObject, const char *id, int x);
-void ospSet1f (OSPObject, const char *id, float x);
-void ospSet1i (OSPObject, const char *id, int x);
-void ospSet2f (OSPObject, const char *id, float x, float y);
-void ospSet2fv(OSPObject, const char *id, const float *xy);
-void ospSet2i (OSPObject, const char *id, int x, int y);
-void ospSet2iv(OSPObject, const char *id, const int *xy);
-void ospSet3f (OSPObject, const char *id, float x, float y, float z);
-void ospSet3fv(OSPObject, const char *id, const float *xyz);
-void ospSet3i (OSPObject, const char *id, int x, int y, int z);
-void ospSet3iv(OSPObject, const char *id, const int *xyz);
-void ospSet4f (OSPObject, const char *id, float x, float y, float z, float w);
-void ospSet4fv(OSPObject, const char *id, const float *xyzw);
+void ospSetBool (OSPObject, const char *id, int x);
+void ospSetFloat (OSPObject, const char *id, float x);
+void ospSetInt (OSPObject, const char *id, int x);
+void ospSetVec2f (OSPObject, const char *id, float x, float y);
+void ospSetVec2fv(OSPObject, const char *id, const float *xy);
+void ospSetVec2i (OSPObject, const char *id, int x, int y);
+void ospSetVec2iv(OSPObject, const char *id, const int *xy);
+void ospSetVec3f (OSPObject, const char *id, float x, float y, float z);
+void ospSetVec3fv(OSPObject, const char *id, const float *xyz);
+void ospSetVec3i (OSPObject, const char *id, int x, int y, int z);
+void ospSetVec3iv(OSPObject, const char *id, const int *xyz);
+void ospSetVec4f (OSPObject, const char *id, float x, float y, float z, float w);
+void ospSetVec4fv(OSPObject, const char *id, const float *xyzw);
 ```
 
 Users can also remove parameters that have been explicitly set via an
@@ -1383,7 +1383,7 @@ of specifying the data of center position and radius within a
 <td style="text-align: left;">int</td>
 <td style="text-align: left;">color_format</td>
 <td style="text-align: right;"><code>color.data_type</code></td>
-<td style="text-align: left;">the format of the color data. Can be one of: <code>OSP_FLOAT4</code>, <code>OSP_FLOAT3</code>, <code>OSP_FLOAT3A</code> or <code>OSP_UCHAR4</code>. Defaults to the type of data in <code>color</code></td>
+<td style="text-align: left;">the format of the color data. Can be one of: <code>OSP_VEC4F</code>, <code>OSP_VEC3F</code>, <code>OSP_VEC3FA</code> or <code>OSP_UCHAR4</code>. Defaults to the type of data in <code>color</code></td>
 </tr>
 <tr class="even">
 <td style="text-align: left;">int</td>
@@ -1659,7 +1659,7 @@ function](#transfer-function).
 
 : Parameters defining a slices geometry.
 
-GeometryInstances
+GeometricModels
 -----------------
 
 Geometries in OSPRay are instantiated in a World to give them a
@@ -1667,11 +1667,11 @@ world-space transform and addition appearance information. To create a
 geometry instance, call
 
 ``` {.cpp}
-OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geometry);
+OSPGeometricModel ospNewGeometricModel(OSPGeometry geometry);
 ```
 
 <table style="width:98%;">
-<caption>Parameters understood by GeometryInstance.</caption>
+<caption>Parameters understood by GeometricModel.</caption>
 <colgroup>
 <col style="width: 22%" />
 <col style="width: 22%" />
@@ -1727,12 +1727,12 @@ OSPGeometryInstance ospNewGeometryInstance(OSPGeometry geometry);
 <td style="text-align: left;">OSPMaterial[]</td>
 <td style="text-align: left;">materialList</td>
 <td style="text-align: left;">NULL</td>
-<td style="text-align: left;"><a href="#data">data</a> array of per-primitive materials, which overrides any single material set by ’ospSetMaterial`. This is also the list optionally indexed by “prim.materialID” (otherwise it is per-primitive)</td>
+<td style="text-align: left;"><a href="#data">data</a> array of per-primitive materials, which overrides any single material set by ’ospSetObject`. This is also the list optionally indexed by “prim.materialID” (otherwise it is per-primitive)</td>
 </tr>
 </tbody>
 </table>
 
-: Parameters understood by GeometryInstance.
+: Parameters understood by GeometricModel.
 
 Renderer
 --------
@@ -1967,14 +1967,14 @@ The call returns an `OSPWorld` handle to the created world. To add an
 already created geometry instance or volume to a world use
 
 ``` {.cpp}
-void ospAddGeometryInstance(OSPWorld, OSPGeometryInstance);
+void ospAddGeometricModel(OSPWorld, OSPGeometricModel);
 void ospAddVolume(OSPWorld, OSPVolume);
 ```
 
 An existing geometry or volume can be removed from a world with
 
 ``` {.cpp}
-void ospRemoveGeometryInstance(OSPWorld, OSPGeometryInstance);
+void ospRemoveGeometricModel(OSPWorld, OSPGeometricModel);
 void ospRemoveVolume(OSPWorld, OSPVolume);
 ```
 
@@ -2248,7 +2248,7 @@ The handle can then be used to assign the material to a given geometry
 with
 
 ``` {.cpp}
-void ospSetMaterial(OSPGeometryInstance, OSPMaterial);
+void ospSetObject(OSPGeometricModel, "material", OSPMaterial);
 ```
 
 #### OBJ Material
@@ -3173,7 +3173,7 @@ The result is returned in the provided `OSPPickResult` struct:
 typedef struct {
     int hasHit;
     osp_vec3f worldPosition;
-    OSPGeometryInstance geometryInstance;
+    OSPGeometricModel GeometricModel;
     uint32_t primID;
 } OSPPickResult;
 ```
@@ -3859,7 +3859,7 @@ float value. This is put on the scene graph with a call to:
 This call accesses the child named “`lights`” on the renderer, and in
 turn the child named “`sun`”. This child then gets its own child of a
 newly created node with the name “`intensity"` of type `float` with a
-value of `0.3f`. When committed, this node will call `ospSet1f`with the
+value of `0.3f`. When committed, this node will call `ospSetFloat`with the
 node value on the current `OSPObject` on the context which is set by the
 parent. If you were to create a custom light called”`MyLight`" and had a
 float parameter called “`flickerFreq`”, a similar line would be used
