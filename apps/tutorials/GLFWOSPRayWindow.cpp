@@ -28,11 +28,14 @@ static bool g_quitNextFrame = false;
 GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
                                    const ospcommon::box3f &worldBounds,
                                    OSPWorld world,
-                                   OSPRenderer renderer)
-    : windowSize(windowSize),
-      worldBounds(worldBounds),
-      world(world),
-      renderer(renderer)
+                                   OSPRenderer renderer,
+                                   OSPFrameBufferFormat fbFormat,
+                                   uint32_t fbChannels)
+  : worldBounds(worldBounds),
+    world(world),
+    renderer(renderer),
+    fbFormat(fbFormat),
+    fbChannels(fbChannels)
 {
   if (activeWindow != nullptr) {
     throw std::runtime_error("Cannot create more than one GLFWOSPRayWindow!");
@@ -78,7 +81,7 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
 
   glfwSetCursorPosCallback(glfwWindow, [](GLFWwindow *, double x, double y) {
     ImGuiIO &io = ImGui::GetIO();
-    if (!io.WantCaptureMouse) {
+    if (!activeWindow->showUi || !io.WantCaptureMouse) {
       activeWindow->motion(ospcommon::vec2f{float(x), float(y)});
     }
   });
@@ -130,12 +133,12 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
   ospSetFloat(camera, "aspect", windowSize.x / float(windowSize.y));
 
   ospSetVec3f(camera,
-              "pos",
+              "position",
               arcballCamera->eyePos().x,
               arcballCamera->eyePos().y,
               arcballCamera->eyePos().z);
   ospSetVec3f(camera,
-              "dir",
+              "direction",
               arcballCamera->lookDir().x,
               arcballCamera->lookDir().y,
               arcballCamera->lookDir().z);
@@ -144,7 +147,6 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
               arcballCamera->upDir().x,
               arcballCamera->upDir().y,
               arcballCamera->upDir().z);
-
   ospCommit(camera);
 
   // finally, commit the renderer
@@ -177,10 +179,10 @@ void GLFWOSPRayWindow::setWorld(OSPWorld newWorld)
   world = newWorld;
 }
 
-void GLFWOSPRayWindow::setPixelOps(OSPData ops)
+void GLFWOSPRayWindow::setImageOps(OSPData ops)
 {
-  pixelOps = ops;
-  ospSetData(framebuffer, "pixelOperations", pixelOps);
+  imageOps = ops;
+  ospSetData(framebuffer, "imageOps", imageOps);
   addObjectToCommit(framebuffer);
 }
 
@@ -236,11 +238,11 @@ void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
   // create new frame buffer
   framebuffer = ospNewFrameBuffer(windowSize.x,
                                   windowSize.y,
-                                  OSP_FB_SRGBA,
-                                  OSP_FB_COLOR | OSP_FB_ACCUM | OSP_FB_ALBEDO);
+                                  fbFormat,
+                                  fbChannels);
 
-  if (pixelOps) {
-    ospSetData(framebuffer, "pixelOperations", pixelOps);
+  if (imageOps) {
+    ospSetData(framebuffer, "imageOps", imageOps);
   }
 
   ospCommit(framebuffer);
@@ -290,12 +292,12 @@ void GLFWOSPRayWindow::motion(const ospcommon::vec2f &position)
     if (cameraChanged) {
       ospSetFloat(camera, "aspect", windowSize.x / float(windowSize.y));
       ospSetVec3f(camera,
-                  "pos",
+                  "position",
                   arcballCamera->eyePos().x,
                   arcballCamera->eyePos().y,
                   arcballCamera->eyePos().z);
       ospSetVec3f(camera,
-                  "dir",
+                  "direction",
                   arcballCamera->lookDir().x,
                   arcballCamera->lookDir().y,
                   arcballCamera->lookDir().z);
@@ -360,15 +362,18 @@ void GLFWOSPRayWindow::display()
     auto *fb = ospMapFrameBuffer(framebuffer,
                                  showAlbedo ? OSP_FB_ALBEDO : OSP_FB_COLOR);
 
+    const GLint glFormat = showAlbedo ? GL_RGB : GL_RGBA;
+    const GLenum glType =
+      showAlbedo || fbFormat == OSP_FB_RGBA32F ? GL_FLOAT : GL_UNSIGNED_BYTE;
     glBindTexture(GL_TEXTURE_2D, framebufferTexture);
     glTexImage2D(GL_TEXTURE_2D,
                  0,
-                 showAlbedo ? GL_RGB : GL_RGBA,
+                 glFormat,
                  windowSize.x,
                  windowSize.y,
                  0,
-                 showAlbedo ? GL_RGB : GL_RGBA,
-                 showAlbedo ? GL_FLOAT : GL_UNSIGNED_BYTE,
+                 glFormat,
+                 glType,
                  fb);
 
     ospUnmapFrameBuffer(fb, framebuffer);

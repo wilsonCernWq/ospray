@@ -98,11 +98,11 @@ namespace ospray {
 
       OSPData verticesData =
           ospNewData(vertices.size(), OSP_VEC3F, vertices.data());
-      ospSetData(geometry, "vertex", verticesData);
+      ospSetData(geometry, "vertex.position", verticesData);
       ospRelease(verticesData);
 
       OSPData colorsData = ospNewData(colors.size(), OSP_VEC4F, colors.data());
-      ospSetData(geometry, "color", colorsData);
+      ospSetData(geometry, "vertex.color", colorsData);
       ospRelease(colorsData);
 
       OSPData facesData = ospNewData(faces.size(), OSP_UINT, faces.data());
@@ -150,15 +150,19 @@ namespace ospray {
       ospCommit(geometry);
       ospCommit(model);
 
-      OSPInstance instance = ospNewInstance();
-      auto instances       = ospNewData(1, OSP_OBJECT, &model);
-      ospSetData(instance, "geometries", instances);
+      OSPGroup group = ospNewGroup();
+      auto models    = ospNewData(1, OSP_OBJECT, &model);
+      ospSetData(group, "geometry", models);
+      ospCommit(group);
+      ospRelease(models);
+
+      OSPInstance instance = ospNewInstance(group);
       ospCommit(instance);
-      ospRelease(instances);
 
       OSPTestingGeometry retval;
       retval.geometry = geometry;
       retval.model    = model;
+      retval.group    = group;
       retval.instance = instance;
       retval.bounds   = reinterpret_cast<osp_box3f &>(bounds);
 

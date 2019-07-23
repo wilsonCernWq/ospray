@@ -16,43 +16,54 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/ManagedObject.h>
+// ospray stuff
+#include "Managed.h"
+// stl
+#include <vector>
+// embree
+#include "embree3/rtcore.h"
+// ospcommon
+#include "ospcommon/utility/Optional.h"
 
 namespace ospray {
-namespace cpp    {
 
-class PixelOp : public ManagedObject_T<OSPPixelOp>
-{
-public:
+  using OptionalScene = utility::Optional<RTCScene>;
 
-  PixelOp() = default;
-  PixelOp(const std::string &type);
-  PixelOp(const PixelOp &copy);
-  PixelOp(OSPPixelOp existing);
-};
+  struct OSPRAY_SDK_INTERFACE Group : public ManagedObject
+  {
+    Group();
+    ~Group() override;
 
-// Inlined function definitions ///////////////////////////////////////////////
+    std::string toString() const override;
+    void commit() override;
 
-inline PixelOp::PixelOp(const std::string &type)
-{
-  OSPPixelOp c = ospNewPixelOp(type.c_str());
-  if (c) {
-    ospObject = c;
-  } else {
-    throw std::runtime_error("Failed to create OSPPixelOp!");
+    OptionalScene embreeGeometryScene();
+    OptionalScene embreeVolumeScene();
+
+    // Data members //
+
+    Ref<Data> geometricModels;
+    std::vector<void *> geometryIEs;  // NOTE: needs to be freed!
+    std::vector<void *> geometricModelIEs;
+
+    Ref<Data> volumetricModels;
+    std::vector<void *> volumeIEs;  // NOTE: needs to be freed!
+    std::vector<void *> volumetricModelIEs;
+
+    RTCScene sceneGeometries{nullptr};
+    RTCScene sceneVolumes{nullptr};
+  };
+
+  // Inlined members /////////////////////////////////////////////////////////
+
+  inline OptionalScene Group::embreeGeometryScene()
+  {
+    return sceneGeometries ? sceneGeometries : OptionalScene();
   }
-}
 
-inline PixelOp::PixelOp(const PixelOp &copy) :
-  ManagedObject_T<OSPPixelOp>(copy.handle())
-{
-}
+  inline OptionalScene Group::embreeVolumeScene()
+  {
+    return sceneVolumes ? sceneVolumes : OptionalScene();
+  }
 
-inline PixelOp::PixelOp(OSPPixelOp existing) :
-  ManagedObject_T<OSPPixelOp>(existing)
-{
-}
-
-
-}// namespace cpp
-}// namespace ospray
+}  // namespace ospray

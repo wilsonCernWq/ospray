@@ -17,21 +17,16 @@
 #pragma once
 
 // ospray stuff
-#include "geometry/GeometricModel.h"
-#include "volume/VolumetricModel.h"
+#include "Group.h"
 // embree
 #include "embree3/rtcore.h"
-// ospcommon
-#include "ospcommon/utility/Optional.h"
 
 namespace ospray {
 
-  using OptionalScene = utility::Optional<RTCScene>;
-
   struct OSPRAY_SDK_INTERFACE Instance : public ManagedObject
   {
-    Instance();
-    ~Instance() override;
+    Instance(Group *group);
+    ~Instance() override = default;
 
     std::string toString() const override;
 
@@ -39,26 +34,12 @@ namespace ospray {
 
     affine3f xfm();
 
-    OptionalScene embreeGeometryScene();
-    OptionalScene embreeVolumeScene();
+    // Data //
 
-   private:
-    // Geometry information
     affine3f instanceXfm;
     affine3f rcpXfm;
 
-    Ref<Data> geometricModels;
-    std::vector<void *> geometricModelIEs;
-
-    Ref<Data> volumetricModels;
-    std::vector<void *> volumetricModelIEs;
-
-    //! \brief the embree scene handle for this geometry
-    RTCScene sceneGeometries{nullptr};
-    RTCScene sceneVolumes{nullptr};
-
-    friend struct PathTracer;  // TODO: fix this!
-    friend struct Renderer;
+    Ref<Group> group;
   };
 
   // Inlined definitions //////////////////////////////////////////////////////
@@ -66,16 +47,6 @@ namespace ospray {
   inline affine3f Instance::xfm()
   {
     return instanceXfm;
-  }
-
-  inline OptionalScene Instance::embreeGeometryScene()
-  {
-    return sceneGeometries ? sceneGeometries : OptionalScene();
-  }
-
-  inline OptionalScene Instance::embreeVolumeScene()
-  {
-    return sceneVolumes ? sceneVolumes : OptionalScene();
   }
 
 }  // namespace ospray

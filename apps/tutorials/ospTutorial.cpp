@@ -94,8 +94,8 @@ int main(int argc, const char **argv) {
   // create and setup camera
   ospray::cpp::Camera camera("perspective");
   camera.set("aspect", imgSize.x/(float)imgSize.y);
-  camera.set("pos", cam_pos);
-  camera.set("dir", cam_view);
+  camera.set("position", cam_pos);
+  camera.set("direction", cam_view);
   camera.set("up",  cam_up);
   camera.commit(); // commit each object to indicate modifications are done
 
@@ -103,7 +103,7 @@ int main(int argc, const char **argv) {
   ospray::cpp::Geometry mesh("triangles");
   ospray::cpp::Data data(4, OSP_VEC3FA, vertex); // OSP_VEC3F format is also supported for vertex positions
   data.commit();
-  mesh.set("vertex", data);
+  mesh.set("vertex.position", data);
   data.release(); // we are done using this handle
 
   data = ospray::cpp::Data(4, OSP_VEC4F, color);
@@ -118,22 +118,30 @@ int main(int argc, const char **argv) {
 
   mesh.commit();
 
+  // put the mesh into a model
   ospray::cpp::GeometricModel model(mesh);
   model.commit();
   mesh.release(); // we are done using this handle
 
-  ospray::cpp::Instance instance;
+  // put the model into a group (collection of models)
+  ospray::cpp::Group group;
   auto modelHandle = model.handle();
   data = ospray::cpp::Data(1, OSP_OBJECT, &modelHandle);
-  instance.set("geometries", data);
+  group.set("geometry", data);
   model.release(); // we are done using this handle
   data.release(); // we are done using this handle
-  instance.commit();
+  group.commit();
 
+  // put the group into an instance (give the group a world transform)
+  ospray::cpp::Instance instance(group);
+  instance.commit();
+  group.release();
+
+  // put the instance in the world
   ospray::cpp::World world;
   auto instanceHandle = instance.handle();
   data = ospray::cpp::Data(1, OSP_OBJECT, &instanceHandle);
-  world.set("instances", data);
+  world.set("instance", data);
   instance.release(); // we are done using this handle
   data.release(); // we are done using this handle
   world.commit();
@@ -151,7 +159,7 @@ int main(int argc, const char **argv) {
   // complete setup of renderer
   renderer.set("aoSamples", 1);
   renderer.set("bgColor", 1.0f); // white, transparent
-  renderer.set("lights", lights);
+  renderer.set("light", lights);
   renderer.commit();
 
 

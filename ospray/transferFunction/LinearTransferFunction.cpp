@@ -33,8 +33,8 @@ namespace ospray {
   void LinearTransferFunction::commit()
   {
     // Retrieve the color and opacity values.
-    colorValues   = getParamData("colors", nullptr);
-    opacityValues = getParamData("opacities", nullptr);
+    colorValues   = getParamData("color", nullptr);
+    opacityValues = getParamData("opacity", nullptr);
     ispc::LinearTransferFunction_setPreIntegration(
         ispcEquivalent, getParam1b("preIntegration", false));
 
@@ -56,9 +56,6 @@ namespace ospray {
       ispc::LinearTransferFunction_precomputePreIntegratedValues(ispcEquivalent);
 
     TransferFunction::commit();
-
-    // Notify listeners that the transfer function has changed.
-    notifyListenersThatObjectGotChanged();
   }
 
   std::string LinearTransferFunction::toString() const

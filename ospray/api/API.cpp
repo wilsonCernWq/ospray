@@ -491,17 +491,6 @@ extern "C" OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume)
 OSPRAY_CATCH_END(nullptr)
 
 ///////////////////////////////////////////////////////////////////////////////
-// Instancing /////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////
-
-extern "C" OSPInstance ospNewInstance() OSPRAY_CATCH_BEGIN
-{
-  ASSERT_DEVICE();
-  return currentDevice().newInstance();
-}
-OSPRAY_CATCH_END(nullptr)
-
-///////////////////////////////////////////////////////////////////////////////
 // Model Meta-Data ////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -545,7 +534,25 @@ extern "C" OSPTexture ospNewTexture(const char *type) OSPRAY_CATCH_BEGIN
 OSPRAY_CATCH_END(nullptr)
 
 ///////////////////////////////////////////////////////////////////////////////
-// World Manipulation /////////////////////////////////////////////////////////
+// Instancing /////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+
+extern "C" OSPGroup ospNewGroup() OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().newGroup();
+}
+OSPRAY_CATCH_END(nullptr)
+
+extern "C" OSPInstance ospNewInstance(OSPGroup group) OSPRAY_CATCH_BEGIN
+{
+  ASSERT_DEVICE();
+  return currentDevice().newInstance(group);
+}
+OSPRAY_CATCH_END(nullptr)
+
+///////////////////////////////////////////////////////////////////////////////
+// Top-level Worlds ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
 extern "C" OSPWorld ospNewWorld() OSPRAY_CATCH_BEGIN
@@ -1008,10 +1015,10 @@ extern "C" OSPFrameBuffer ospNewFrameBuffer(int size_x,
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" OSPPixelOp ospNewPixelOp(const char *_type) OSPRAY_CATCH_BEGIN
+extern "C" OSPImageOp ospNewImageOp(const char *_type) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
-  Assert2(_type, "invalid render type identifier in ospNewPixelOp");
+  Assert2(_type, "invalid render type identifier in ospNewImageOp");
   int L      = strlen(_type);
   char *type = STACK_BUFFER(char, L + 1);
   for (int i = 0; i <= L; i++) {
@@ -1020,8 +1027,8 @@ extern "C" OSPPixelOp ospNewPixelOp(const char *_type) OSPRAY_CATCH_BEGIN
       c = '_';
     type[i] = c;
   }
-  OSPPixelOp pixelOp = currentDevice().newPixelOp(type);
-  return pixelOp;
+  OSPImageOp op = currentDevice().newImageOp(type);
+  return op;
 }
 OSPRAY_CATCH_END(nullptr)
 

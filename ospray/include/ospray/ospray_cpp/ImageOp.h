@@ -16,19 +16,42 @@
 
 #pragma once
 
-// ospray
-#include "PixelOp.h"
+#include "ManagedObject.h"
 
 namespace ospray {
+  namespace cpp {
+    class ImageOp : public ManagedObject_T<OSPImageOp>
+    {
+      public:
 
-  /*! \brief Generic tone mapping operator approximating ACES by default. */
-  struct OSPRAY_SDK_INTERFACE ToneMapperPixelOp : public PixelOp
-  {
-    ToneMapperPixelOp();
-    virtual void commit() override;
-    virtual void postAccum(FrameBuffer *fb, Tile &tile) override;
+        ImageOp() = default;
+        ImageOp(const std::string &type);
+        ImageOp(const ImageOp &copy);
+        ImageOp(OSPImageOp existing);
+    };
 
-    virtual std::string toString() const override;
-  };
+    // Inlined function definitions ///////////////////////////////////////////////
 
-} // ::ospray
+    inline ImageOp::ImageOp(const std::string &type)
+    {
+      OSPImageOp c = ospNewImageOp(type.c_str());
+      if (c) {
+        ospObject = c;
+      } else {
+        throw std::runtime_error("Failed to create OSPImageOp!");
+      }
+    }
+
+    inline ImageOp::ImageOp(const ImageOp &copy) :
+      ManagedObject_T<OSPImageOp>(copy.handle())
+    {
+    }
+
+    inline ImageOp::ImageOp(OSPImageOp existing) :
+      ManagedObject_T<OSPImageOp>(existing)
+    {
+    }
+
+
+  }// namespace cpp
+}// namespace ospray

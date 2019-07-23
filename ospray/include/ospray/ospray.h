@@ -126,13 +126,6 @@ typedef enum
 #define OSP_DEFAULT_VAL(a)
 #endif
 
-typedef struct
-{
-  int   bounds[6];
-  int   refinementLevel;
-  float cellWidth;
-} osp_amr_brick_info;
-
 // Give OSPRay handle types a concrete defintion to enable C++ type checking
 #ifdef __cplusplus
 namespace osp {
@@ -143,6 +136,7 @@ namespace osp {
   struct Camera           : public ManagedObject {};
   struct Data             : public ManagedObject {};
   struct Future           : public ManagedObject {};
+  struct Group            : public ManagedObject {};
   struct Geometry         : public ManagedObject {};
   struct GeometricModel   : public ManagedObject {};
   struct Material         : public ManagedObject {};
@@ -151,8 +145,8 @@ namespace osp {
   struct TransferFunction : public ManagedObject {};
   struct Texture          : public ManagedObject {};
   struct Light            : public ManagedObject {};
-  struct PixelOp          : public ManagedObject {};
   struct Instance         : public ManagedObject {};
+  struct ImageOp          : public ManagedObject {};
   struct World            : public ManagedObject {};
 }
 
@@ -162,6 +156,7 @@ typedef osp::Renderer          *OSPRenderer;
 typedef osp::Camera            *OSPCamera;
 typedef osp::Data              *OSPData;
 typedef osp::Future            *OSPFuture;
+typedef osp::Group             *OSPGroup;
 typedef osp::Geometry          *OSPGeometry;
 typedef osp::GeometricModel    *OSPGeometricModel;
 typedef osp::Material          *OSPMaterial;
@@ -171,8 +166,8 @@ typedef osp::VolumetricModel   *OSPVolumetricModel;
 typedef osp::TransferFunction  *OSPTransferFunction;
 typedef osp::Texture           *OSPTexture;
 typedef osp::ManagedObject     *OSPObject;
-typedef osp::PixelOp           *OSPPixelOp;
 typedef osp::Instance          *OSPInstance;
+typedef osp::ImageOp           *OSPImageOp;
 typedef osp::World             *OSPWorld;
 #else
 typedef void _OSPManagedObject;
@@ -189,6 +184,7 @@ typedef _OSPManagedObject *OSPManagedObject,
   *OSPInstance,
   *OSPWorld,
   *OSPData,
+  *OSPGroup,
   *OSPGeometry,
   *OSPGeometricModel,
   *OSPMaterial,
@@ -198,7 +194,7 @@ typedef _OSPManagedObject *OSPManagedObject,
   *OSPTransferFunction,
   *OSPTexture,
   *OSPObject,
-  *OSPPixelOp,
+  *OSPImageOp,
   *OSPFuture;
 #endif
 
@@ -282,10 +278,6 @@ extern "C" {
   OSPRAY_INTERFACE OSPGeometricModel ospNewGeometricModel(OSPGeometry geom);
   OSPRAY_INTERFACE OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume);
 
-  // Instancing ///////////////////////////////////////////////////////////////
-
-  OSPRAY_INTERFACE OSPInstance ospNewInstance();
-
   // Model Meta-Data //////////////////////////////////////////////////////////
 
   OSPRAY_INTERFACE OSPMaterial ospNewMaterial(const char *rendererType,
@@ -295,7 +287,12 @@ extern "C" {
 
   OSPRAY_INTERFACE OSPTexture ospNewTexture(const char *type);
 
-  // World Manipulation ///////////////////////////////////////////////////////
+  // Instancing ///////////////////////////////////////////////////////////////
+
+  OSPRAY_INTERFACE OSPGroup ospNewGroup();
+  OSPRAY_INTERFACE OSPInstance ospNewInstance(OSPGroup);
+
+  // Top-level Worlds /////////////////////////////////////////////////////////
 
   OSPRAY_INTERFACE OSPWorld ospNewWorld();
 
@@ -363,10 +360,11 @@ extern "C" {
                                                     OSPFrameBufferFormat format OSP_DEFAULT_VAL(= OSP_FB_SRGBA),
                                                     uint32_t frameBufferChannels OSP_DEFAULT_VAL(= OSP_FB_COLOR));
 
-  // Create a new pixel op of given type return 'NULL' if that type is not known
-  OSPRAY_INTERFACE OSPPixelOp ospNewPixelOp(const char *type);
+  //! create a new pixel op of given type
+  /*! return 'NULL' if that type is not known */
+  OSPRAY_INTERFACE OSPImageOp ospNewImageOp(const char *type);
 
-  // Map app-side content of a framebuffer (see \ref frame_buffer_handling)
+  /*! \brief map app-side content of a framebuffer (see \ref frame_buffer_handling) */
   OSPRAY_INTERFACE const void *ospMapFrameBuffer(OSPFrameBuffer,
                                                  OSPFrameBufferChannel OSP_DEFAULT_VAL(=OSP_FB_COLOR));
 

@@ -19,13 +19,13 @@
 
 namespace ospray {
 
-  FrameBuffer::FrameBuffer(const vec2i &size,
-                           ColorBufferFormat colorBufferFormat,
+  FrameBuffer::FrameBuffer(const vec2i &_size,
+                           ColorBufferFormat _colorBufferFormat,
                            const uint32 channels)
-    : size(size),
+    : size(_size),
       numTiles(divRoundUp(size, getTileSize())),
       maxValidPixelID(size-vec2i(1)),
-      colorBufferFormat(colorBufferFormat),
+      colorBufferFormat(_colorBufferFormat),
       hasDepthBuffer(channels & OSP_FB_DEPTH),
       hasAccumBuffer(channels & OSP_FB_ACCUM),
       hasVarianceBuffer(channels & OSP_FB_VARIANCE && channels & OSP_FB_ACCUM),
@@ -39,7 +39,7 @@ namespace ospray {
 
   void FrameBuffer::commit()
   {
-    pixelOpData = getParamData("pixelOperations", nullptr);
+    imageOpData = getParamData("imageOps", nullptr);
   }
 
   vec2i FrameBuffer::getTileSize() const
@@ -113,6 +113,25 @@ namespace ospray {
   bool FrameBuffer::frameCancelled() const
   {
     return cancelRender;
+  }
+
+  void FrameBuffer::findFirstFrameOperation()
+  {
+    firstFrameOperation = -1;
+    if (imageOps.empty())
+      return;
+
+    firstFrameOperation = imageOps.size();
+    for (size_t i = 0; i < imageOps.size(); ++i) {
+      const auto *obj = imageOps[i].get();
+      const bool isFrameOp = dynamic_cast<const LiveFrameOp *>(obj) != nullptr;
+
+      if (firstFrameOperation == imageOps.size() && isFrameOp)
+        firstFrameOperation = i;
+      else if (firstFrameOperation < imageOps.size() && !isFrameOp)
+        throw std::runtime_error("PixelOps/TileOps can't come after FrameOps "
+                                 "in the imageOp pipeline for now.");
+    }
   }
 
 } // ::ospray

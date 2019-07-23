@@ -21,6 +21,8 @@
 // ospcommon
 #include "ospcommon/box.h"
 #include "ospcommon/tasking/parallel_for.h"
+// apps/utility
+#include "../../utility/rawToAMR.h"
 using namespace ospcommon;
 
 namespace ospray {
@@ -31,16 +33,16 @@ namespace ospray {
       GravitySpheresVolume()           = default;
       ~GravitySpheresVolume() override = default;
 
+      std::vector<float> generateVoxels(const size_t numPoints=10) const;
       OSPTestingVolume createVolume() const override;
 
-     private:
+     protected:
       size_t volumeDimension{256};
-      size_t numPoints{10};
     };
 
     // Inlined definitions ////////////////////////////////////////////////////
 
-    OSPTestingVolume GravitySpheresVolume::createVolume() const
+    std::vector<float> GravitySpheresVolume::generateVoxels(const size_t numPoints) const
     {
       struct Point
       {
@@ -66,20 +68,6 @@ namespace ospray {
         p.weight = weightDistribution(gen);
       }
 
-      // create a structured volume and assign attributes
-      OSPVolume volume = ospNewVolume("block_bricked_volume");
-
-      ospSetVec3i(volume,
-               "dimensions",
-               volumeDimension,
-               volumeDimension,
-               volumeDimension);
-      ospSetString(volume, "voxelType", "float");
-      ospSetVec3f(volume, "gridOrigin", -1.f, -1.f, -1.f);
-
-      const float gridSpacing = 2.f / float(volumeDimension);
-      ospSetVec3f(volume, "gridSpacing", gridSpacing, gridSpacing, gridSpacing);
-
       // get world coordinate in [-1.f, 1.f] from logical coordinates in [0,
       // volumeDimension)
       auto logicalToWorldCoordinates = [&](size_t i, size_t j, size_t k) {
@@ -88,7 +76,7 @@ namespace ospray {
                      -1.f + float(k) / float(volumeDimension - 1) * 2.f);
       };
 
-      // generate volume values
+      // generate voxels
       std::vector<float> voxels(volumeDimension * volumeDimension *
                                 volumeDimension);
 
@@ -116,6 +104,28 @@ namespace ospray {
         }
       });
 
+      return voxels;
+    }
+
+    OSPTestingVolume GravitySpheresVolume::createVolume() const
+    {
+      // create a structured volume and assign attributes
+      OSPVolume volume = ospNewVolume("block_bricked_volume");
+
+      ospSetVec3i(volume,
+               "dimensions",
+               volumeDimension,
+               volumeDimension,
+               volumeDimension);
+      ospSetString(volume, "voxelType", "float");
+      ospSetVec3f(volume, "gridOrigin", -1.f, -1.f, -1.f);
+
+      const float gridSpacing = 2.f / float(volumeDimension);
+      ospSetVec3f(volume, "gridSpacing", gridSpacing, gridSpacing, gridSpacing);
+
+      // generate volume values
+      std::vector<float> voxels = generateVoxels();
+
       vec3i regionStart{0, 0, 0};
       vec3i regionEnd{
           int(volumeDimension), int(volumeDimension), int(volumeDimension)};
@@ -140,6 +150,96 @@ namespace ospray {
     }
 
     OSP_REGISTER_TESTING_VOLUME(GravitySpheresVolume, gravity_spheres_volume);
+
+    struct GravitySpheresAMRVolume : public GravitySpheresVolume
+    {
+      GravitySpheresAMRVolume()           = default;
+      ~GravitySpheresAMRVolume() override = default;
+
+      OSPTestingVolume createVolume() const override;
+    };
+
+    OSPTestingVolume GravitySpheresAMRVolume::createVolume() const
+    {
+      // generate the structured volume voxel data
+      std::vector<float> voxels = generateVoxels(20);
+
+      // initialize constants for converting to AMR
+      vec3f volumeDims(volumeDimension, volumeDimension, volumeDimension);
+      const int numLevels       = 2;
+      const int blockSize       = 16;
+      const int refinementLevel = 4;
+      const float threshold     = 1.0;
+
+      std::vector<box3i> blockBounds;
+      std::vector<int> refinementLevels;
+      std::vector<float> cellWidths;
+      std::vector<std::vector<float>> blockDataVectors;
+      std::vector<OSPData> blockData;
+
+      // convert the structured volume to AMR
+      ospray::amr::makeAMR(voxels,
+                           volumeDims,
+                           numLevels,
+                           blockSize,
+                           refinementLevel,
+                           threshold,
+                           blockBounds,
+                           refinementLevels,
+                           cellWidths,
+                           blockDataVectors);
+
+      for (const std::vector<float> &bd : blockDataVectors) {
+        OSPData data =
+            ospNewData(bd.size(), OSP_FLOAT, bd.data(), OSP_DATA_SHARED_BUFFER);
+        blockData.push_back(data);
+      }
+
+      OSPData blockDataData = ospNewData(
+          blockData.size(), OSP_DATA, blockData.data(), OSP_DATA_SHARED_BUFFER);
+      ospCommit(blockDataData);
+
+      OSPData blockBoundsData = ospNewData(blockBounds.size(),
+                                           OSP_BOX3I,
+                                           blockBounds.data(),
+                                           OSP_DATA_SHARED_BUFFER);
+      ospCommit(blockBoundsData);
+
+      OSPData refinementLevelsData = ospNewData(refinementLevels.size(),
+                                                OSP_INT,
+                                                refinementLevels.data(),
+                                                OSP_DATA_SHARED_BUFFER);
+      ospCommit(refinementLevelsData);
+
+      OSPData cellWidthsData = ospNewData(cellWidths.size(),
+                                          OSP_FLOAT,
+                                          cellWidths.data(),
+                                          OSP_DATA_SHARED_BUFFER);
+      ospCommit(cellWidthsData);
+
+      // create an AMR volume and assign attributes
+      OSPVolume volume = ospNewVolume("amr_volume");
+
+      ospSetString(volume, "voxelType", "float");
+      ospSetData(volume, "block.data", blockDataData);
+      ospSetData(volume, "block.bounds", blockBoundsData);
+      ospSetData(volume, "block.level", refinementLevelsData);
+      ospSetData(volume, "block.cellWidth", cellWidthsData);
+
+      ospCommit(volume);
+
+      float ub = std::pow((float)refinementLevel, (float)numLevels + 1);
+
+      OSPTestingVolume retval;
+      retval.volume     = volume;
+      retval.voxelRange = osp_vec2f{0, 100};
+      retval.bounds     = osp_box3f{osp_vec3f{0, 0, 0}, osp_vec3f{ub, ub, ub}};
+
+      return retval;
+    }
+
+    OSP_REGISTER_TESTING_VOLUME(GravitySpheresAMRVolume,
+                                gravity_spheres_amr_volume);
 
   }  // namespace testing
 }  // namespace ospray

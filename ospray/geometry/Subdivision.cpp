@@ -24,11 +24,6 @@
 
 namespace ospray {
 
-  Subdivision::Subdivision()
-  {
-    this->ispcEquivalent = ispc::Subdivision_create(this);
-  }
-
   std::string Subdivision::toString() const
   {
     return "ospray::Subdivision";
@@ -36,23 +31,22 @@ namespace ospray {
 
   void Subdivision::commit()
   {
-    Geometry::commit();
+    vertexData   = getParamData("vertex.position");
+    colorsData   = getParamData("vertex.color");
+    texcoordData = getParamData("vertex.texcoord");
 
     level = getParam1f("level", 5.f);
 
-    vertexData = getParamData("vertex", getParamData("position"));
-    indexData  = getParamData("index");
-    facesData  = getParamData("face");
+    indexData      = getParamData("index");
+    indexLevelData = getParamData("index.level");
+
+    facesData = getParamData("face");
 
     edge_crease_indicesData = getParamData("edgeCrease.index");
     edge_crease_weightsData = getParamData("edgeCrease.weight");
 
     vertex_crease_indicesData = getParamData("vertexCrease.index");
     vertex_crease_weightsData = getParamData("vertexCrease.weight");
-
-    colorsData     = getParamData("vertex.color", getParamData("color"));
-    texcoordData   = getParamData("vertex.texcoord", getParamData("texcoord"));
-    indexLevelData = getParamData("index.level");
 
     // check for valid params
     if (!vertexData || vertexData->type != OSP_VEC3F)
@@ -86,14 +80,8 @@ namespace ospray {
       throw std::runtime_error(
           "unsupported subdivision 'vertex.texcoord' data type");
 
-    createEmbreeGeometry();
-
     postStatusMsg(2) << "  created subdivision (" << numFaces << " faces "
                      << ", " << vertexData->size() << " vertices)\n";
-
-    vec2f *texcoord = texcoordData ? (vec2f *)texcoordData->data : nullptr;
-
-    ispc::Subdivision_set(getIE(), embreeGeometry, (ispc::vec2f *)texcoord);
   }
 
   size_t Subdivision::numPrimitives() const
@@ -101,12 +89,12 @@ namespace ospray {
     return indexData ? indexData->numItems / 4 : 0;
   }
 
-  void Subdivision::createEmbreeGeometry()
+  LiveGeometry Subdivision::createEmbreeGeometry()
   {
-    if (embreeGeometry)
-      rtcReleaseGeometry(embreeGeometry);
+    LiveGeometry retval;
 
-    auto geom =
+    retval.ispcEquivalent = ispc::Subdivision_create(this);
+    retval.embreeGeometry =
         rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_SUBDIVISION);
 
     vec3f *vertex = (vec3f *)vertexData->data;
@@ -115,7 +103,7 @@ namespace ospray {
         indexLevelData ? (float *)indexLevelData->data : nullptr;
     vec2f *texcoord = texcoordData ? (vec2f *)texcoordData->data : nullptr;
 
-    rtcSetSharedGeometryBuffer(geom,
+    rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                RTC_BUFFER_TYPE_VERTEX,
                                0,
                                RTC_FORMAT_FLOAT3,
@@ -123,7 +111,7 @@ namespace ospray {
                                0,
                                sizeof(vec3f),
                                vertexData->size());
-    rtcSetSharedGeometryBuffer(geom,
+    rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                RTC_BUFFER_TYPE_INDEX,
                                0,
                                RTC_FORMAT_UINT,
@@ -131,7 +119,7 @@ namespace ospray {
                                0,
                                sizeof(unsigned int),
                                indexData->size());
-    rtcSetSharedGeometryBuffer(geom,
+    rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                RTC_BUFFER_TYPE_FACE,
                                0,
                                RTC_FORMAT_UINT,
@@ -146,7 +134,7 @@ namespace ospray {
         postStatusMsg(1)
             << "subdivision edge crease indices size does not match weights";
       else {
-        rtcSetSharedGeometryBuffer(geom,
+        rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                    RTC_BUFFER_TYPE_EDGE_CREASE_INDEX,
                                    0,
                                    RTC_FORMAT_UINT2,
@@ -154,7 +142,7 @@ namespace ospray {
                                    0,
                                    2 * sizeof(unsigned int),
                                    edge_creases);
-        rtcSetSharedGeometryBuffer(geom,
+        rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                    RTC_BUFFER_TYPE_EDGE_CREASE_WEIGHT,
                                    0,
                                    RTC_FORMAT_FLOAT,
@@ -171,7 +159,7 @@ namespace ospray {
         postStatusMsg(1)
             << "subdivision vertex crease indices size does not match weights";
       else {
-        rtcSetSharedGeometryBuffer(geom,
+        rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                    RTC_BUFFER_TYPE_VERTEX_CREASE_INDEX,
                                    0,
                                    RTC_FORMAT_UINT,
@@ -179,7 +167,7 @@ namespace ospray {
                                    0,
                                    sizeof(unsigned int),
                                    vertex_creases);
-        rtcSetSharedGeometryBuffer(geom,
+        rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                    RTC_BUFFER_TYPE_VERTEX_CREASE_WEIGHT,
                                    0,
                                    RTC_FORMAT_FLOAT,
@@ -191,8 +179,8 @@ namespace ospray {
     }
 
     if (colors) {
-      rtcSetGeometryVertexAttributeCount(geom, 1);
-      rtcSetSharedGeometryBuffer(geom,
+      rtcSetGeometryVertexAttributeCount(retval.embreeGeometry, 1);
+      rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                  RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
                                  0,
                                  RTC_FORMAT_FLOAT4,
@@ -203,8 +191,8 @@ namespace ospray {
     }
 
     if (texcoord) {
-      rtcSetGeometryVertexAttributeCount(geom, 2);
-      rtcSetSharedGeometryBuffer(geom,
+      rtcSetGeometryVertexAttributeCount(retval.embreeGeometry, 2);
+      rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                  RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
                                  1,
                                  RTC_FORMAT_FLOAT2,
@@ -215,9 +203,9 @@ namespace ospray {
     }
 
     if (!indexLevelData)
-      rtcSetGeometryTessellationRate(geom, level);
+      rtcSetGeometryTessellationRate(retval.embreeGeometry, level);
     else {
-      rtcSetSharedGeometryBuffer(geom,
+      rtcSetSharedGeometryBuffer(retval.embreeGeometry,
                                  RTC_BUFFER_TYPE_LEVEL,
                                  0,
                                  RTC_FORMAT_FLOAT,
@@ -227,9 +215,12 @@ namespace ospray {
                                  indexLevelData->size());
     }
 
-    rtcCommitGeometry(geom);
+    rtcCommitGeometry(retval.embreeGeometry);
 
-    embreeGeometry = geom;
+    ispc::Subdivision_set(
+        retval.ispcEquivalent, retval.embreeGeometry, (ispc::vec2f *)texcoord);
+
+    return retval;
   }
 
   OSP_REGISTER_GEOMETRY(Subdivision, subdivision);

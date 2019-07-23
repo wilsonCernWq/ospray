@@ -13,27 +13,30 @@
 // See the License for the specific language governing permissions and      //
 // limitations under the License.                                           //
 // ======================================================================== //
+
 #pragma once
 
-#include "ospray/fb/PixelOp.h"
+// oidn
+#include "OpenImageDenoise/oidn.h"
+// ospray
+#include "ospray/fb/ImageOp.h"
+#include "ospray_module_denoiser_export.h"
 
 namespace ospray {
-  // The debug PixelOp just dumps the input tiles out as PPM files,
-  // with some optional filename prefix. It can also add a color to the
-  // tile which will be passed down the pipeline after it, for testing
-  // the tile pipeline itself.
-  // To combine the output tiles into a single
-  // image you can use ImageMagick's montage command:
-  // montage `ls *.ppm | sort -V` -geometry +0+0 -tile MxN out.jpg
-  // where M is the number of tiles along X, and N the number of tiles along Y
-  struct DebugPixelOp : public PixelOp
+
+  struct OSPRAY_MODULE_DENOISER_EXPORT DenoiseFrameOp : public FrameOp
   {
-    void commit() override;
-    void postAccum(FrameBuffer *fb, Tile &tile) override;
+    DenoiseFrameOp();
+
+    virtual ~DenoiseFrameOp() override;
+
+    virtual std::unique_ptr<LiveImageOp> attach(
+        FrameBufferView &fbView) override;
+
     std::string toString() const override;
 
-    std::string prefix;
-    vec3f addColor;
+   private:
+    OIDNDevice device;
   };
-}
 
+}  // namespace ospray

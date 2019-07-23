@@ -92,8 +92,8 @@ int main(int argc, const char **argv) {
   // create and setup camera
   OSPCamera camera = ospNewCamera("perspective");
   ospSetFloat(camera, "aspect", imgSize_x/(float)imgSize_y);
-  ospSetVec3fv(camera, "pos", cam_pos);
-  ospSetVec3fv(camera, "dir", cam_view);
+  ospSetVec3fv(camera, "position", cam_pos);
+  ospSetVec3fv(camera, "direction", cam_view);
   ospSetVec3fv(camera, "up",  cam_up);
   ospCommit(camera); // commit each object to indicate modifications are done
 
@@ -102,7 +102,7 @@ int main(int argc, const char **argv) {
   OSPGeometry mesh = ospNewGeometry("triangles");
   OSPData data = ospNewData(4, OSP_VEC3FA, vertex, 0); // OSP_VEC3F format is also supported for vertex positions
   ospCommit(data);
-  ospSetData(mesh, "vertex", data);
+  ospSetData(mesh, "vertex.position", data);
   ospRelease(data); // we are done using this handle
 
   data = ospNewData(4, OSP_VEC4F, color, 0);
@@ -122,18 +122,23 @@ int main(int argc, const char **argv) {
   ospCommit(model);
   ospRelease(mesh); // we are done using this handle
 
-  // put the model into an instance
-  OSPInstance instance = ospNewInstance();
+  // put the model into a group (collection of models)
+  OSPGroup group = ospNewGroup();
   OSPData geometricModels = ospNewData(1, OSP_OBJECT, &model, 0);
-  ospSetData(instance, "geometries", geometricModels);
-  ospCommit(instance);
+  ospSetData(group, "geometry", geometricModels);
+  ospCommit(group);
   ospRelease(model);
   ospRelease(geometricModels);
+
+  // put the group into an instance (give the group a world transform)
+  OSPInstance instance = ospNewInstance(group);
+  ospCommit(instance);
+  ospRelease(group);
 
   // put the instance in the world
   OSPWorld world = ospNewWorld();
   OSPData instances = ospNewData(1, OSP_OBJECT, &instance, 0);
-  ospSetData(world, "instances", instances);
+  ospSetData(world, "instance", instances);
   ospCommit(world);
   ospRelease(instance);
   ospRelease(instances);
@@ -150,7 +155,7 @@ int main(int argc, const char **argv) {
   // complete setup of renderer
   ospSetInt(renderer, "aoSamples", 1);
   ospSetFloat(renderer, "bgColor", 1.0f); // white, transparent
-  ospSetObject(renderer, "lights", lights);
+  ospSetObject(renderer, "light", lights);
   ospCommit(renderer);
 
   // create and setup framebuffer

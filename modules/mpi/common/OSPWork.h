@@ -34,8 +34,10 @@
 #include "camera/Camera.h"
 #include "common/Instance.h"
 #include "common/World.h"
+#include "geometry/Geometry.h"
 #include "lights/Light.h"
 #include "render/Renderer.h"
+#include "fb/ImageOp.h"
 #include "transferFunction/TransferFunction.h"
 #include "volume/Volume.h"
 
@@ -160,8 +162,8 @@ namespace ospray {
       // NewObjectT explicit instantiations ///////////////////////////////////
 
       using NewWorld            = NewObjectT<World>;
-      using NewInstance         = NewObjectT<Instance>;
-      using NewPixelOp          = NewObjectT<PixelOp>;
+      using NewGroup            = NewObjectT<Group>;
+      using NewImageOp          = NewObjectT<ImageOp>;
       using NewRenderer         = NewObjectT<Renderer>;
       using NewCamera           = NewObjectT<Camera>;
       using NewVolume           = NewObjectT<Volume>;
@@ -177,10 +179,16 @@ namespace ospray {
       void NewVolume::runOnMaster();
 
       template <>
+      void NewImageOp::runOnMaster();
+
+      template <>
       void NewWorld::run();
 
       template <>
-      void NewInstance::run();
+      void NewGroup::run();
+
+      template<>
+      void NewCamera::runOnMaster();
 
       struct NewMaterial : public Work
       {
@@ -209,6 +217,30 @@ namespace ospray {
         std::string rendererType;
         std::string materialType;
         ObjectHandle handle;
+      };
+
+      struct NewInstance : public Work
+      {
+        NewInstance() = default;
+        NewInstance(ObjectHandle handle, ObjectHandle group_handle)
+            : handle(handle), groupHandle(group_handle)
+        {
+        }
+
+        void run() override;
+
+        void serialize(WriteStream &b) const override
+        {
+          b << (int64)handle << (int64)groupHandle;
+        }
+
+        void deserialize(ReadStream &b) override
+        {
+          b >> handle.i64 >> groupHandle.i64;
+        }
+
+        ObjectHandle handle;
+        ObjectHandle groupHandle;
       };
 
       struct NewGeometricModel : public Work
@@ -293,6 +325,8 @@ namespace ospray {
                 int flags);
 
         void run() override;
+
+        void runOnMaster() override;
 
         /*! serializes itself on the given serial buffer - will write
           all data into this buffer in a way that it can afterwards
@@ -463,7 +497,9 @@ namespace ospray {
             return;
 
           ManagedObject *obj = handle.lookup();
-          if (dynamic_cast<Renderer *>(obj) || dynamic_cast<Volume *>(obj)) {
+          if (dynamic_cast<Renderer *>(obj) || dynamic_cast<Volume *>(obj)
+              || dynamic_cast<FrameBuffer *>(obj) || dynamic_cast<Camera *>(obj))
+          {
             obj->setParam(name, val);
           }
         }
@@ -516,8 +552,22 @@ namespace ospray {
             param = val.lookup();
             Assert(param);
           }
-          obj->setParam(name.c_str(), param);
+          obj->setParam(name, param);
         }
+
+        void runOnMaster() override
+        {
+          if (!handle.defined() || !val.defined())
+            return;
+
+          ManagedObject *obj = handle.lookup();
+          if (dynamic_cast<Renderer *>(obj) || dynamic_cast<Volume *>(obj)
+            || dynamic_cast<FrameBuffer *>(obj) || dynamic_cast<Camera *>(obj))
+          {
+            obj->setParam(name, val.lookup());
+          }
+        }
+
 
         /*! serializes itself on the given serial buffer - will write
           all data into this buffer in a way that it can afterwards

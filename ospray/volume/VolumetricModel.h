@@ -16,18 +16,18 @@
 
 #pragma once
 
-#include "common/Data.h"
 #include "Volume.h"
+#include "common/Data.h"
 
 namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE VolumetricModel : public ManagedObject
   {
     VolumetricModel(Volume *geometry);
-    virtual ~VolumetricModel() override;
-    virtual std::string toString() const override;
+    ~VolumetricModel() override = default;
+    std::string toString() const override;
 
-    virtual void commit() override;
+    void commit() override;
 
     RTCGeometry embreeGeometryHandle() const;
 
@@ -36,18 +36,8 @@ namespace ospray {
     void setGeomID(int geomID);
 
    private:
-    // Data members //
-
-    // Volume information
-    box3f instanceBounds;
-    AffineSpace3f instanceXfm;
-    Ref<Volume> instancedVolume;
-
-    // Embree information
-    RTCScene embreeSceneHandle{nullptr};
-    RTCGeometry embreeInstanceGeometry{nullptr};
-    RTCGeometry lastEmbreeInstanceGeometryHandle{nullptr}; // to detect updates
-    int embreeID{-1};
+    box3f volumeBounds;
+    Ref<Volume> volume;
   };
 
 }  // namespace ospray

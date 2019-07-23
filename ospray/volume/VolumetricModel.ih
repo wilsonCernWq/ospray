@@ -24,25 +24,6 @@ struct VolumetricModel
 {
   Volume *volume;  //!< instanced Volume
 
-  //! Allow the renderer to perform gradient shading.
-  bool gradientShadingEnabled;
-
-  //! Integrates over transfer function values, good for high frequency tf
-  bool preIntegration;
-
-  //! Adaptively alter the sampling rate according to the sampled values
-  bool adaptiveSampling;
-
-  //! scalar to multiply step size for adaptive calculation
-  float adaptiveScalar;
-
-  //! maximum adaptive sampling rate
-  float adaptiveMaxSamplingRate;
-
-  //! what value to backstep for adaptie sampling, will step back and sample
-  //! finely
-  float adaptiveBacktrack;
-
   //! Recommended sampling step size for ray casting based renderers, set by the
   //! underlying volume implementation.
   float samplingStep;
@@ -53,15 +34,7 @@ struct VolumetricModel
   //! Color and opacity transfer function.
   TransferFunction *transferFunction;
 
-  //! Clipping box for the volume (applies to volume rendering only). An empty
-  //! clipping box is ignored.
-  box3f volumeClippingBox;
-
   box3f boundingBox;
-
-  //! Affine transformation
-  AffineSpace3f xfm;      //!< instantiation matrix
-  AffineSpace3f rcp_xfm;  //!< rcp(instantiation matrix)
 };
 
 // Helper functions ///////////////////////////////////////////////////////////

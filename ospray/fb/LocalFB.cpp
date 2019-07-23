@@ -14,18 +14,18 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-// ospray
+#include <iterator>
 #include "LocalFB.h"
 #include "LocalFB_ispc.h"
-#include "PixelOp.h"
+#include "ImageOp.h"
 
 namespace ospray {
 
-  LocalFrameBuffer::LocalFrameBuffer(const vec2i &size,
-                                     ColorBufferFormat colorBufferFormat,
+  LocalFrameBuffer::LocalFrameBuffer(const vec2i &_size,
+                                     ColorBufferFormat _colorBufferFormat,
                                      const uint32 channels,
                                      void *colorBufferToUse)
-      : FrameBuffer(size, colorBufferFormat, channels),
+      : FrameBuffer(_size, _colorBufferFormat, channels),
         tileErrorRegion(hasVarianceBuffer ? getNumTiles() : vec2i(0))
   {
     Assert(size.x > 0);
@@ -90,6 +90,26 @@ namespace ospray {
     alignedFree(tileAccumID);
   }
 
+  void LocalFrameBuffer::commit()
+  {
+    FrameBuffer::commit();
+
+    imageOps.clear();
+    if (imageOpData) {
+      FrameBufferView fbv(this, colorBufferFormat, colorBuffer, depthBuffer,
+                          normalBuffer, albedoBuffer);
+
+      std::transform(imageOpData->begin<ImageOp *>(),
+                     imageOpData->end<ImageOp*>(),
+                     std::back_inserter(imageOps),
+                     [&](ImageOp *i) {
+                       return i->attach(fbv);
+                     });
+
+      findFirstFrameOperation();
+    }
+  }
+
   std::string LocalFrameBuffer::toString() const
   {
     return "ospray::LocalFrameBuffer";
@@ -132,10 +152,16 @@ namespace ospray {
                                                tile.ny,
                                                tile.nz);
 
-    if (pixelOpData) {
-      std::for_each(pixelOpData->begin<PixelOp *>(),
-                    pixelOpData->end<PixelOp *>(),
-                    [&](PixelOp *p) { p->postAccum(this, tile); });
+    if (!imageOps.empty()) {
+      std::for_each(imageOps.begin(), imageOps.begin() + firstFrameOperation,
+                    [&](std::unique_ptr<LiveImageOp> &iop) {
+                      LiveTileOp *top = dynamic_cast<LiveTileOp *>(iop.get());
+                      if (top) {
+                        top->process(tile);
+                      }
+                      // TODO: For now, frame operations must be last
+                      // in the pipeline
+                    });
     }
 
     if (colorBuffer) {
@@ -169,20 +195,25 @@ namespace ospray {
   {
     FrameBuffer::beginFrame();
 
-    if (pixelOpData) {
-      std::for_each(pixelOpData->begin<PixelOp *>(),
-                    pixelOpData->end<PixelOp *>(),
-                    [](PixelOp *p) { p->beginFrame(); });
-    }
+    std::for_each(imageOps.begin(), imageOps.end(),
+                  [](std::unique_ptr<LiveImageOp> &p) { p->beginFrame(); });
   }
 
-  void LocalFrameBuffer::endFrame(const float errorThreshold)
+  void LocalFrameBuffer::endFrame(const float errorThreshold,
+                                  const Camera *camera)
   {
-    if (pixelOpData) {
-      std::for_each(pixelOpData->begin<PixelOp *>(),
-                    pixelOpData->end<PixelOp *>(),
-                    [](PixelOp *p) { p->endFrame(); });
+    if (!imageOps.empty() && firstFrameOperation < imageOps.size()) {
+      std::for_each(imageOps.begin() + firstFrameOperation,
+                    imageOps.end(),
+                    [&](std::unique_ptr<LiveImageOp> &iop) {
+                      LiveFrameOp *fop = dynamic_cast<LiveFrameOp *>(iop.get());
+                      if (fop)
+                        fop->process(camera);
+                    });
     }
+
+    std::for_each(imageOps.begin(), imageOps.end(),
+                  [](std::unique_ptr<LiveImageOp> &p) { p->endFrame(); });
 
     frameVariance = tileErrorRegion.refine(errorThreshold);
   }

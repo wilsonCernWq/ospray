@@ -19,6 +19,7 @@
 #include "mpi/MPIOffloadDevice.h"
 #include "camera/Camera.h"
 #include "common/Data.h"
+#include "common/Group.h"
 #include "common/Library.h"
 #include "common/Util.h"
 #include "common/World.h"
@@ -595,7 +596,6 @@ namespace ospray {
       return (OSPVolume)(int64)handle;
     }
 
-
     OSPGeometricModel MPIOffloadDevice::newGeometricModel(OSPGeometry geom)
     {
       ObjectHandle handle = allocateHandle();
@@ -610,18 +610,6 @@ namespace ospray {
       work::NewVolumetricModel work(handle, (ObjectHandle &)volume);
       processWork(work);
       return (OSPVolumetricModel)(int64)handle;
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    // Instancing /////////////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////////
-
-    OSPInstance MPIOffloadDevice::newInstance()
-    {
-      ObjectHandle handle = allocateHandle();
-      work::NewInstance work("", handle);
-      processWork(work);
-      return (OSPInstance)(int64)handle;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -651,6 +639,26 @@ namespace ospray {
       work::NewTexture work(type, handle);
       processWork(work);
       return (OSPTexture)(int64)handle;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Instancing /////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
+
+    OSPGroup MPIOffloadDevice::newGroup()
+    {
+      ObjectHandle handle = allocateHandle();
+      work::NewGroup work("", handle);
+      processWork(work);
+      return (OSPGroup)(int64)handle;
+    }
+
+    OSPInstance MPIOffloadDevice::newInstance(OSPGroup group)
+    {
+      ObjectHandle handle = allocateHandle();
+      work::NewInstance work(handle, (ObjectHandle &)group);
+      processWork(work);
+      return (OSPInstance)(int64)handle;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -885,12 +893,12 @@ namespace ospray {
       return (OSPFrameBuffer)(int64)handle;
     }
 
-    OSPPixelOp MPIOffloadDevice::newPixelOp(const char *type)
+    OSPImageOp MPIOffloadDevice::newImageOp(const char *type)
     {
       ObjectHandle handle = allocateHandle();
-      work::NewPixelOp work(type, handle);
+      work::NewImageOp work(type, handle);
       processWork(work);
-      return (OSPPixelOp)(int64)handle;
+      return (OSPImageOp)(int64)handle;
     }
 
     const void *MPIOffloadDevice::frameBufferMap(OSPFrameBuffer _fb,

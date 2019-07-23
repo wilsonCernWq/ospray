@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/Geometry.h>
-#include <ospray/ospray_cpp/Material.h>
+#include "Geometry.h"
+#include "Material.h"
 
 namespace ospray {
   namespace cpp {

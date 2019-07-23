@@ -137,9 +137,14 @@ namespace OSPRayTestScenes {
     ospCommit(model);
     OSPData data = ospNewData(1, OSP_OBJECT, &model);
 
-    OSPInstance instance = ospNewInstance();
+    OSPGroup group = ospNewGroup();
+    ospSetData(group, "geometry", data);
+    ospCommit(group);
+
+    OSPInstance instance = ospNewInstance(group);
     ospSetAffine3fv(instance, "xfm", (float*)&xfm);
-    ospSetData(instance, "geometries", data);
+    ospCommit(instance);
+    ospRelease(group);
 
     AddInstance(instance);
 
@@ -152,9 +157,14 @@ namespace OSPRayTestScenes {
     ospCommit(model);
     OSPData data = ospNewData(1, OSP_OBJECT, &model);
 
-    OSPInstance instance = ospNewInstance();
+    OSPGroup group = ospNewGroup();
+    ospSetData(group, "volume", data);
+    ospCommit(group);
+
+    OSPInstance instance = ospNewInstance(group);
     ospSetAffine3fv(instance, "xfm", (float*)&xfm);
-    ospSetData(instance, "volumes", data);
+    ospCommit(instance);
+    ospRelease(group);
 
     AddInstance(instance);
 
@@ -175,7 +185,7 @@ namespace OSPRayTestScenes {
     if (!instances.empty()) {
       OSPData insts =
           ospNewData(instances.size(), OSP_OBJECT, instances.data());
-      ospSetObject(world, "instances", insts);
+      ospSetObject(world, "instance", insts);
       ospRelease(insts);
     }
 
@@ -216,8 +226,8 @@ namespace OSPRayTestScenes {
     camera = ospNewCamera("perspective");
 
     ospSetFloat(camera, "aspect", imgSize.x / (float)imgSize.y);
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
   }
 
@@ -230,7 +240,7 @@ namespace OSPRayTestScenes {
   {
     if (!lightsList.empty()) {
       lights = ospNewData(lightsList.size(), OSP_LIGHT, lightsList.data());
-      ospSetObject(renderer, "lights", lights);
+      ospSetObject(renderer, "light", lights);
       ospRelease(lights);
     }
   }
@@ -258,7 +268,7 @@ namespace OSPRayTestScenes {
     OSPMaterial material = ospNewMaterial(rendererType.c_str(), type.data());
     EXPECT_TRUE(material);
     if (type == "Glass") {
-      ospSetFloat(material, "eta", 1.5);
+      ospSetFloat(material, "etaInside", 1.5);
       ospSetVec3f(material, "attenuationColor", 0.f, 1.f, 1.f);
       ospSetFloat(material, "attenuationDistance", 5.0);
     } else if (type == "Luminous") {
@@ -325,8 +335,8 @@ namespace OSPRayTestScenes {
     float fov  = 160.0f * std::min(std::tan(radius / std::abs(dist)), 1.0f);
     float cent = move_cam ? 0.0f : dist + radius;
 
-    ospSetVec3f(camera, "pos", 0.f, 0.f, move_cam ? -dist - radius : 0.0f);
-    ospSetVec3f(camera, "dir", 0.f, 0.f, 1.f);
+    ospSetVec3f(camera, "position", 0.f, 0.f, move_cam ? -dist - radius : 0.0f);
+    ospSetVec3f(camera, "direction", 0.f, 0.f, 1.f);
     ospSetVec3f(camera, "up", 0.f, 1.f, 0.f);
     ospSetFloat(camera, "fovy", fov);
 
@@ -431,7 +441,7 @@ namespace OSPRayTestScenes {
     SetMaterials();
 
     std::vector<OSPGeometricModel> models;
-    OSPInstance instance = ospNewInstance();
+    OSPGroup group = ospNewGroup();
 
     float wallsVertices[] = {// left wall
                              1.f,
@@ -496,7 +506,7 @@ namespace OSPRayTestScenes {
     OSPGeometry wallsMesh  = ospNewGeometry("triangles");
     OSPData data           = ospNewData(16, OSP_VEC3F, wallsVertices);
     ospCommit(data);
-    ospSetData(wallsMesh, "vertex", data);
+    ospSetData(wallsMesh, "vertex.position", data);
     ospRelease(data);
     data = ospNewData(16, OSP_VEC4F, wallsColors);
     ospCommit(data);
@@ -531,7 +541,7 @@ namespace OSPRayTestScenes {
     OSPGeometry lightSquare = ospNewGeometry("triangles");
     data                    = ospNewData(4, OSP_VEC3F, lightVertices);
     ospCommit(data);
-    ospSetData(lightSquare, "vertex", data);
+    ospSetData(lightSquare, "vertex.position", data);
     ospRelease(data);
     data = ospNewData(2, OSP_VEC3I, lightIndices);
     ospSetData(lightSquare, "index", data);
@@ -562,7 +572,7 @@ namespace OSPRayTestScenes {
     data               = ospNewData(8, OSP_VEC3F, cuboidVertices);
 
     ospCommit(data);
-    ospSetData(cuboid, "vertex", data);
+    ospSetData(cuboid, "vertex.position", data);
     ospRelease(data);
     data = ospNewData(12, OSP_VEC3I, cuboidIndices);
     ospCommit(data);
@@ -595,8 +605,13 @@ namespace OSPRayTestScenes {
       ospCommit(m);
 
     OSPData models_data = ospNewData(models.size(), OSP_OBJECT, models.data());
-    ospSetData(instance, "geometries", models_data);
+    ospSetData(group, "geometry", models_data);
+    ospCommit(group);
     ospRelease(models_data);
+
+    OSPInstance instance = ospNewInstance(group);
+    ospCommit(instance);
+    ospRelease(group);
 
     AddInstance(instance);
 
@@ -640,8 +655,8 @@ namespace OSPRayTestScenes {
     float cam_pos[]  = {-0.5f, -1.f, 0.2f};
     float cam_up[]   = {0.f, 0.f, -1.f};
     float cam_view[] = {0.5f, 1.f, 0.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     int size = 1 << level;
@@ -693,10 +708,10 @@ namespace OSPRayTestScenes {
     float colors[]      = {1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f};
     float opacites[]    = {0.f, 1.0f};
     OSPData tfColorData = ospNewData(2, OSP_VEC3F, colors);
-    ospSetData(transferFun, "colors", tfColorData);
+    ospSetData(transferFun, "color", tfColorData);
     ospRelease(tfColorData);
     OSPData tfOpacityData = ospNewData(2, OSP_FLOAT, opacites);
-    ospSetData(transferFun, "opacities", tfOpacityData);
+    ospSetData(transferFun, "opacity", tfOpacityData);
     ospRelease(tfOpacityData);
     ospCommit(transferFun);
     ospSetObject(model, "transferFunction", transferFun);
@@ -707,7 +722,7 @@ namespace OSPRayTestScenes {
       ospSetObject(isosurface, "volume", model);
       float isovalue        = 0.f;
       OSPData isovaluesData = ospNewData(1, OSP_FLOAT, &isovalue);
-      ospSetData(isosurface, "isovalues", isovaluesData);
+      ospSetData(isosurface, "isovalue", isovaluesData);
       ospRelease(isovaluesData);
 
       ospCommit(isosurface);
@@ -741,14 +756,14 @@ namespace OSPRayTestScenes {
     float cam_pos[]  = {-0.7f, -1.4f, 0.f};
     float cam_up[]   = {0.f, 0.f, -1.f};
     float cam_view[] = {0.5f, 1.f, 0.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     OSPVolume torus = CreateTorus(volumetricData, 256);
     ospCommit(torus);
 
-    OSPVolumetricModel VolumetricModel = ospNewVolumetricModel(torus);
+    OSPVolumetricModel volumetricModel = ospNewVolumetricModel(torus);
     ospRelease(torus);
 
     OSPTransferFunction transferFun =
@@ -757,22 +772,23 @@ namespace OSPRayTestScenes {
     float colors[]      = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
     float opacites[]    = {1.0f, 1.0f};
     OSPData tfColorData = ospNewData(2, OSP_VEC3F, colors);
-    ospSetData(transferFun, "colors", tfColorData);
+    ospSetData(transferFun, "color", tfColorData);
     ospRelease(tfColorData);
     OSPData tfOpacityData = ospNewData(2, OSP_FLOAT, opacites);
-    ospSetData(transferFun, "opacities", tfOpacityData);
+    ospSetData(transferFun, "opacity", tfOpacityData);
     ospRelease(tfOpacityData);
     ospCommit(transferFun);
-    ospSetObject(VolumetricModel, "transferFunction", transferFun);
+    ospSetObject(volumetricModel, "transferFunction", transferFun);
     ospRelease(transferFun);
 
-    ospCommit(VolumetricModel);
+    ospCommit(volumetricModel);
 
     OSPGeometry isosurface = ospNewGeometry("isosurfaces");
-    ospSetObject(isosurface, "volume", VolumetricModel);
+    PRINT(isosurface);
+    ospSetObject(isosurface, "volume", volumetricModel);
     float isovalues[2]    = {-7000.f, 0.f};
     OSPData isovaluesData = ospNewData(2, OSP_FLOAT, isovalues);
-    ospSetData(isosurface, "isovalues", isovaluesData);
+    ospSetData(isosurface, "isovalue", isovaluesData);
     ospRelease(isovaluesData);
     ospCommit(isosurface);
 
@@ -795,8 +811,8 @@ namespace OSPRayTestScenes {
     float cam_pos[]  = {-0.7f, -1.4f, 0.f};
     float cam_up[]   = {0.f, 0.f, -1.f};
     float cam_view[] = {0.5f, 1.f, 0.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     int size = 100;
@@ -831,7 +847,7 @@ namespace OSPRayTestScenes {
     ospSetVec3f(blob, "gridSpacing", 1.f / size, 1.f / size, 1.f / size);
     ospCommit(blob);
 
-    OSPVolumetricModel VolumetricModel = ospNewVolumetricModel(blob);
+    OSPVolumetricModel volumetricModel = ospNewVolumetricModel(blob);
 
     OSPTransferFunction transferFun =
         ospNewTransferFunction("piecewise_linear");
@@ -841,15 +857,15 @@ namespace OSPRayTestScenes {
     float opacites[]    = {0.0f, 1.0f};
     OSPData tfColorData = ospNewData(2, OSP_VEC3F, colors);
     ASSERT_TRUE(tfColorData);
-    ospSetData(transferFun, "colors", tfColorData);
+    ospSetData(transferFun, "color", tfColorData);
     OSPData tfOpacityData = ospNewData(2, OSP_FLOAT, opacites);
     ASSERT_TRUE(tfOpacityData);
-    ospSetData(transferFun, "opacities", tfOpacityData);
+    ospSetData(transferFun, "opacity", tfOpacityData);
     ospCommit(transferFun);
 
-    ospSetObject(VolumetricModel, "transferFunction", transferFun);
+    ospSetObject(volumetricModel, "transferFunction", transferFun);
     ospRelease(transferFun);
-    ospCommit(VolumetricModel);
+    ospCommit(volumetricModel);
 
     OSPGeometry slice = ospNewGeometry("slices");
     ASSERT_TRUE(slice);
@@ -857,10 +873,10 @@ namespace OSPRayTestScenes {
         1.f, 1.f, 1.f, 0.5f, 1.f, 1.f, 1.f, 0.f, 1.f, 1.f, 1.f, -0.5f};
     OSPData planesData = ospNewData(3, OSP_VEC4F, planes);
     ASSERT_TRUE(planesData);
-    ospSetData(slice, "planes", planesData);
-    ospSetObject(slice, "volume", VolumetricModel);
+    ospSetData(slice, "plane", planesData);
+    ospSetObject(slice, "volume", volumetricModel);
     ospCommit(slice);
-    ospRelease(VolumetricModel);
+    ospRelease(volumetricModel);
 
     OSPGeometricModel model = ospNewGeometricModel(slice);
     AddModel(model);
@@ -902,7 +918,7 @@ namespace OSPRayTestScenes {
     data = ospNewData(8, OSP_VEC3F, mirrorsVertices);
     ASSERT_TRUE(data);
     ospCommit(data);
-    ospSetData(mirrors, "vertex", data);
+    ospSetData(mirrors, "vertex.position", data);
     data = ospNewData(4, OSP_VEC3I, mirrorsIndices);
     ASSERT_TRUE(data);
     ospSetData(mirrors, "index", data);
@@ -959,8 +975,8 @@ namespace OSPRayTestScenes {
     float cam_pos[]  = {-7.f, 2.f, 0.7f};
     float cam_view[] = {7.f, -2.f, -0.7f};
     float cam_up[]   = {0.f, 0.f, 1.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     float vertex[] = {
@@ -977,7 +993,7 @@ namespace OSPRayTestScenes {
     ASSERT_TRUE(streamlines);
     OSPData data = ospNewData(16, OSP_VEC3FA, vertex);
     ASSERT_TRUE(data);
-    ospSetData(streamlines, "vertex", data);
+    ospSetData(streamlines, "vertex.position", data);
     ospRelease(data);
     data = ospNewData(15, OSP_INT, index);
     ASSERT_TRUE(data);
@@ -1012,14 +1028,14 @@ namespace OSPRayTestScenes {
     float cam_pos[]  = {-0.7f, -1.4f, 0.f};
     float cam_up[]   = {0.f, 0.f, -1.f};
     float cam_view[] = {0.5f, 1.f, 0.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     OSPVolume torus = CreateTorus(volumetricData, 256);
     ospCommit(torus);
 
-    OSPVolumetricModel VolumetricModel = ospNewVolumetricModel(torus);
+    OSPVolumetricModel volumetricModel = ospNewVolumetricModel(torus);
     ospRelease(torus);
 
     OSPTransferFunction transferFun =
@@ -1028,21 +1044,21 @@ namespace OSPRayTestScenes {
     float colors[]      = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
     float opacites[]    = {1.0f, 1.0f};
     OSPData tfColorData = ospNewData(2, OSP_VEC3F, colors);
-    ospSetData(transferFun, "colors", tfColorData);
+    ospSetData(transferFun, "color", tfColorData);
     ospRelease(tfColorData);
     OSPData tfOpacityData = ospNewData(2, OSP_FLOAT, opacites);
-    ospSetData(transferFun, "opacities", tfOpacityData);
+    ospSetData(transferFun, "opacity", tfOpacityData);
     ospRelease(tfOpacityData);
     ospCommit(transferFun);
-    ospSetObject(VolumetricModel, "transferFunction", transferFun);
+    ospSetObject(volumetricModel, "transferFunction", transferFun);
     ospRelease(transferFun);
-    ospCommit(VolumetricModel);
+    ospCommit(volumetricModel);
 
     OSPMaterial sphereMaterial =
         ospNewMaterial(rendererType.c_str(), "default");
     OSPTexture tex = ospNewTexture("volume");
-    ospSetObject(tex, "volume", VolumetricModel);
-    ospRelease(VolumetricModel);
+    ospSetObject(tex, "volume", volumetricModel);
+    ospRelease(volumetricModel);
     ospCommit(tex);
     ospSetObject(sphereMaterial, "map_Kd", tex);
     ospRelease(tex);
@@ -1082,8 +1098,8 @@ namespace OSPRayTestScenes {
     const float cam_pos[]  = {0.f, 0.f, 1.0f};
     const float cam_up[]   = {0.f, 1.f, 0.f};
     const float cam_view[] = {0.0f, 0.f, -1.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     OSPVolume torus = CreateTorus(volumetricData, 256);
@@ -1098,10 +1114,10 @@ namespace OSPRayTestScenes {
     const float colors[]   = {1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f};
     const float opacites[] = {0.05f, 0.1f};
     OSPData tfColorData    = ospNewData(2, OSP_VEC3F, colors);
-    ospSetData(transferFun, "colors", tfColorData);
+    ospSetData(transferFun, "color", tfColorData);
     ospRelease(tfColorData);
     OSPData tfOpacityData = ospNewData(2, OSP_FLOAT, opacites);
-    ospSetData(transferFun, "opacities", tfOpacityData);
+    ospSetData(transferFun, "opacity", tfOpacityData);
     ospRelease(tfOpacityData);
     ospCommit(transferFun);
     ospSetObject(model, "transferFunction", transferFun);
@@ -1196,7 +1212,7 @@ namespace OSPRayTestScenes {
 
     auto subd     = ospNewGeometry("subdivision");
     auto vertices = ospNewData(8, OSP_VEC3F, cube_vertices);
-    ospSetData(subd, "vertex", vertices);
+    ospSetData(subd, "vertex.position", vertices);
     ospRelease(vertices);
     auto indices = ospNewData(numIndices, OSP_UINT, cube_indices);
     ospSetData(subd, "index", indices);
@@ -1220,7 +1236,7 @@ namespace OSPRayTestScenes {
     ospSetData(subd, "vertexCrease.weight", vertex_crease_weights);
     ospRelease(vertex_crease_weights);
     auto colors = ospNewData(8, OSP_VEC4F, cube_colors);
-    ospSetData(subd, "color", colors);
+    ospSetData(subd, "vertex.color", colors);
     ospRelease(colors);
     ospSetFloat(subd, "level", 128.0f);
 
@@ -1236,8 +1252,8 @@ namespace OSPRayTestScenes {
     float cam_pos[]  = {-1.5f, 2.f, 1.7f};
     float cam_view[] = {1.5f, -2.f, -1.7f};
     float cam_up[]   = {0.f, 1.f, 0.f};
-    ospSetVec3fv(camera, "pos", cam_pos);
-    ospSetVec3fv(camera, "dir", cam_view);
+    ospSetVec3fv(camera, "position", cam_pos);
+    ospSetVec3fv(camera, "direction", cam_view);
     ospSetVec3fv(camera, "up", cam_up);
 
     OSPLight directional = ospNewLight("directional");

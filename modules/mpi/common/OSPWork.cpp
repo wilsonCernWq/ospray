@@ -26,8 +26,9 @@
 #include "common/Data.h"
 #include "common/Library.h"
 #include "common/World.h"
-#include "geometry/TriangleMesh.h"
+#include "geometry/GeometricModel.h"
 #include "texture/Texture.h"
+#include "volume/VolumetricModel.h"
 
 namespace ospray {
   namespace mpi {
@@ -40,13 +41,14 @@ namespace ospray {
         registerWorkUnit<NewRenderer>(registry);
         registerWorkUnit<NewWorld>(registry);
         registerWorkUnit<NewInstance>(registry);
+        registerWorkUnit<NewGroup>(registry);
         registerWorkUnit<NewGeometry>(registry);
         registerWorkUnit<NewGeometricModel>(registry);
         registerWorkUnit<NewCamera>(registry);
         registerWorkUnit<NewVolume>(registry);
         registerWorkUnit<NewVolumetricModel>(registry);
         registerWorkUnit<NewTransferFunction>(registry);
-        registerWorkUnit<NewPixelOp>(registry);
+        registerWorkUnit<NewImageOp>(registry);
 
         registerWorkUnit<NewMaterial>(registry);
         registerWorkUnit<NewLight>(registry);
@@ -153,7 +155,9 @@ namespace ospray {
       {
         if (handle.defined()) {
           ManagedObject *obj = handle.lookup();
-          if (dynamic_cast<Renderer *>(obj)) {
+          if (dynamic_cast<Renderer *>(obj) || dynamic_cast<FrameBuffer *>(obj)
+              || dynamic_cast<Camera *>(obj))
+          {
             obj->commit();
           }
         }
@@ -250,7 +254,9 @@ namespace ospray {
           return;
 
         ManagedObject *obj = handle.lookup();
-        if (dynamic_cast<Renderer *>(obj) || dynamic_cast<Volume *>(obj)) {
+        if (dynamic_cast<Renderer *>(obj) || dynamic_cast<Volume *>(obj)
+            || dynamic_cast<FrameBuffer *>(obj) || dynamic_cast<Camera *>(obj))
+        {
           obj->setParam(name, val);
         }
       }
@@ -274,10 +280,18 @@ namespace ospray {
       // ospNewInstance ///////////////////////////////////////////////////////
 
       template <>
-      void NewInstance::run()
+      void NewGroup::run()
       {
-        auto *world = new Instance;
-        handle.assign(world);
+        auto *group = new Group;
+        handle.assign(group);
+      }
+
+      // ospNewImageOp /////////////////////////////////////////////////////////
+
+      template <>
+      void NewImageOp::runOnMaster()
+      {
+        run();
       }
 
       // ospNewWorld //////////////////////////////////////////////////////////
@@ -289,6 +303,14 @@ namespace ospray {
         handle.assign(world);
       }
 
+      // ospNewCamera /////////////////////////////////////////////////////////
+
+      template<>
+      void NewCamera::runOnMaster()
+      {
+        run();
+      }
+      
       // ospNewMaterial ///////////////////////////////////////////////////////
 
       void NewMaterial::run()
@@ -298,22 +320,31 @@ namespace ospray {
         handle.assign(material);
       }
 
-      // ospNewGeometricModel ///////////////////////////////////////////////
+      // ospNewInstance ///////////////////////////////////////////////////////
 
-      void NewGeometricModel::run()
+      void NewInstance::run()
       {
-        auto *geom     = (Geometry *)geometryHandle.lookup();
-        auto *instance = new GeometricModel(geom);
+        auto *group    = (Group *)groupHandle.lookup();
+        auto *instance = new Instance(group);
         handle.assign(instance);
       }
 
-      // ospNewVolumetricModel ///////////////////////////////////////////////
+      // ospNewGeometricModel /////////////////////////////////////////////////
+
+      void NewGeometricModel::run()
+      {
+        auto *geom  = (Geometry *)geometryHandle.lookup();
+        auto *model = new GeometricModel(geom);
+        handle.assign(model);
+      }
+
+      // ospNewVolumetricModel ////////////////////////////////////////////////
 
       void NewVolumetricModel::run()
       {
-        auto *geom     = (Volume *)volumeHandle.lookup();
-        auto *instance = new VolumetricModel(geom);
-        handle.assign(instance);
+        auto *geom  = (Volume *)volumeHandle.lookup();
+        auto *model = new VolumetricModel(geom);
+        handle.assign(model);
       }
 
       // ospNewLight //////////////////////////////////////////////////////////
@@ -354,13 +385,8 @@ namespace ospray {
         // it), so let's assert that nobody accidentally uses it.
         assert(format != OSP_STRING);
 
-        if (format == OSP_OBJECT || format == OSP_CAMERA ||
-            format == OSP_DATA || format == OSP_FRAMEBUFFER ||
-            format == OSP_GEOMETRY || format == OSP_LIGHT ||
-            format == OSP_MATERIAL || format == OSP_WORLD ||
-            format == OSP_RENDERER || format == OSP_TEXTURE ||
-            format == OSP_TRANSFER_FUNCTION || format == OSP_VOLUME ||
-            format == OSP_PIXEL_OP) {
+        if (isManagedObject(format))
+        {
           /* translating handles to managedobject pointers: if a
              data array has 'object' or 'data' entry types, then
              what the host sends are _handles_, not pointers, but
@@ -377,6 +403,16 @@ namespace ospray {
 
         Data *ospdata = new Data(nItems, format, dataView.data());
         handle.assign(ospdata);
+      }
+
+      void NewData::runOnMaster()
+      {
+        // TODO Will: Temporary workaround for now to get the DFB on the master
+        // to know about the image ops we have attached to it, so it can run
+        // the denoise frame op on the head node.
+        if (format == OSP_IMAGE_OP) {
+          run();
+        }
       }
 
       void NewData::serialize(WriteStream &b) const
@@ -519,6 +555,7 @@ namespace ospray {
         mpicommon::world.barrier();
         Renderer *renderer = (Renderer *)rendererHandle.lookup();
         FrameBuffer *fb    = (FrameBuffer *)fbHandle.lookup();
+        Camera *camera     = (Camera *)cameraHandle.lookup();
 
         fb->setCompletedEvent(OSP_NONE_FINISHED);
 
@@ -528,7 +565,7 @@ namespace ospray {
         // The master doesn't have or need a world or camera, so skip
         // looking them up
         auto *f = new RenderTask(fb, [=]() {
-          float result = renderer->renderFrame(fb, nullptr, nullptr);
+          float result = renderer->renderFrame(fb, camera, nullptr);
 
           fb->refDec();
           renderer->refDec();

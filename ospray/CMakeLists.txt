@@ -43,13 +43,14 @@ set(OSPRAY_SOURCES
   include/ospray/ospray_cpp/Light.h
   include/ospray/ospray_cpp/ManagedObject.h
   include/ospray/ospray_cpp/Material.h
-  include/ospray/ospray_cpp/PixelOp.h
+  include/ospray/ospray_cpp/ImageOp.h
   include/ospray/ospray_cpp/Renderer.h
-  include/ospray/ospray_cpp/Texture2D.h
+  include/ospray/ospray_cpp/Texture.h
   include/ospray/ospray_cpp/TransferFunction.h
   include/ospray/ospray_cpp/Volume.h
   include/ospray/ospray_cpp/World.h
 )
+
 
 set(OSPRAY_ISPC_DEVICE_SOURCES
   ispc_tasksys.cpp
@@ -59,6 +60,8 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   common/ObjectHandle.cpp
   common/Data.cpp
+  common/Group.cpp
+  common/Group.ispc
   common/Instance.cpp
   common/Instance.ispc
   common/Managed.cpp
@@ -70,14 +73,22 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   fb/FrameBuffer.ispc
   fb/FrameBuffer.cpp
+  fb/FrameBufferView.cpp
   fb/LocalFB.ispc
   fb/LocalFB.cpp
-  fb/PixelOp.cpp
-  fb/ToneMapperPixelOp.cpp
-  fb/ToneMapperPixelOp.ispc
-  fb/DebugPixelOp.cpp
+  fb/ImageOp.cpp
   fb/Tile.h
   fb/TileError.cpp
+
+  fb/frame_ops/Blur.cpp
+  fb/frame_ops/Debug.cpp
+  fb/frame_ops/Depth.cpp
+  fb/frame_ops/SSAO.cpp
+  fb/frame_ops/SSAO.ispc
+
+  fb/tile_ops/SaveTiles.cpp
+  fb/tile_ops/ToneMapper.cpp
+  fb/tile_ops/ToneMapper.ispc
 
   camera/Camera.cpp
   camera/Camera.ispc

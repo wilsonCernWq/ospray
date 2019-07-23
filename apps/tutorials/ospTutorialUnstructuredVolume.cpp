@@ -55,7 +55,7 @@ namespace {
     std::vector<float> isoValues = {value};
     OSPData isoValuesData =
         ospNewData(isoValues.size(), OSP_FLOAT, isoValues.data());
-    ospSetData(geometry, "isovalues", isoValuesData);
+    ospSetData(geometry, "isovalue", isoValuesData);
     ospRelease(isoValuesData);
   }
 }  // namespace
@@ -71,12 +71,16 @@ int main(int argc, const char **argv)
   }
 
   // create the world which will contain all of our geometries / volumes
-  OSPWorld world   = ospNewWorld();
-  OSPInstance inst = ospNewInstance();
+  OSPWorld world = ospNewWorld();
+  OSPGroup group = ospNewGroup();
 
-  OSPData instances = ospNewData(1, OSP_OBJECT, &inst);
-  ospSetData(world, "instances", instances);
+  OSPInstance instance = ospNewInstance(group);
+  ospCommit(instance);
+
+  OSPData instances = ospNewData(1, OSP_OBJECT, &instance);
+  ospSetData(world, "instance", instances);
   ospRelease(instances);
+  ospRelease(instance);
 
   // create all volume variances [sharedVertices][valuesPerCell]
   OSPVolumetricModel allVolumes[2][2];
@@ -116,7 +120,7 @@ int main(int argc, const char **argv)
 
   // create and set lights
   OSPData lightsData = ospTestingNewLights("ambient_and_directional");
-  ospSetData(renderer, "lights", lightsData);
+  ospSetData(renderer, "light", lightsData);
   ospRelease(lightsData);
 
   // apply changes to the renderer
@@ -129,8 +133,8 @@ int main(int argc, const char **argv)
   bool isoSurface     = false;
 
   auto updateScene = [&]() {
-    ospRemoveParam(inst, "volumes");
-    ospRemoveParam(inst, "geometries");
+    ospRemoveParam(group, "volume");
+    ospRemoveParam(group, "geometry");
 
     // remove current volume
     ospRemoveParam(isoGeometry, "volume");
@@ -143,17 +147,17 @@ int main(int argc, const char **argv)
 
     if (isoSurface) {
       OSPData geomModels = ospNewData(1, OSP_OBJECT, &model);
-      ospSetObject(inst, "geometries", geomModels);
+      ospSetObject(group, "geometry", geomModels);
       ospRelease(geomModels);
     } else {
       OSPData volModels = ospNewData(1, OSP_OBJECT, &testVolume);
-      ospSetObject(inst, "volumes", volModels);
+      ospSetObject(group, "volume", volModels);
       ospRelease(volModels);
     }
   };
 
   updateScene();
-  ospCommit(inst);
+  ospCommit(group);
   ospCommit(world);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
@@ -178,7 +182,7 @@ int main(int argc, const char **argv)
         setIsoValue(isoGeometry, isoValue);
         glfwOSPRayWindow->addObjectToCommit(isoGeometry);
         glfwOSPRayWindow->addObjectToCommit(model);
-        glfwOSPRayWindow->addObjectToCommit(inst);
+        glfwOSPRayWindow->addObjectToCommit(group);
         glfwOSPRayWindow->addObjectToCommit(world);
       }
 
@@ -192,7 +196,7 @@ int main(int argc, const char **argv)
     if (updateWorld) {
       updateScene();
       glfwOSPRayWindow->addObjectToCommit(isoGeometry);
-      glfwOSPRayWindow->addObjectToCommit(inst);
+      glfwOSPRayWindow->addObjectToCommit(group);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
   });
@@ -207,7 +211,7 @@ int main(int argc, const char **argv)
   ospRelease(allVolumes[1][1]);
   ospRelease(isoGeometry);
   ospRelease(model);
-  ospRelease(inst);
+  ospRelease(group);
   ospRelease(material);
 
   // cleanly shut OSPRay down

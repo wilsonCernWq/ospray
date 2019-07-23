@@ -72,10 +72,6 @@ namespace ospray {
       virtual OSPGeometricModel newGeometricModel(OSPGeometry geom)   = 0;
       virtual OSPVolumetricModel newVolumetricModel(OSPVolume volume) = 0;
 
-      // Instancing ///////////////////////////////////////////////////////////
-
-      virtual OSPInstance newInstance() = 0;
-
       // Model Meta-Data //////////////////////////////////////////////////////
 
       virtual OSPMaterial newMaterial(const char *renderer_type,
@@ -85,7 +81,12 @@ namespace ospray {
 
       virtual OSPTexture newTexture(const char *type) = 0;
 
-      // World Manipulation ///////////////////////////////////////////////////
+      // Instancing ///////////////////////////////////////////////////////////
+
+      virtual OSPGroup newGroup() = 0;
+      virtual OSPInstance newInstance(OSPGroup group) = 0;
+
+      // Top-level Worlds /////////////////////////////////////////////////////
 
       virtual OSPWorld newWorld() = 0;
 
@@ -191,7 +192,7 @@ namespace ospray {
                                                const OSPFrameBufferFormat mode,
                                                const uint32 channels) = 0;
 
-      virtual OSPPixelOp newPixelOp(const char *type) = 0;
+      virtual OSPImageOp newImageOp(const char *type) = 0;
 
       virtual const void *frameBufferMap(OSPFrameBuffer fb,
                                          const OSPFrameBufferChannel) = 0;

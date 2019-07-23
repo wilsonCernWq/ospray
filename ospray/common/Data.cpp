@@ -33,13 +33,13 @@ namespace ospray {
       data = alignedMalloc(numBytes+16);
       if (init)
         memcpy(data,init,numBytes);
-      else if (type == OSP_OBJECT)
+      else if (isManagedObject(type))
         memset(data,0,numBytes);
     }
 
     managedObjectType = OSP_DATA;
 
-    if (type == OSP_OBJECT) {
+    if (isManagedObject(type)) {
       ManagedObject **child = (ManagedObject **)data;
       for (uint32_t i = 0; i < numItems; i++) {
         if (child[i])
@@ -50,7 +50,7 @@ namespace ospray {
 
   Data::~Data()
   {
-    if (type == OSP_OBJECT) {
+    if (isManagedObject(type)) {
       Data **child = (Data **)data;
       for (uint32_t i = 0; i < numItems; i++) {
         if (child[i])
@@ -60,13 +60,6 @@ namespace ospray {
 
     if (!(flags & OSP_DATA_SHARED_BUFFER))
       alignedFree(data);
-  }
-
-  /*! commit this object - for this object type, make sure that all
-    listeners that have registered know that we have changed */
-  void Data::commit()
-  {
-    notifyListenersThatObjectGotChanged();
   }
 
   std::string Data::toString() const

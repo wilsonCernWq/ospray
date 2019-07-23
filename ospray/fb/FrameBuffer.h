@@ -20,7 +20,7 @@
 // ospray
 #include "common/Managed.h"
 #include "common/Data.h"
-#include "fb/PixelOp.h"
+#include "fb/ImageOp.h"
 #include "ospray/ospray.h"
 
 namespace ospray {
@@ -69,8 +69,8 @@ namespace ospray {
 
     virtual void beginFrame();
 
-    //! returns error of frame
-    virtual void endFrame(const float errorThreshold) = 0;
+    //! end the frame and run any final post-processing frame ops
+    virtual void endFrame(const float errorThreshold, const Camera *camera) = 0;
 
     //! \brief common function to help printf-debugging
     /*! \detailed Every derived class should override this! */
@@ -87,6 +87,11 @@ namespace ospray {
     bool frameCancelled() const;
 
    protected:
+    /*! Find the index of the first frameoperation included in
+     * the imageop pipeline
+     */
+    void findFirstFrameOperation();
+
     const vec2i size;
     vec2i numTiles;
     vec2i maxValidPixelID;
@@ -115,6 +120,8 @@ namespace ospray {
 
     std::atomic<OSPSyncEvent> stagesCompleted{OSP_FRAME_FINISHED};
 
-    Ref<Data> pixelOpData;
+    Ref<Data> imageOpData;
+    std::vector<std::unique_ptr<LiveImageOp>> imageOps;
+    size_t firstFrameOperation = -1;
   };
 }  // namespace ospray

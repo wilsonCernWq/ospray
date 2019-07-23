@@ -22,7 +22,7 @@ using namespace ospcommon;
 #include <iterator>
 #include <vector>
 
-void initializeOSPRay(int argc, const char **argv)
+void initializeOSPRay(int argc, const char **argv, bool errorsFatal)
 {
   // initialize OSPRay; OSPRay parses (and removes) its commandline parameters,
   // e.g. "--osp:debug"
@@ -36,10 +36,16 @@ void initializeOSPRay(int argc, const char **argv)
     throw std::runtime_error("OSPRay device could not be fetched!");
 
   // set an error callback to catch any OSPRay errors and exit the application
-  ospDeviceSetErrorFunc(device, [](OSPError error, const char *errorDetails) {
-    std::cerr << "OSPRay error: " << errorDetails << std::endl;
-    exit(error);
-  });
+  if (errorsFatal) {
+    ospDeviceSetErrorFunc(device, [](OSPError error, const char *errorDetails) {
+      std::cerr << "OSPRay error: " << errorDetails << std::endl;
+      exit(error);
+    });
+  } else {
+    ospDeviceSetErrorFunc(device, [](OSPError, const char *errorDetails) {
+      std::cerr << "OSPRay error: " << errorDetails << std::endl;
+    });
+  }
 }
 
 OSPInstance createGroundPlane(std::string renderer_type)
@@ -159,7 +165,7 @@ OSPInstance createGroundPlane(std::string renderer_type)
       ospNewData(quadIndices.size(), OSP_VEC4I, quadIndices.data());
 
   // set vertex / index data on the geometry
-  ospSetData(planeGeometry, "vertex", positionData);
+  ospSetData(planeGeometry, "vertex.position", positionData);
   ospSetData(planeGeometry, "vertex.normal", normalData);
   ospSetData(planeGeometry, "vertex.color", colorData);
   ospSetData(planeGeometry, "index", indexData);
@@ -179,11 +185,15 @@ OSPInstance createGroundPlane(std::string renderer_type)
 
   ospCommit(model);
 
-  OSPInstance instance = ospNewInstance();
+  OSPGroup group = ospNewGroup();
 
   OSPData models = ospNewData(1, OSP_OBJECT, &model);
-  ospSetData(instance, "geometries", models);
+  ospSetData(group, "geometry", models);
+  ospCommit(group);
+
+  OSPInstance instance = ospNewInstance(group);
   ospCommit(instance);
+  ospRelease(group);
 
   // release handles we no longer need
   ospRelease(positionData);

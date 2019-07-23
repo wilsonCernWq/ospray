@@ -29,11 +29,6 @@ namespace ospray {
 
     virtual ~Data() override;
 
-    /*! commit this object - for this object type, make sure that all
-        listeners that have registered know that we have changed */
-    virtual void commit() override;
-
-    /*! pretty-print this object, for debugging purposes */
     virtual std::string toString() const override;
 
     /*! return number of items in this data buffer */
@@ -109,7 +104,7 @@ namespace ospray {
 
   inline std::vector<void *> createArrayOfIE(Data &data)
   {
-    if (data.type != OSP_OBJECT)
+    if (!isManagedObject(data.type))
       throw std::runtime_error("cannot createArrayOfIE() with non OSP_OBJECT!");
 
     std::vector<void *> retval;
