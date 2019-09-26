@@ -70,17 +70,8 @@ export void *uniform BilinearPatches_create(void *uniform cppEquivalent)
      because we use embree to do the traversal for us (see
      BilinearPatches_set()) below */
   Geometry_Constructor(
-      &self->super, cppEquivalent, BilinearPatches_postIntersect, NULL);
+      &self->super, cppEquivalent, BilinearPatches_postIntersect);
   return self;
-}
-
-export void BilinearPatches_destroy(void *uniform _self)
-{
-  /* _actually_ this should also destroy the created embree geometry
-     here; not doing this to keep the code as small as possible, but
-     usually this is where it should be done */
-  BilinearPatches *uniform self = (BilinearPatches * uniform) _self;
-  delete self;
 }
 
 /*! to be able to have embree build a data structure over us we have
@@ -97,10 +88,10 @@ unmasked void BilinearPatches_bounds(
 
   box3fa *uniform out = (box3fa * uniform) args->bounds_o;
   *out = box_extend(box_extend(box_extend(box_extend(make_box3fa_empty(),
-                                                     make_vec3fa(patch->v00)),
-                                          make_vec3fa(patch->v01)),
-                               make_vec3fa(patch->v10)),
-                    make_vec3fa(patch->v11));
+                                                     make_vec3f(patch->v00)),
+                                          make_vec3f(patch->v01)),
+                               make_vec3f(patch->v10)),
+                    make_vec3f(patch->v11));
 }
 
 bool recursiveBisection(varying Ray &ray,

@@ -16,9 +16,7 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/GeometricModel.h>
-#include <ospray/ospray_cpp/ManagedObject.h>
-#include <ospray/ospray_cpp/VolumetricModel.h>
+#include "Group.h"
 
 namespace ospray {
   namespace cpp {
@@ -26,26 +24,26 @@ namespace ospray {
     class Instance : public ManagedObject_T<OSPInstance>
     {
      public:
-      Instance();
+      Instance(Group &group);
+      Instance(OSPGroup group);
+
       Instance(const Instance &copy);
       Instance(OSPInstance existing);
     };
 
     // Inlined function definitions ///////////////////////////////////////////
 
-    inline Instance::Instance()
+    inline Instance::Instance(Group &group) : Instance(group.handle()) {}
+
+    inline Instance::Instance(OSPGroup group)
     {
-      OSPInstance c = ospNewInstance();
-      if (c) {
-        ospObject = c;
-      } else {
-        throw std::runtime_error("Failed to create OSPInstance!");
-      }
+      ospObject = ospNewInstance(group);
     }
 
     inline Instance::Instance(const Instance &copy)
         : ManagedObject_T<OSPInstance>(copy.handle())
     {
+      ospRetain(copy.handle());
     }
 
     inline Instance::Instance(OSPInstance existing)

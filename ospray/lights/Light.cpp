@@ -23,9 +23,11 @@ namespace ospray {
 
   void Light::commit()
   {
-    isVisible = getParam1b("isVisible", true);
+    color     = getParam<vec3f>("color", vec3f(1.f));
+    intensity = getParam<float>("intensity", 1.f);
+    isVisible = getParam<bool>("visible", true);
 
-    ispc::Light_set(getIE(), isVisible);
+    ispc::Light_set(getIE(), (ispc::vec3f &)color, intensity, isVisible);
   }
 
   std::string Light::toString() const

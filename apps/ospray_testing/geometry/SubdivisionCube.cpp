@@ -16,8 +16,9 @@
 
 #include "Geometry.h"
 // ospcommon
-#include "ospcommon/box.h"
-using namespace ospcommon;
+#include "ospcommon/math/box.h"
+
+using namespace ospcommon::math;
 
 #include <vector>
 
@@ -98,11 +99,11 @@ namespace ospray {
 
       OSPData verticesData =
           ospNewData(vertices.size(), OSP_VEC3F, vertices.data());
-      ospSetData(geometry, "vertex", verticesData);
+      ospSetData(geometry, "vertex.position", verticesData);
       ospRelease(verticesData);
 
       OSPData colorsData = ospNewData(colors.size(), OSP_VEC4F, colors.data());
-      ospSetData(geometry, "color", colorsData);
+      ospSetData(geometry, "vertex.color", colorsData);
       ospRelease(colorsData);
 
       OSPData facesData = ospNewData(faces.size(), OSP_UINT, faces.data());
@@ -125,7 +126,7 @@ namespace ospray {
       ospRelease(vertexCreaseWeightsData);
 
       OSPData edgeCreaseIndicesData = ospNewData(
-          edgeCreaseIndices.size(), OSP_VEC2I, edgeCreaseIndices.data());
+          edgeCreaseIndices.size(), OSP_VEC2UI, edgeCreaseIndices.data());
       ospSetData(geometry, "edgeCrease.index", edgeCreaseIndicesData);
       ospRelease(edgeCreaseIndicesData);
 
@@ -150,17 +151,22 @@ namespace ospray {
       ospCommit(geometry);
       ospCommit(model);
 
-      OSPInstance instance = ospNewInstance();
-      auto instances       = ospNewData(1, OSP_OBJECT, &model);
-      ospSetData(instance, "geometries", instances);
+      OSPGroup group = ospNewGroup();
+      auto models = ospNewData(1, OSP_GEOMETRIC_MODEL, &model);
+      ospSetData(group, "geometry", models);
+      ospCommit(group);
+      ospRelease(models);
+
+      OSPInstance instance = ospNewInstance(group);
       ospCommit(instance);
-      ospRelease(instances);
 
       OSPTestingGeometry retval;
       retval.geometry = geometry;
       retval.model    = model;
+      retval.group    = group;
       retval.instance = instance;
-      retval.bounds   = reinterpret_cast<osp_box3f &>(bounds);
+
+      std::memcpy(&retval.bounds, &bounds, sizeof(bounds));
 
       return retval;
     }

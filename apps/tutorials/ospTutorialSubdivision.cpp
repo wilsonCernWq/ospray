@@ -14,12 +14,8 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include <iterator>
-#include <memory>
-#include <random>
 #include "GLFWOSPRayWindow.h"
 
-#include "ospcommon/library.h"
 #include "ospray_testing.h"
 
 #include "tutorial_util.h"
@@ -57,9 +53,9 @@ int main(int argc, const char **argv)
   instanceHandles.push_back(plane);
 
   OSPData geomInstances =
-      ospNewData(instanceHandles.size(), OSP_OBJECT, instanceHandles.data());
+      ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
 
-  ospSetData(world, "instances", geomInstances);
+  ospSetData(world, "instance", geomInstances);
   ospRelease(geomInstances);
 
   for (auto inst : instanceHandles)
@@ -72,7 +68,7 @@ int main(int argc, const char **argv)
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   OSPData lightsData = ospTestingNewLights("ambient_and_directional");
-  ospSetData(renderer, "lights", lightsData);
+  ospSetData(renderer, "light", lightsData);
   ospRelease(lightsData);
 
   ospCommit(renderer);
@@ -88,7 +84,7 @@ int main(int argc, const char **argv)
     if (ImGui::SliderInt("tessellation level", &tessellationLevel, 1, 10)) {
       ospSetFloat(subdivisionGeometry.geometry, "level", tessellationLevel);
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
-      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.instance);
+      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.group);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
 
@@ -112,7 +108,7 @@ int main(int argc, const char **argv)
       ospRelease(vertexCreaseWeightsData);
 
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
-      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.instance);
+      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.group);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
 
@@ -135,7 +131,7 @@ int main(int argc, const char **argv)
       ospRelease(edgeCreaseWeightsData);
 
       glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.geometry);
-      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.instance);
+      glfwOSPRayWindow->addObjectToCommit(subdivisionGeometry.group);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
   });

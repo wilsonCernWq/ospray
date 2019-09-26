@@ -20,17 +20,18 @@
 #include <type_traits>
 
 #include <ospray/ospray.h>
-#include "ospcommon/vec.h"
-#include "ospcommon/AffineSpace.h"
+
+#include "ospcommon/math/AffineSpace.h"
+#include "ospcommon/math/vec.h"
 
 namespace ospray {
-  namespace cpp    {
+  namespace cpp {
+
+    using namespace ospcommon::math;
 
     class ManagedObject
     {
-
-    public:
-
+     public:
       // string
       virtual void set(const std::string &name, const std::string &v) const = 0;
 
@@ -38,47 +39,64 @@ namespace ospray {
       virtual void set(const std::string &name, bool v) const = 0;
 
       // int
-      virtual void set(const std::string &name, int v) const = 0;
+      virtual void set(const std::string &name, int v) const          = 0;
       virtual void set(const std::string &name, int v1, int v2) const = 0;
-      virtual void set(const std::string &name, int v1, int v2, int v3) const = 0;
+      virtual void set(const std::string &name,
+                       int v1,
+                       int v2,
+                       int v3) const                                  = 0;
 
       // float
-      virtual void set(const std::string &name, float v) const = 0;
+      virtual void set(const std::string &name, float v) const            = 0;
       virtual void set(const std::string &name, float v1, float v2) const = 0;
-      virtual void set(const std::string &name, float v1, float v2, float v3) const = 0;
-      virtual void set(const std::string &name, float v1, float v2, float v3, float v4) const = 0;
+      virtual void set(const std::string &name,
+                       float v1,
+                       float v2,
+                       float v3) const                                    = 0;
+      virtual void set(const std::string &name,
+                       float v1,
+                       float v2,
+                       float v3,
+                       float v4) const                                    = 0;
 
       // double
-      virtual void set(const std::string &name, double v) const = 0;
+      virtual void set(const std::string &name, double v) const             = 0;
       virtual void set(const std::string &name, double v1, double v2) const = 0;
-      virtual void set(const std::string &name, double v1, double v2, double v3) const = 0;
-      virtual void set(const std::string &name, double v1, double v2, double v3, double v4) const = 0;
+      virtual void set(const std::string &name,
+                       double v1,
+                       double v2,
+                       double v3) const                                     = 0;
+      virtual void set(const std::string &name,
+                       double v1,
+                       double v2,
+                       double v3,
+                       double v4) const                                     = 0;
 
-      // ospcommon::vec2
-      virtual void set(const std::string &name, const ospcommon::vec2i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::vec2f &v) const = 0;
+      // vec2
+      virtual void set(const std::string &name, const vec2i &v) const = 0;
+      virtual void set(const std::string &name, const vec2f &v) const = 0;
 
-      // ospcommon::vec3
-      virtual void set(const std::string &name, const ospcommon::vec3i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::vec3f &v) const = 0;
+      // vec3
+      virtual void set(const std::string &name, const vec3i &v) const = 0;
+      virtual void set(const std::string &name, const vec3f &v) const = 0;
 
-      // ospcommon::vec4
-      virtual void set(const std::string &name, const ospcommon::vec4i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::vec4f &v) const = 0;
+      // vec4
+      virtual void set(const std::string &name, const vec4i &v) const = 0;
+      virtual void set(const std::string &name, const vec4f &v) const = 0;
 
-      // ospcommon::box
-      virtual void set(const std::string &name, const ospcommon::box1i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box1f &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box2i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box2f &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box3i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box3f &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box4i &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::box4f &v) const = 0;
+      // box
+      virtual void set(const std::string &name, const box1i &v) const = 0;
+      virtual void set(const std::string &name, const box1f &v) const = 0;
+      virtual void set(const std::string &name, const box2i &v) const = 0;
+      virtual void set(const std::string &name, const box2f &v) const = 0;
+      virtual void set(const std::string &name, const box3i &v) const = 0;
+      virtual void set(const std::string &name, const box3f &v) const = 0;
+      virtual void set(const std::string &name, const box4i &v) const = 0;
+      virtual void set(const std::string &name, const box4f &v) const = 0;
 
       // linear/affine spaces
-      virtual void set(const std::string &name, const ospcommon::linear3f &v) const = 0;
-      virtual void set(const std::string &name, const ospcommon::affine3f &v) const = 0;
+      virtual void set(const std::string &name, const linear3f &v) const = 0;
+      virtual void set(const std::string &name, const affine3f &v) const = 0;
 
       // C-string
       virtual void set(const std::string &name, const char *v) const = 0;
@@ -90,7 +108,8 @@ namespace ospray {
       virtual void set(const std::string &name, OSPObject v) const = 0;
 
       // ManagedObject&
-      virtual void set(const std::string &name, const ManagedObject &v) const = 0;
+      virtual void set(const std::string &name,
+                       const ManagedObject &v) const = 0;
 
       // Remove parameter on the object
       virtual void remove(const std::string &name) const = 0;
@@ -98,13 +117,10 @@ namespace ospray {
       //! Commit to ospray
       virtual void commit() const = 0;
 
-      //! Release the handle, sets the held handle instance to 'nullptr'
-      virtual void release() = 0;
-
       //! Get the underlying generic OSPObject handle
       virtual OSPObject object() const = 0;
 
-      virtual ~ManagedObject() {}
+      virtual ~ManagedObject() = default;
     };
 
     //! \todo auto-commit mode
@@ -112,10 +128,15 @@ namespace ospray {
     template <typename OSP_TYPE = OSPObject>
     class ManagedObject_T : public ManagedObject
     {
-    public:
-
+     public:
       ManagedObject_T(OSP_TYPE object = nullptr);
       virtual ~ManagedObject_T() override;
+
+      ManagedObject_T(const ManagedObject_T<OSP_TYPE> &copy);
+      ManagedObject_T(ManagedObject_T<OSP_TYPE> &&move);
+
+      ManagedObject_T &operator=(const ManagedObject_T<OSP_TYPE> &copy);
+      ManagedObject_T &operator=(ManagedObject_T<OSP_TYPE> &&move);
 
       void set(const std::string &name, const std::string &v) const override;
 
@@ -127,37 +148,51 @@ namespace ospray {
 
       void set(const std::string &name, float v) const override;
       void set(const std::string &name, float v1, float v2) const override;
-      void set(const std::string &name, float v1, float v2, float v3) const override;
-      void set(const std::string &name, float v1, float v2, float v3, float v4) const override;
+      void set(const std::string &name,
+               float v1,
+               float v2,
+               float v3) const override;
+      void set(const std::string &name,
+               float v1,
+               float v2,
+               float v3,
+               float v4) const override;
 
       void set(const std::string &name, double v) const override;
       void set(const std::string &name, double v1, double v2) const override;
-      void set(const std::string &name, double v1, double v2, double v3) const override;
-      void set(const std::string &name, double v1, double v2, double v3, double v4) const override;
+      void set(const std::string &name,
+               double v1,
+               double v2,
+               double v3) const override;
+      void set(const std::string &name,
+               double v1,
+               double v2,
+               double v3,
+               double v4) const override;
 
-      void set(const std::string &name, const ospcommon::vec2i &v) const override;
-      void set(const std::string &name, const ospcommon::vec2f &v) const override;
+      void set(const std::string &name, const vec2i &v) const override;
+      void set(const std::string &name, const vec2f &v) const override;
 
-      void set(const std::string &name, const ospcommon::vec3i &v) const override;
-      void set(const std::string &name, const ospcommon::vec3f &v) const override;
+      void set(const std::string &name, const vec3i &v) const override;
+      void set(const std::string &name, const vec3f &v) const override;
 
-      void set(const std::string &name, const ospcommon::vec4i &v) const override;
-      void set(const std::string &name, const ospcommon::vec4f &v) const override;
+      void set(const std::string &name, const vec4i &v) const override;
+      void set(const std::string &name, const vec4f &v) const override;
 
-      void set(const std::string &name, const ospcommon::box1i &v) const override;
-      void set(const std::string &name, const ospcommon::box1f &v) const override;
+      void set(const std::string &name, const box1i &v) const override;
+      void set(const std::string &name, const box1f &v) const override;
 
-      void set(const std::string &name, const ospcommon::box2i &v) const override;
-      void set(const std::string &name, const ospcommon::box2f &v) const override;
+      void set(const std::string &name, const box2i &v) const override;
+      void set(const std::string &name, const box2f &v) const override;
 
-      void set(const std::string &name, const ospcommon::box3i &v) const override;
-      void set(const std::string &name, const ospcommon::box3f &v) const override;
+      void set(const std::string &name, const box3i &v) const override;
+      void set(const std::string &name, const box3f &v) const override;
 
-      void set(const std::string &name, const ospcommon::box4i &v) const override;
-      void set(const std::string &name, const ospcommon::box4f &v) const override;
+      void set(const std::string &name, const box4i &v) const override;
+      void set(const std::string &name, const box4f &v) const override;
 
-      void set(const std::string &name, const ospcommon::linear3f &v) const override;
-      void set(const std::string &name, const ospcommon::affine3f &v) const override;
+      void set(const std::string &name, const linear3f &v) const override;
+      void set(const std::string &name, const affine3f &v) const override;
 
       void set(const std::string &name, const char *v) const override;
 
@@ -171,31 +206,31 @@ namespace ospray {
 
       void commit() const override;
 
-      void release() override;
-
       OSPObject object() const override;
 
       //! Get the underlying specific OSP* handle
       OSP_TYPE handle() const;
 
       //! return whether the given object is valid, or NULL
-      inline operator bool () const { return handle() != nullptr; }
+      inline operator bool() const
+      {
+        return handle() != nullptr;
+      }
 
-    protected:
-
+     protected:
       OSP_TYPE ospObject;
     };
 
     // Inlined function definitions ///////////////////////////////////////////
 
     template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(OSP_TYPE object) :
-      ospObject(object)
+    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(OSP_TYPE object)
+        : ospObject(object)
     {
       using OSPObject_T = typename std::remove_pointer<OSPObject>::type;
       using OtherOSP_T  = typename std::remove_pointer<OSP_TYPE>::type;
       static_assert(std::is_same<osp::ManagedObject, OSPObject_T>::value ||
-                    std::is_base_of<osp::ManagedObject, OtherOSP_T>::value,
+                        std::is_base_of<osp::ManagedObject, OtherOSP_T>::value,
                     "ManagedObject_T<OSP_TYPE> can only be instantiated with "
                     "OSPObject (a.k.a. osp::ManagedObject*) or one of its"
                     "descendants (a.k.a. the OSP* family of types).");
@@ -204,230 +239,282 @@ namespace ospray {
     template <typename OSP_TYPE>
     inline ManagedObject_T<OSP_TYPE>::~ManagedObject_T()
     {
+      ospRelease(ospObject);
+    }
+
+    template <typename OSP_TYPE>
+    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(
+        const ManagedObject_T<OSP_TYPE> &copy)
+    {
+      ospObject = copy.handle();
+      ospRetain(copy.handle());
+    }
+
+    template <typename OSP_TYPE>
+    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(
+        ManagedObject_T<OSP_TYPE> &&move)
+    {
+      ospObject      = move.handle();
+      move.ospObject = nullptr;
+    }
+
+    template <typename OSP_TYPE>
+    inline ManagedObject_T<OSP_TYPE> &ManagedObject_T<OSP_TYPE>::operator=(
+        const ManagedObject_T<OSP_TYPE> &copy)
+    {
+      ospObject = copy.handle();
+      ospRetain(copy.handle());
+      return *this;
+    }
+
+    template <typename OSP_TYPE>
+    inline ManagedObject_T<OSP_TYPE> &ManagedObject_T<OSP_TYPE>::operator=(
+        ManagedObject_T<OSP_TYPE> &&move)
+    {
+      ospObject      = move.handle();
+      move.ospObject = nullptr;
+      return *this;
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
                                                const std::string &v) const
     {
-      ospSetString(ospObject, name.c_str(), v.c_str());
+      ospSetParam(ospObject, name.c_str(), OSP_STRING, v.c_str());
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, bool v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               bool v) const
     {
       ospSetBool(ospObject, name.c_str(), v);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, int v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               int v) const
     {
       ospSetInt(ospObject, name.c_str(), v);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               int v1, int v2) const
+                                               int v1,
+                                               int v2) const
     {
       ospSetVec2i(ospObject, name.c_str(), v1, v2);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               int v1, int v2, int v3) const
+                                               int v1,
+                                               int v2,
+                                               int v3) const
     {
       ospSetVec3i(ospObject, name.c_str(), v1, v2, v3);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, float v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               float v) const
     {
       ospSetFloat(ospObject, name.c_str(), v);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               float v1, float v2) const
+                                               float v1,
+                                               float v2) const
     {
       ospSetVec2f(ospObject, name.c_str(), v1, v2);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               float v1, float v2, float v3) const
+                                               float v1,
+                                               float v2,
+                                               float v3) const
     {
       ospSetVec3f(ospObject, name.c_str(), v1, v2, v3);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               float v1, float v2,
-                                               float v3, float v4) const
+    inline void ManagedObject_T<OSP_TYPE>::set(
+        const std::string &name, float v1, float v2, float v3, float v4) const
     {
       ospSetVec4f(ospObject, name.c_str(), v1, v2, v3, v4);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, double v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               double v) const
     {
       ospSetFloat(ospObject, name.c_str(), v);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               double v1, double v2) const
+                                               double v1,
+                                               double v2) const
     {
       ospSetVec2f(ospObject, name.c_str(), v1, v2);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               double v1, double v2, double v3) const
+                                               double v1,
+                                               double v2,
+                                               double v3) const
     {
       ospSetVec3f(ospObject, name.c_str(), v1, v2, v3);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               double v1, double v2,
-                                               double v3, double v4) const
+                                               double v1,
+                                               double v2,
+                                               double v3,
+                                               double v4) const
     {
       ospSetVec4f(ospObject, name.c_str(), v1, v2, v3, v4);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::vec2i &v) const
+                                               const vec2i &v) const
     {
-      ospSetVec2iv(ospObject, name.c_str(), &v.x);
+      ospSetParam(ospObject, name.c_str(), OSP_VEC2I, &v.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::vec2f &v) const
+                                               const vec2f &v) const
     {
-      ospSetVec2fv(ospObject, name.c_str(), &v.x);
+      ospSetParam(ospObject, name.c_str(), OSP_VEC2F, &v.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::vec3i &v) const
+                                               const vec3i &v) const
     {
-      ospSetVec3iv(ospObject, name.c_str(), &v.x);
+      ospSetParam(ospObject, name.c_str(), OSP_VEC3I, &v.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::vec3f &v) const
+                                               const vec3f &v) const
     {
-      ospSetVec3fv(ospObject, name.c_str(), &v.x);
+      ospSetParam(ospObject, name.c_str(), OSP_VEC3F, &v.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::vec4i &v) const
+                                               const vec4i &v) const
     {
-      ospSetVec4iv(ospObject, name.c_str(), &v.x);
+      ospSetParam(ospObject, name.c_str(), OSP_VEC4I, &v.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::vec4f &v) const
+                                               const vec4f &v) const
     {
-      ospSetVec4fv(ospObject, name.c_str(), &v.x);
+      ospSetParam(ospObject, name.c_str(), OSP_VEC4F, &v.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box1i &v) const
+                                               const box1i &v) const
     {
-      ospSetBox1iv(ospObject, name.c_str(), &v.lower);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX1I, &v.lower);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box1f &v) const
+                                               const box1f &v) const
     {
-      ospSetBox1fv(ospObject, name.c_str(), &v.lower);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX1F, &v.lower);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box2i &v) const
+                                               const box2i &v) const
     {
-      ospSetBox2iv(ospObject, name.c_str(), &v.lower.x);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX2I, &v.lower.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box2f &v) const
+                                               const box2f &v) const
     {
-      ospSetBox2fv(ospObject, name.c_str(), &v.lower.x);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX2F, &v.lower.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box3i &v) const
+                                               const box3i &v) const
     {
-      ospSetBox3iv(ospObject, name.c_str(), &v.lower.x);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX3I, &v.lower.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box3f &v) const
+                                               const box3f &v) const
     {
-      ospSetBox3fv(ospObject, name.c_str(), &v.lower.x);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX3F, &v.lower.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box4i &v) const
+                                               const box4i &v) const
     {
-      ospSetBox4iv(ospObject, name.c_str(), &v.lower.x);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX4I, &v.lower.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::box4f &v) const
+                                               const box4f &v) const
     {
-      ospSetBox4fv(ospObject, name.c_str(), &v.lower.x);
+      ospSetParam(ospObject, name.c_str(), OSP_BOX4F, &v.lower.x);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::linear3f &v) const
+                                               const linear3f &v) const
     {
-      ospSetLinear3fv(ospObject, name.c_str(), (const float *)&v);
+      ospSetParam(ospObject, name.c_str(), OSP_LINEAR3F, (const float *)&v);
     }
 
     template <typename OSP_TYPE>
     inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
-                                               const ospcommon::affine3f &v) const
+                                               const affine3f &v) const
     {
-      ospSetAffine3fv(ospObject, name.c_str(), (const float *)&v);
+      ospSetParam(ospObject, name.c_str(), OSP_AFFINE3F, (const float *)&v);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, const char *v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               const char *v) const
     {
-      ospSetString(ospObject, name.c_str(), v);
+      ospSetParam(ospObject, name.c_str(), OSP_STRING, v);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, void *v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               void *v) const
     {
-      ospSetVoidPtr(ospObject, name.c_str(), v);
+      ospSetParam(ospObject, name.c_str(), OSP_VOID_PTR, v);
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name, OSPObject v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               OSPObject v) const
     {
       ospSetObject(ospObject, name.c_str(), v);
     }
 
     template <typename OSP_TYPE>
-    inline void
-    ManagedObject_T<OSP_TYPE>::set(const std::string &name, const ManagedObject &v) const
+    inline void ManagedObject_T<OSP_TYPE>::set(const std::string &name,
+                                               const ManagedObject &v) const
     {
       ospSetObject(ospObject, name.c_str(), v.object());
     }
@@ -445,13 +532,6 @@ namespace ospray {
     }
 
     template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::release()
-    {
-      ospRelease(ospObject);
-      ospObject = nullptr;
-    }
-
-    template <typename OSP_TYPE>
     OSPObject ManagedObject_T<OSP_TYPE>::object() const
     {
       return (OSPObject)ospObject;
@@ -463,5 +543,5 @@ namespace ospray {
       return ospObject;
     }
 
-  }// namespace cpp
-}// namespace ospray
+  }  // namespace cpp
+}  // namespace ospray

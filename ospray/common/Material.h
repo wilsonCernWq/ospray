@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "Managed.h"
+#include "./Managed.h"
 
 namespace ospray {
 
@@ -75,6 +75,8 @@ namespace ospray {
     static Material *createInstance(const char *renderer_type,
                                     const char *material_type);
   };
+
+  OSPTYPEFOR_SPECIALIZATION(Material *, OSP_MATERIAL);
 
 #define OSP_REGISTER_MATERIAL(renderer_name, InternalClass, external_name)     \
   OSP_REGISTER_OBJECT(::ospray::Material, material, \

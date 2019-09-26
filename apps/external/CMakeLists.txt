@@ -18,6 +18,11 @@ if (NOT WIN32)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 endif()
 
-include(cmake/configure_glfw.cmake)
+ospray_disable_compiler_warnings()
+
+if (OSPRAY_ENABLE_TESTING)
+  include(cmake/configure_gtest.cmake)
+endif()
+
 add_subdirectory(imgui)
 add_subdirectory(stb_image)

@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/ManagedObject.h>
-#include <ospray/ospray_cpp/Instance.h>
+#include "Instance.h"
+#include "ManagedObject.h"
 
 namespace ospray {
   namespace cpp {
@@ -34,17 +34,13 @@ namespace ospray {
 
     inline World::World()
     {
-      OSPWorld c = ospNewWorld();
-      if (c) {
-        ospObject = c;
-      } else {
-        throw std::runtime_error("Failed to create OSPWorld!");
-      }
+      ospObject = ospNewWorld();
     }
 
     inline World::World(const World &copy)
         : ManagedObject_T<OSPWorld>(copy.handle())
     {
+      ospRetain(copy.handle());
     }
 
     inline World::World(OSPWorld existing) : ManagedObject_T<OSPWorld>(existing)

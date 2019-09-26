@@ -16,7 +16,6 @@
 
 // ospray
 #include "World.h"
-#include "Instance.h"
 #include "api/ISPCDevice.h"
 // ispc exports
 #include "World_ispc.h"
@@ -31,26 +30,22 @@ namespace ospray {
   // Embree helper functions ///////////////////////////////////////////////////
 
   static std::pair<int, int> createEmbreeScenes(RTCScene &geometryScene,
-                                                RTCScene &volumeScene,
-                                                Data &instances,
-                                                int embreeFlags)
+      RTCScene &volumeScene,
+      const DataT<Instance *> &instances,
+      int embreeFlags)
   {
     RTCDevice embreeDevice = (RTCDevice)ospray_getEmbreeDevice();
 
     int numGeomInstances   = 0;
     int numVolumeInstances = 0;
 
-    std::vector<RTCGeometry> toFreeAfterCommit;
-
-    auto begin = instances.begin<Instance *>();
-    auto end   = instances.end<Instance *>();
-    std::for_each(begin, end, [&](Instance *inst) {
-      auto instGeometryScene = inst->embreeGeometryScene();
-      auto instVolumeScene   = inst->embreeVolumeScene();
+    for (auto &&inst : instances) {
+      auto instGeometryScene = inst->group->embreeGeometryScene();
+      auto instVolumeScene   = inst->group->embreeVolumeScene();
 
       auto xfm = inst->xfm();
 
-      if (instGeometryScene) {
+      {
         auto eInst = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_INSTANCE);
         rtcSetGeometryInstancedScene(eInst, instGeometryScene.value());
         rtcSetGeometryTransform(
@@ -62,7 +57,7 @@ namespace ospray {
         numGeomInstances++;
       }
 
-      if (instVolumeScene) {
+      {
         auto eInst = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_INSTANCE);
         rtcSetGeometryInstancedScene(eInst, instVolumeScene.value());
         rtcSetGeometryTransform(
@@ -73,7 +68,7 @@ namespace ospray {
 
         numVolumeInstances++;
       }
-    });
+    }
 
     rtcSetSceneFlags(geometryScene, static_cast<RTCSceneFlags>(embreeFlags));
     rtcSetSceneFlags(volumeScene, static_cast<RTCSceneFlags>(embreeFlags));
@@ -116,7 +111,16 @@ namespace ospray {
     freeAndNullifyEmbreeScene(embreeSceneHandleGeometries);
     freeAndNullifyEmbreeScene(embreeSceneHandleVolumes);
 
-    instances = (Data *)getParamObject("instances");
+    instances = getParamDataT<Instance *>("instance");
+
+    // get rid of stride for now
+    if (instances && !instances->compact()) {
+      auto data =
+          new Data(OSP_GEOMETRIC_MODEL, vec3ui(instances->size(), 1, 1));
+      data->copy(*instances, vec3ui(0));
+      instances = &(data->as<Instance *>());
+      data->refDec();
+    }
 
     auto numInstances = instances ? instances->size() : 0;
 

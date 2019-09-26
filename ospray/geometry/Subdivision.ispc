@@ -17,14 +17,14 @@
 // ospray
 #include "Geometry.ih"
 #include "common/World.ih"
-#include "common/safe_gather.ih"
 #include "math/LinearSpace.ih"
 #include "math/sampling.ih"
 
 struct Subdivision
 {
   Geometry super;
-  vec2f *texcoord;
+  RTCGeometry geom;
+  int64 flagMask; // which attributes are missing and cannot be interpolated
 };
 
 static void Subdivision_postIntersect(const Geometry *uniform _self,
@@ -34,11 +34,12 @@ static void Subdivision_postIntersect(const Geometry *uniform _self,
 {
   Subdivision *uniform self = (Subdivision * uniform) _self;
   dg.Ng = dg.Ns = ray.Ng;
-  // get normals
-  cif(flags & DG_NS)
-  {
+
+  flags &= self->flagMask;
+
+  cif (flags & DG_NS) {
     vec3f dPdu, dPdv;
-    rtcInterpolateV1(self->super.geom,
+    rtcInterpolateV1(self->geom,
                      ray.primID,
                      ray.u,
                      ray.v,
@@ -50,10 +51,9 @@ static void Subdivision_postIntersect(const Geometry *uniform _self,
                      3);
     dg.Ns = cross(dPdu, dPdv);
   }
-  // get colors
-  cif(flags & DG_COLOR)
-  {
-    rtcInterpolateV1(self->super.geom,
+
+  cif (flags & DG_COLOR) {
+    rtcInterpolateV1(self->geom,
                      ray.primID,
                      ray.u,
                      ray.v,
@@ -64,10 +64,9 @@ static void Subdivision_postIntersect(const Geometry *uniform _self,
                      NULL,
                      4);
   }
-  // get texcoords
-  cif(flags & DG_TEXCOORD && self->texcoord)
-  {
-    rtcInterpolateV1(self->super.geom,
+
+  cif (flags & DG_TEXCOORD) {
+    rtcInterpolateV1(self->geom,
                      ray.primID,
                      ray.u,
                      ray.v,
@@ -80,28 +79,32 @@ static void Subdivision_postIntersect(const Geometry *uniform _self,
   }
 }
 
-void Subdivision_Constructor(uniform Subdivision *uniform mesh,
-                             void *uniform cppEquivalent,
-                             RTCGeometry geom,
-                             uniform vec2f *uniform texcoord)
+void Subdivision_Constructor(
+    uniform Subdivision *uniform mesh, void *uniform cppEquivalent)
 {
-  Geometry_Constructor(
-      &mesh->super, cppEquivalent, Subdivision_postIntersect, geom);
+  Geometry_Constructor(&mesh->super, cppEquivalent, Subdivision_postIntersect);
 
-  mesh->texcoord = texcoord;
+  mesh->geom = NULL;
+  mesh->flagMask = 0;
 }
 
 export void *uniform Subdivision_create(void *uniform cppEquivalent)
 {
   Subdivision *uniform mesh = uniform new Subdivision;
-  Subdivision_Constructor(mesh, cppEquivalent, NULL, NULL);
+  Subdivision_Constructor(mesh, cppEquivalent);
   return mesh;
 }
 
 export void *uniform Subdivision_set(void *uniform _mesh,
-                                     RTCGeometry geom,
-                                     uniform vec2f *uniform texcoord)
+    RTCGeometry geom,
+    uniform bool haveColor,
+    uniform bool haveTC)
 {
   uniform Subdivision *uniform mesh = (uniform Subdivision * uniform) _mesh;
-  Subdivision_Constructor(mesh, mesh->super.cppEquivalent, geom, texcoord);
+  mesh->geom = geom;
+  mesh->flagMask = -1;
+  if (!haveColor)
+    mesh->flagMask &= ~DG_COLOR;
+  if (!haveTC)
+    mesh->flagMask &= ~DG_TEXCOORD;
 }

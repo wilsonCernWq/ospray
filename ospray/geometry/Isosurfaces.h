@@ -23,7 +23,7 @@ namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE Isosurfaces : public Geometry
   {
-    Isosurfaces();
+    Isosurfaces() = default;
     virtual ~Isosurfaces() override = default;
 
     virtual std::string toString() const override;
@@ -32,17 +32,13 @@ namespace ospray {
 
     virtual size_t numPrimitives() const override;
 
+    LiveGeometry createEmbreeGeometry() override;
+
    protected:
     // Data members //
 
-    Ref<Data> isovaluesData;  //!< refcounted data array for isovalues data
+    Ref<const DataT<float>> isovaluesData;
     Ref<VolumetricModel> volume;
-
-    int numIsovalues{0};
-    float *isovalues{nullptr};
-
-   private:
-    void createEmbreeGeometry() override;
   };
 
 }  // namespace ospray

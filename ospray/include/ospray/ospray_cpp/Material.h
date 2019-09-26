@@ -16,15 +16,14 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/ManagedObject.h>
+#include "ManagedObject.h"
 
 namespace ospray {
   namespace cpp {
 
     class Material : public ManagedObject_T<OSPMaterial>
     {
-    public:
-
+     public:
       Material() = default;
       Material(const std::string &renderer_type, const std::string &mat_type);
       Material(const Material &copy);
@@ -36,23 +35,19 @@ namespace ospray {
     inline Material::Material(const std::string &renderer_type,
                               const std::string &mat_type)
     {
-      auto c = ospNewMaterial(renderer_type.c_str(), mat_type.c_str());
-      if (c) {
-        ospObject = c;
-      } else {
-        throw std::runtime_error("Failed to create OSPMaterial (of type '"+renderer_type+"'::'"+mat_type+"')!");
-      }
+      ospObject = ospNewMaterial(renderer_type.c_str(), mat_type.c_str());
     }
 
-    inline Material::Material(const Material &copy) :
-      ManagedObject_T<OSPMaterial>(copy.handle())
+    inline Material::Material(const Material &copy)
+        : ManagedObject_T<OSPMaterial>(copy.handle())
+    {
+      ospRetain(copy.handle());
+    }
+
+    inline Material::Material(OSPMaterial existing)
+        : ManagedObject_T<OSPMaterial>(existing)
     {
     }
 
-    inline Material::Material(OSPMaterial existing) :
-      ManagedObject_T<OSPMaterial>(existing)
-    {
-    }
-
-  }// namespace cpp
-}// namespace ospray
+  }  // namespace cpp
+}  // namespace ospray

@@ -19,7 +19,6 @@
 #include <random>
 #include "GLFWOSPRayWindow.h"
 
-#include "ospcommon/library.h"
 #include "ospray_testing.h"
 
 #include "tutorial_util.h"
@@ -43,9 +42,10 @@ struct Sphere
 // every frame
 static std::vector<Sphere> g_spheres;
 static std::vector<vec4f> g_colors;
+static OSPData g_positionData;
 static OSPGeometry g_spheresGeometry;
 static OSPGeometricModel g_spheresModel;
-static OSPInstance g_instance;
+static OSPGroup g_spheresGroup;
 static OSPWorld g_world;
 
 std::vector<Sphere> generateRandomSpheres(size_t numSpheres)
@@ -88,22 +88,28 @@ OSPGeometricModel createRandomSpheresGeometry(size_t numSpheres)
 {
   g_spheres = generateRandomSpheres(numSpheres);
 
-  // create a data object with all the sphere information
-  OSPData spheresData =
-      ospNewData(numSpheres * sizeof(Sphere), OSP_UCHAR, g_spheres.data());
+  // create a data objects with all the sphere information
+  g_positionData =
+      ospNewSharedData((char *)g_spheres.data() + offsetof(Sphere, center),
+          OSP_VEC3F,
+          numSpheres,
+          sizeof(Sphere));
+  OSPData radiusData =
+      ospNewSharedData((char *)g_spheres.data() + offsetof(Sphere, radius),
+          OSP_FLOAT,
+          numSpheres,
+          sizeof(Sphere));
 
   // create the sphere geometry, and assign attributes
   g_spheresGeometry = ospNewGeometry("spheres");
   g_spheresModel    = ospNewGeometricModel(g_spheresGeometry);
 
-  ospSetData(g_spheresGeometry, "spheres", spheresData);
-  ospSetInt(g_spheresGeometry, "bytes_per_sphere", int(sizeof(Sphere)));
-  ospSetInt(g_spheresGeometry, "offset_center", int(offsetof(Sphere, center)));
-  ospSetInt(g_spheresGeometry, "offset_radius", int(offsetof(Sphere, radius)));
+  ospSetData(g_spheresGeometry, "sphere.position", g_positionData);
+  ospSetData(g_spheresGeometry, "sphere.radius", radiusData);
 
   OSPData colorData = ospNewData(numSpheres, OSP_VEC4F, g_colors.data());
 
-  ospSetData(g_spheresModel, "color", colorData);
+  ospSetData(g_spheresModel, "prim.color", colorData);
 
   // create glass material and assign to geometry
   OSPMaterial glassMaterial =
@@ -118,7 +124,7 @@ OSPGeometricModel createRandomSpheresGeometry(size_t numSpheres)
   ospCommit(g_spheresModel);
 
   // release handles we no longer need
-  ospRelease(spheresData);
+  ospRelease(radiusData);
   ospRelease(colorData);
   ospRelease(glassMaterial);
 
@@ -128,28 +134,32 @@ OSPGeometricModel createRandomSpheresGeometry(size_t numSpheres)
 void createWorld()
 {
   // create the world which will contain all of our geometries
-  g_world    = ospNewWorld();
-  g_instance = ospNewInstance();
+  g_world        = ospNewWorld();
+  g_spheresGroup = ospNewGroup();
 
   std::vector<OSPInstance> instanceHandles;
 
   // add in spheres geometry (100 of them)
   g_spheresModel = createRandomSpheresGeometry(100);
 
-  OSPData spheresModels = ospNewData(1, OSP_OBJECT, &g_spheresModel);
-  ospSetData(g_instance, "geometries", spheresModels);
-  ospCommit(g_instance);
+  OSPData spheresModels = ospNewData(1, OSP_GEOMETRIC_MODEL, &g_spheresModel);
+  ospSetData(g_spheresGroup, "geometry", spheresModels);
+  ospCommit(g_spheresGroup);
 
-  instanceHandles.push_back(g_instance);
+  OSPInstance spheresInstance = ospNewInstance(g_spheresGroup);
+  ospCommit(spheresInstance);
+
+  instanceHandles.push_back(spheresInstance);
 
   // add in a ground plane geometry
   OSPInstance plane = createGroundPlane(renderer_type);
   instanceHandles.push_back(plane);
 
   OSPData instances =
-      ospNewData(instanceHandles.size(), OSP_OBJECT, instanceHandles.data());
-  ospSetData(g_world, "instances", instances);
+      ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
+  ospSetData(g_world, "instance", instances);
   ospRelease(instances);
+  ospRelease(spheresInstance);
   ospRelease(plane);
 
   ospCommit(g_world);
@@ -161,7 +171,7 @@ OSPRenderer createRenderer()
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   OSPData lightsData = ospTestingNewLights("ambient_only");
-  ospSetData(renderer, "lights", lightsData);
+  ospSetData(renderer, "light", lightsData);
   ospRelease(lightsData);
 
   // commit the renderer
@@ -181,7 +191,7 @@ void updateSpheresCoordinates()
     const float T    = sqrtf(8.f * s.maxHeight / g);
     const float Vmax = sqrtf(2.f * s.maxHeight * g);
 
-    float tRemainder = ospcommon::fmod(0.5f * T + t, T);
+    float tRemainder = ospcommon::math::fmod(0.5f * T + t, T);
 
     s.center.y = -1.f + s.radius - 0.5f * g * tRemainder * tRemainder +
                  Vmax * tRemainder;
@@ -204,15 +214,9 @@ void updateSpheresCoordinates()
 
 void updateSpheresGeometry()
 {
-  // create new spheres data for the updated center coordinates, and assign to
-  // geometry
-  OSPData spheresData = ospNewData(
-      g_spheres.size() * sizeof(Sphere), OSP_UCHAR, g_spheres.data());
-
-  ospSetData(g_spheresGeometry, "spheres", spheresData);
-
-  // release handles we no longer need
-  ospRelease(spheresData);
+  // communicate that center coordinates got changed
+  ospCommit(g_positionData);
+  ospCommit(g_spheresGeometry);
 }
 
 // updates the bouncing spheres' coordinates, geometry, and world
@@ -225,8 +229,7 @@ void displayCallback(GLFWOSPRayWindow *glfwOSPRayWindow)
   // queue the world to be committed since it changed, however don't commit
   // it immediately because it's being rendered asynchronously
   glfwOSPRayWindow->addObjectToCommit(g_spheresGeometry);
-  glfwOSPRayWindow->addObjectToCommit(g_spheresModel);
-  glfwOSPRayWindow->addObjectToCommit(g_instance);
+  glfwOSPRayWindow->addObjectToCommit(g_spheresGroup);
   glfwOSPRayWindow->addObjectToCommit(g_world);
 
   // update the world on the GLFW window
@@ -263,9 +266,10 @@ int main(int argc, const char **argv)
   // start the GLFW main loop, which will continuously render
   glfwOSPRayWindow->mainLoop();
 
+  ospRelease(g_positionData);
   ospRelease(g_spheresGeometry);
   ospRelease(g_spheresModel);
-  ospRelease(g_instance);
+  ospRelease(g_spheresGroup);
 
   // cleanly shut OSPRay down
   ospShutdown();

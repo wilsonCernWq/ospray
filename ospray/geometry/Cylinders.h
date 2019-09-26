@@ -22,7 +22,8 @@ namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE Cylinders : public Geometry
   {
-    Cylinders();
+    Cylinders() = default;
+    virtual ~Cylinders() override = default;
 
     virtual std::string toString() const override;
 
@@ -30,20 +31,15 @@ namespace ospray {
 
     virtual size_t numPrimitives() const override;
 
+    LiveGeometry createEmbreeGeometry() override;
+
    protected:
-    float radius;  //!< default radius, if no per-cylinder radius was specified.
-
-    size_t numCylinders;
-    size_t bytesPerCylinder;  //!< num bytes per cylinder
-    int64 offset_v0;
-    int64 offset_v1;
-    int64 offset_radius;
-
-    Ref<Data> cylinderData;
-    Ref<Data> texcoordData;
-
-   private:
-    void createEmbreeGeometry() override;
+    float radius{0.01}; // default radius, if no per-cylinder radius
+    Ref<const DataT<vec3f>> vertex0Data;
+    Ref<const DataT<vec3f>> vertex1Data;
+    Ref<const DataT<float>> radiusData;
+    Ref<const DataT<vec2f>> texcoord0Data;
+    Ref<const DataT<vec2f>> texcoord1Data;
   };
 
 }  // namespace ospray

@@ -14,8 +14,6 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#undef NDEBUG
-
 // ospray
 #include "Cylinders.h"
 #include "common/Data.h"
@@ -25,11 +23,6 @@
 
 namespace ospray {
 
-  Cylinders::Cylinders()
-  {
-    this->ispcEquivalent = ispc::Cylinders_create(this);
-  }
-
   std::string Cylinders::toString() const
   {
     return "ospray::Cylinders";
@@ -37,53 +30,42 @@ namespace ospray {
 
   void Cylinders::commit()
   {
-    Geometry::commit();
+    radius           = getParam<float>("radius", 0.01f);
+    vertex0Data = getParamDataT<vec3f>("cylinder.position0", true);
+    vertex1Data = getParamDataT<vec3f>("cylinder.position1", true);
+    if (vertex0Data->size() != vertex1Data->size())
+      throw std::runtime_error(toString()
+          + ": arrays 'cylinder.position0' and 'cylinder.position1' need to be of same size.");
+    radiusData = getParamDataT<float>("cylinder.radius");
+    texcoord0Data = getParamDataT<vec2f>("cylinder.texcoord0");
+    texcoord1Data = getParamDataT<vec2f>("cylinder.texcoord1");
 
-    radius           = getParam1f("radius", 0.01f);
-    bytesPerCylinder = getParam1i("bytes_per_cylinder", 6 * sizeof(float));
-    offset_v0        = getParam1i("offset_v0", 0);
-    offset_v1        = getParam1i("offset_v1", 3 * sizeof(float));
-    offset_radius    = getParam1i("offset_radius", -1);
-    cylinderData     = getParamData("cylinders");
-    texcoordData     = getParamData("texcoord");
-
-    if (cylinderData.ptr == nullptr || bytesPerCylinder == 0) {
-      throw std::runtime_error(
-          "#ospray:geometry/cylinders: no 'cylinders'"
-          " data specified");
-    }
-
-    numCylinders = cylinderData->numBytes / bytesPerCylinder;
-
-    postStatusMsg(2) << "#osp: creating 'cylinders' geometry, #cylinders = "
-                     << numCylinders;
-
-    createEmbreeGeometry();
-
-    ispc::CylindersGeometry_set(getIE(),
-                                embreeGeometry,
-                                cylinderData->data,
-                                texcoordData ? texcoordData->data : nullptr,
-                                numCylinders,
-                                bytesPerCylinder,
-                                radius,
-                                offset_v0,
-                                offset_v1,
-                                offset_radius);
+    postCreationInfo();
   }
 
   size_t Cylinders::numPrimitives() const
   {
-    return numCylinders;
+    return vertex0Data ? vertex0Data->size() : 0;
   }
 
-  void Cylinders::createEmbreeGeometry()
+  LiveGeometry Cylinders::createEmbreeGeometry()
   {
-    if (embreeGeometry)
-      rtcReleaseGeometry(embreeGeometry);
+    LiveGeometry retval;
 
-    embreeGeometry =
+    retval.embreeGeometry =
         rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_USER);
+    retval.ispcEquivalent = ispc::Cylinders_create(this);
+
+    ispc::CylindersGeometry_set(retval.ispcEquivalent,
+        retval.embreeGeometry,
+        ispc(vertex0Data),
+        ispc(vertex1Data),
+        ispc(radiusData),
+        ispc(texcoord0Data),
+        ispc(texcoord1Data),
+        radius);
+
+    return retval;
   }
 
   OSP_REGISTER_GEOMETRY(Cylinders, cylinders);

@@ -17,24 +17,16 @@
 #pragma once
 
 // ospray stuff
-#include "geometry/GeometricModel.h"
-#include "volume/VolumetricModel.h"
-
+#include "./Data.h"
+#include "./Managed.h"
+#include "Instance.h"
 // stl
 #include <vector>
-
 // embree
 #include "embree3/rtcore.h"
 
 namespace ospray {
 
-  /*! \brief Base Abstraction for an OSPRay 'World' entity
-
-    A 'model' is the generalization of a 'scene' in embree: it is a
-    collection of geometries and volumes that one can trace rays
-    against, and that one can afterwards 'query' for certain
-    properties (like the shading normal or material for a given
-    ray/model intersection) */
   struct OSPRAY_SDK_INTERFACE World : public ManagedObject
   {
     World();
@@ -45,7 +37,7 @@ namespace ospray {
 
     // Data members //
 
-    Ref<Data> instances;
+    Ref<const DataT<Instance *>> instances;
     std::vector<void*> instanceIEs;
     int numGeometries{0};
     int numVolumes{0};
@@ -54,5 +46,7 @@ namespace ospray {
     RTCScene embreeSceneHandleGeometries{nullptr};
     RTCScene embreeSceneHandleVolumes{nullptr};
   };
+
+  OSPTYPEFOR_SPECIALIZATION(World *, OSP_WORLD);
 
 }  // namespace ospray

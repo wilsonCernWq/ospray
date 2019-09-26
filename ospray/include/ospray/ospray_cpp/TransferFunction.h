@@ -16,44 +16,39 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/ManagedObject.h>
+#include "ManagedObject.h"
 
 namespace ospray {
-namespace cpp    {
+  namespace cpp {
 
-class TransferFunction : public ManagedObject_T<OSPTransferFunction>
-{
-public:
+    class TransferFunction : public ManagedObject_T<OSPTransferFunction>
+    {
+     public:
+      TransferFunction();
+      TransferFunction(const std::string &type);
+      TransferFunction(const TransferFunction &copy);
+      TransferFunction(OSPTransferFunction existing);
+    };
 
-  TransferFunction();
-  TransferFunction(const std::string &type);
-  TransferFunction(const TransferFunction &copy);
-  TransferFunction(OSPTransferFunction existing);
-};
+    // Inlined function definitions ///////////////////////////////////////////
 
-// Inlined function definitions ///////////////////////////////////////////////
+    inline TransferFunction::TransferFunction() {}
 
-inline TransferFunction::TransferFunction() {}
+    inline TransferFunction::TransferFunction(const std::string &type)
+    {
+      ospObject = ospNewTransferFunction(type.c_str());
+    }
 
-inline TransferFunction::TransferFunction(const std::string &type)
-{
-  OSPTransferFunction c = ospNewTransferFunction(type.c_str());
-  if (c) {
-    ospObject = c;
-  } else {
-    throw std::runtime_error("Failed to create OSPTransferFunction!");
-  }
-}
+    inline TransferFunction::TransferFunction(const TransferFunction &copy)
+        : ManagedObject_T<OSPTransferFunction>(copy.handle())
+    {
+      ospRetain(copy.handle());
+    }
 
-inline TransferFunction::TransferFunction(const TransferFunction &copy) :
-  ManagedObject_T<OSPTransferFunction>(copy.handle())
-{
-}
+    inline TransferFunction::TransferFunction(OSPTransferFunction existing)
+        : ManagedObject_T<OSPTransferFunction>(existing)
+    {
+    }
 
-inline TransferFunction::TransferFunction(OSPTransferFunction existing) :
-  ManagedObject_T<OSPTransferFunction>(existing)
-{
-}
-
-}// namespace cpp
-}// namespace ospray
+  }  // namespace cpp
+}  // namespace ospray

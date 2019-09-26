@@ -14,8 +14,9 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include "StructuredVolume.ih"
 #include "GridAccelerator.ih"
+#include "StructuredVolume.ih"
+#include "common/Intersect.ih"
 
 inline varying float StructuredVolume_sample(const void *uniform _volume,
                                              const varying vec3f &worldCoordinates)
@@ -139,13 +140,14 @@ inline void StructuredVolume_intersectIsosurface(const void *uniform _volume,
   // The nominal step size for ray casting based volume renderers, not considering the sampling rate.
   const uniform float step = volume->super.samplingStep;
 
-  float tBox0, tBox1;
-  intersectBox(ray, volume->super.boundingBox, tBox0, tBox1);
-
   // Operate on a copy of the ray.
   Ray rayCopy = ray;
-  rayCopy.t0 = max(ray.t0, tBox0) + ray.time; // use ray.time as a ray offset
-  rayCopy.t = min(ray.t, tBox1);
+  const Intersections isect =
+      intersectBox(ray.org, ray.dir, volume->super.boundingBox);
+
+  rayCopy.t0 =
+      max(ray.t0, isect.entry.t) + ray.time; // use ray.time as a ray offset
+  rayCopy.t = min(ray.t, isect.exit.t);
 
   // Sample the volume at the current point in world coordinates.
   float t0 = rayCopy.t0;

@@ -15,35 +15,22 @@
 // ======================================================================== //
 
 // ospray
+#include "common/Data.ih"
+#include "common/Intersect.ih"
 #include "common/Ray.ih"
 #include "common/World.ih"
-#include "common/safe_gather.ih"
 #include "geometry/Geometry.ih"
 #include "math/box.ih"
 #include "math/sampling.ih"
 #include "math/vec.ih"
-#include "ospray/OSPDataType.h"
 
 struct Spheres
 {
-  /*! inherit from "Geometry" class: */
   Geometry super;
-
-  /*! data array that contains the sphere data (possibly but not
-    necessarily including the color, which could be in color);
-    most offset and stride values point into here.  */
-  uint8 *data;
-  int32 stride;
-  int offset_center;
-  int offset_radius;
-  int offset_materialID;
-  int offset_colorID;
-
-  float radius;
-
-  vec2f *texcoord;
-
-  bool huge_mesh;
+  Data1D vertex;
+  Data1D radius;
+  Data1D texcoord;
+  float global_radius;
 };
 
 static void Spheres_postIntersect(const Geometry *uniform geometry,
@@ -51,40 +38,36 @@ static void Spheres_postIntersect(const Geometry *uniform geometry,
                                   const varying Ray &ray,
                                   uniform int64 flags)
 {
-  uniform Spheres *uniform self = (uniform Spheres * uniform) geometry;
+  Spheres *uniform self = (Spheres * uniform) geometry;
 
   dg.Ng = dg.Ns = ray.Ng;
 
-  uint8 *spherePtr = self->data + self->stride * ((int64)ray.primID);
-  float radius     = self->radius;
-  if (self->offset_radius >= 0)
-    radius = *((float *)(spherePtr + self->offset_radius));
+  float radius = self->global_radius;
+  cif (valid(self->radius))
+    radius = get_float(self->radius, ray.primID);
+
   // make epsilon large enough to not get lost when computing
   // |CO| = |center-ray.org| ~ radius for 2ndary rays
   dg.epsilon = radius * ulpEpsilon;
 
-  if (flags & DG_TEXCOORD && self->texcoord)
-    dg.st = self->texcoord[ray.primID];
+  cif (and(flags & DG_TEXCOORD, valid(self->texcoord)))
+    dg.st = get_vec2f(self->texcoord, ray.primID);
 }
 
 unmasked void Spheres_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
   Spheres *uniform self = (Spheres * uniform) args->geometryUserPtr;
   uniform int primID    = args->primID;
-  uint8 *uniform spherePtr =
-      self->data + self->stride * ((uniform int64)primID);
-  uniform bool offr = self->offset_radius >= 0;
-  uniform float radius =
-      offr ? *((uniform float *uniform)(spherePtr + self->offset_radius))
-           : self->radius;
-  uniform vec3f center = *((vec3f * uniform)(spherePtr + self->offset_center));
+  uniform float radius = valid(self->radius) ? get_float(self->radius, primID)
+                                             : self->global_radius;
+  uniform vec3f center = get_vec3f(self->vertex, primID);
   box3fa *uniform out  = (box3fa * uniform) args->bounds_o;
   *out                 = make_box3fa(center - radius, center + radius);
 }
 
-void Spheres_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
-                                  args,
-                              const uniform bool isOcclusionTest)
+void Spheres_intersect_kernel(
+    const RTCIntersectFunctionNArguments *uniform args,
+    const uniform bool isOcclusionTest)
 {
   // make sure to set the mask
   if (!args->valid[programIndex])
@@ -96,53 +79,24 @@ void Spheres_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
   // this assumes that the args->rayhit is actually a pointer to a varying ray!
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-  uint8 *uniform spherePtr =
-      self->data + self->stride * ((uniform int64)primID);
-  uniform float radius = self->radius;
-  if (self->offset_radius >= 0) {
-    radius = *((float *uniform)(spherePtr + self->offset_radius));
-  }
-  uniform vec3f center = *((vec3f * uniform)(spherePtr + self->offset_center));
+  uniform float radius = valid(self->radius) ? get_float(self->radius, primID)
+                                             : self->global_radius;
+  uniform vec3f center = get_vec3f(self->vertex, primID);
 
-  const vec3f d   = ray->dir;
-  const float rd2 = 1.0f / dot(d, d);  // 1/a
-  const vec3f CO  = center - ray->org;
-  // transformation to avoid missing a small sphere which is far away:
-  // the standard c=CO^2-r^2 would quickly loose term r due to float arithmetic
-  const float projCO     = dot(CO, d) * rd2;  // in ray-space
-  const vec3f perp       = CO - projCO * d;
-  const float l2         = dot(perp, perp);
-  const uniform float r2 = sqr(radius);
-  if (l2 > r2)
-    return;
-
-  float td          = sqrt((r2 - l2) * rd2);
-  const float t_in  = projCO - td;
-  const float t_out = projCO + td;
-  // above solutions are problematic if rays starts close to the sphere
-  // (due to catastrophic cancellation, because then |projCO| ~ td)
-  // the usual recommendation is to choose the one solution with same sign:
-  //   const float t1 = projCO + floatbits(signbits(projCO)|intbits(td));
-  // and compute the other solution via t1*t2=c/a:
-  //   const float t2 = (dot(CO, CO) - r2) / t1 * rd2;
-  // this is more precise, but still problematic in particular for large
-  // spheres, because |CO| ~ r; slightly better alternative, but costly sqrt:
-  //   const float f = sqrt(dot(CO, CO));
-  //   const float t2 = (f - radius) * (f + radius) / t1 * rd2;
-  // the only variant I found that has high enough precision to avoid
-  // self-intersections of 2ndary rays is to (re-)compute most terms (CO, dot,
-  // r2, t2) with doubles; large spheres are a rare usecase for OSPRay, thus we
-  // use instead as a workaround an additional, radius-dependent epsilon
+  const Intersections isect =
+      intersectSphere(ray->org, ray->dir, center, radius);
 
   bool hit = false;
-  // avoid short-circuiting &&
-  if (and(ray->t0 < t_in, t_in <= ray->t)) {
+  if (and(and(isect.entry.t > ray->t0, isect.entry.t <= ray->t),
+          isect.entry.hit)) {
     hit = true;
-    td *= -1.f;
-    ray->t = t_in;
-  } else if (and(ray->t0 < t_out, t_out <= ray->t)) {
-    hit    = true;
-    ray->t = t_out;
+    ray->t = isect.entry.t;
+    ray->Ng = isect.entry.N;
+  } else if (and(and(isect.exit.t > ray->t0, isect.exit.t <= ray->t),
+                 isect.exit.hit)) {
+    hit = true;
+    ray->t = isect.exit.t;
+    ray->Ng = isect.exit.N;
   }
 
   if (hit) {
@@ -155,9 +109,6 @@ void Spheres_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
       ray->primID = primID;
       ray->geomID = self->super.geomID;
       ray->instID = args->context->instID[0];
-      // cannot easily be moved to postIntersect
-      // we need hit in object space, in postIntersect it is in world-space
-      ray->Ng = td * d - perp;
     }
   }
 }
@@ -169,9 +120,9 @@ unmasked void Spheres_intersect(
 }
 
 unmasked void Spheres_occluded(
-    const struct RTCIntersectFunctionNArguments *uniform args)
+    const struct RTCOccludedFunctionNArguments *uniform args)
 {
-  Spheres_intersect_kernel(args, true);
+  Spheres_intersect_kernel((RTCIntersectFunctionNArguments *)args, true);
 }
 
 SampleAreaRes Spheres_sampleArea(const Geometry *uniform const _self,
@@ -181,31 +132,13 @@ SampleAreaRes Spheres_sampleArea(const Geometry *uniform const _self,
                                  const vec2f &s)
 {
   const Spheres *const uniform self = (const Spheres *uniform)_self;
-  float radius                      = self->radius;
-  vec3f center;
 
-  const uniform int32 primsPerPage = (1024 * 1024 * 64);
-  if (any(primID >= primsPerPage)) {
-    const int primPageID  = primID / primsPerPage;
-    const int localPrimID = primID % primsPerPage;
-    foreach_unique(primPage in primPageID)
-    {
-      uint8 *uniform pagePtr =
-          self->data + (((int64)primPage) * primsPerPage * self->stride);
-      uint8 *spherePtr = pagePtr + self->stride * localPrimID;
-      center           = *((vec3f *)(spherePtr + self->offset_center));
-      if (self->offset_radius >= 0)
-        radius = *((float *)(spherePtr + self->offset_radius));
-    }
-  } else {
-    uint8 *spherePtr = self->data + self->stride * primID;
-    center           = *((vec3f *)(spherePtr + self->offset_center));
-    if (self->offset_radius >= 0)
-      radius = *((float *)(spherePtr + self->offset_radius));
-  }
+  float radius = self->global_radius;
+  cif (valid(self->radius))
+    radius = get_float(self->radius, primID);
 
   const vec3f localNormal = uniformSampleSphere(radius, s);
-  const vec3f localPos    = center + localNormal;
+  const vec3f localPos = get_vec3f(self->vertex, primID) + localNormal;
 
   SampleAreaRes res;
   res.pos    = xfmPoint(xfm, localPos);
@@ -233,66 +166,55 @@ void Spheres_getAreas(const Geometry *const uniform _self,
         "transformation detected! Importance sampling for emissive "
         "materials and thus resulting image may be wrong.\n");
   // use average as approximation to closest uniform scaling
-  const uniform float scaling = reduce_add(scaling3) / 3.f;
+  const uniform float scale = four_pi * sqr(reduce_add(scaling3) / 3.f);
 
-  if (self->offset_radius < 0) {
-    const uniform float sphereArea = four_pi * sqr(self->radius * scaling);
+  cif (!valid(self->radius)) {
+    const uniform float sphereArea = scale * sqr(self->global_radius);
     foreach (i = 0 ... numPrims)
       areas[i] = sphereArea;
   } else {
-    const uniform int64 stride = self->stride;
     // TODO vectorize this loop, with foreach or ProgramCount & ProgramIndex
-    for (uniform int32 i = 0; i < numPrims; i++) {
-      const uniform uint8 *uniform radiusPtr =
-          self->data + self->offset_radius + primIDs[i] * stride;
-      const uniform float radius = *((float *uniform)radiusPtr);
-      areas[i]                   = four_pi * sqr(radius * scaling);
-    }
+    for (uniform int32 i = 0; i < numPrims; i++)
+      areas[i] = scale * sqr(get_float(self->radius, i));
   }
+}
+
+void Spheres_Constructor(Spheres *uniform self, void *uniform cppEquivalent)
+{
+  Geometry_Constructor(&self->super, cppEquivalent, Spheres_postIntersect);
+  self->super.getAreas = Spheres_getAreas;
+  self->super.sampleArea = Spheres_sampleArea;
+  Data1D_Constructor(&self->vertex);
+  Data1D_Constructor(&self->radius);
+  Data1D_Constructor(&self->texcoord);
+  self->global_radius = 0.01;
 }
 
 export void *uniform Spheres_create(void *uniform cppEquivalent)
 {
-  uniform Spheres *uniform self = uniform new uniform Spheres;
-  Geometry_Constructor(
-      &self->super, cppEquivalent, Spheres_postIntersect, NULL);
+  Spheres *uniform self = uniform new Spheres;
+  Spheres_Constructor(self, cppEquivalent);
   return self;
 }
 
 export void SpheresGeometry_set(void *uniform _self,
-                                void *uniform _embreeGeometry,
-                                void *uniform data,
-                                vec2f *uniform texcoord,
-                                uniform int numSpheres,
-                                uniform int bytesPerSphere,
-                                uniform float radius,
-                                uniform int offset_center,
-                                uniform int offset_radius,
-                                uniform bool huge_mesh)
+    void *uniform _embreeGeometry,
+    const Data1D *uniform vertex,
+    const Data1D *uniform radius,
+    const Data1D *uniform texcoord,
+    uniform float global_radius)
 {
   Spheres *uniform self = (Spheres * uniform) _self;
 
-  self->super.numPrimitives = numSpheres;
-  self->super.getAreas      = Spheres_getAreas;
-  self->super.sampleArea    = Spheres_sampleArea;
-  self->texcoord            = texcoord;
-  self->radius              = radius;
-  self->data                = (uint8 * uniform) data;
-  self->stride              = bytesPerSphere;
-  self->offset_center       = offset_center;
-  self->offset_radius       = offset_radius;
+  self->vertex = *vertex;
+  self->radius = *radius;
+  self->texcoord = *texcoord;
+  self->global_radius = global_radius;
+  self->super.numPrimitives = vertex->numItems;
 
-  self->huge_mesh = huge_mesh;
-
-  RTCGeometry geom = (RTCGeometry)_embreeGeometry;
-
-  rtcSetGeometryUserData(geom, self);
-  rtcSetGeometryUserPrimitiveCount(geom, numSpheres);
-  rtcSetGeometryBoundsFunction(
-      geom, (uniform RTCBoundsFunction)&Spheres_bounds, self);
-  rtcSetGeometryIntersectFunction(
-      geom, (uniform RTCIntersectFunctionN)&Spheres_intersect);
-  rtcSetGeometryOccludedFunction(
-      geom, (uniform RTCOccludedFunctionN)&Spheres_occluded);
-  rtcCommitGeometry(geom);
+  Geometry_setEmbreeUserGeometry(&self->super,
+      (RTCGeometry)_embreeGeometry,
+      Spheres_bounds,
+      Spheres_intersect,
+      Spheres_occluded);
 }

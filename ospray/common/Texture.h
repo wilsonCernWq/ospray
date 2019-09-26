@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "Managed.h"
+#include "./Managed.h"
 
 namespace ospray {
   /*! \brief implements the basic abstraction for anything that is a 'texture'.
@@ -29,4 +29,6 @@ namespace ospray {
     /*! Every derived class should override this! */
     virtual std::string toString() const { return "ospray::Texture"; }
   };
+
+  OSPTYPEFOR_SPECIALIZATION(Texture *, OSP_TEXTURE);
 }

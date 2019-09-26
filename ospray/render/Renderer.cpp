@@ -18,6 +18,7 @@
 #include "Renderer.h"
 #include "common/Instance.h"
 #include "common/Util.h"
+#include "geometry/GeometricModel.h"
 // ispc exports
 #include "Renderer_ispc.h"
 // ospray
@@ -32,16 +33,16 @@ namespace ospray {
 
   void Renderer::commit()
   {
-    spp                         = std::max(1, getParam1i("spp", 1));
-    const int32 maxDepth        = std::max(0, getParam1i("maxDepth", 20));
-    const float minContribution = getParam1f("minContribution", 0.001f);
-    errorThreshold              = getParam1f("varianceThreshold", 0.f);
+    spp                         = std::max(1, getParam<int>("spp", 1));
+    const int32 maxDepth        = std::max(0, getParam<int>("maxDepth", 20));
+    const float minContribution = getParam<float>("minContribution", 0.001f);
+    errorThreshold              = getParam<float>("varianceThreshold", 0.f);
 
     maxDepthTexture = (Texture2D *)getParamObject("maxDepthTexture", nullptr);
 
     if (maxDepthTexture) {
-      if (maxDepthTexture->type != OSP_TEXTURE_R32F ||
-          !(maxDepthTexture->flags & OSP_TEXTURE_FILTER_NEAREST)) {
+      if (maxDepthTexture->format != OSP_TEXTURE_R32F
+          || maxDepthTexture->filter != OSP_TEXTURE_FILTER_NEAREST) {
         static WarnOnce warning(
             "maxDepthTexture provided to the renderer "
             "needs to be of type OSP_TEXTURE_R32F and have "
@@ -49,8 +50,8 @@ namespace ospray {
       }
     }
 
-    vec3f bgColor3 = getParam3f("bgColor", vec3f(getParam1f("bgColor", 0.f)));
-    bgColor        = getParam4f("bgColor", vec4f(bgColor3, 0.f));
+    vec3f bgColor3 = getParam<vec3f>("bgColor", vec3f(getParam<float>("bgColor", 0.f)));
+    bgColor        = getParam<vec4f>("bgColor", vec4f(bgColor3, 0.f));
 
     if (getIE()) {
       ispc::Renderer_set(getIE(),
@@ -127,8 +128,9 @@ namespace ospray {
                         res.hasHit);
 
     if (res.hasHit) {
-      auto *instance = world->instances->at<Instance*>(instID);
-      auto *model    = instance->geometricModels->at<GeometricModel*>(geomID);
+      auto *instance = (*world->instances)[instID];
+      auto *group    = instance->group.ptr;
+      auto *model = (*group->geometricModels)[geomID];
 
       res.instance = (OSPInstance)instance;
       res.model    = (OSPGeometricModel)model;

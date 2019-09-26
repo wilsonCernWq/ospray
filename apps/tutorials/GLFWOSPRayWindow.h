@@ -16,23 +16,25 @@
 
 #pragma once
 
-#include <functional>
 #include "ArcballCamera.h"
-// ospcommon
-#include "ospcommon/box.h"
-#include "ospcommon/containers/TransactionalBuffer.h"
-#include "ospcommon/vec.h"
-// ospray
+#include "tutorial_util.h"
+// glfw
 #include "GLFW/glfw3.h"
-#include "ospray/ospray.h"
+// ospcommon
+#include "ospcommon/containers/TransactionalBuffer.h"
+// std
+#include <functional>
 
 class GLFWOSPRayWindow
 {
  public:
-  GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
-                   const ospcommon::box3f &worldBounds,
+  GLFWOSPRayWindow(const vec2i &windowSize,
+                   const box3f &worldBounds,
                    OSPWorld world,
-                   OSPRenderer renderer);
+                   OSPRenderer renderer,
+                   OSPFrameBufferFormat fbFormat = OSP_FB_SRGBA,
+                   uint32_t fbChannels           = OSP_FB_COLOR | OSP_FB_DEPTH |
+                                         OSP_FB_ACCUM | OSP_FB_ALBEDO);
 
   ~GLFWOSPRayWindow();
 
@@ -41,7 +43,7 @@ class GLFWOSPRayWindow
   OSPWorld getWorld();
   void setWorld(OSPWorld newWorld);
 
-  void setPixelOps(OSPData ops);
+  void setImageOps(OSPData ops);
 
   void resetAccumulation();
 
@@ -52,6 +54,9 @@ class GLFWOSPRayWindow
 
   void mainLoop();
 
+  void updateCamera();
+  void commitCamera();
+
   void addObjectToCommit(OSPObject obj);
 
   std::unique_ptr<ArcballCamera> &getArcballCamera()
@@ -60,8 +65,8 @@ class GLFWOSPRayWindow
   }
 
  protected:
-  void reshape(const ospcommon::vec2i &newWindowSize);
-  void motion(const ospcommon::vec2f &position);
+  void reshape(const vec2i &newWindowSize);
+  void motion(const vec2f &position);
   void display();
   void startNewOSPRayFrame();
   void waitOnOSPRayFrame();
@@ -69,13 +74,15 @@ class GLFWOSPRayWindow
 
   static GLFWOSPRayWindow *activeWindow;
 
-  ospcommon::vec2i windowSize;
-  ospcommon::vec2f previousMouse{-1.f};
-  ospcommon::box3f worldBounds;
+  vec2i windowSize;
+  vec2f previousMouse{-1.f};
+  box3f worldBounds;
   OSPWorld world       = nullptr;
   OSPRenderer renderer = nullptr;
 
   bool showAlbedo{false};
+  OSPFrameBufferFormat fbFormat;
+  uint32_t fbChannels;
 
   // GLFW window instance
   GLFWwindow *glfwWindow = nullptr;
@@ -87,10 +94,10 @@ class GLFWOSPRayWindow
   OSPCamera camera           = nullptr;
   OSPFrameBuffer framebuffer = nullptr;
   OSPFuture currentFrame     = nullptr;
-  OSPData pixelOps           = nullptr;
+  OSPData imageOps           = nullptr;
 
   // List of OSPRay handles to commit before the next frame
-  ospcommon::TransactionalBuffer<OSPObject> objectsToCommit;
+  ospcommon::containers::TransactionalBuffer<OSPObject> objectsToCommit;
 
   // OpenGL framebuffer texture
   GLuint framebufferTexture = 0;

@@ -15,6 +15,8 @@
 // ======================================================================== //
 
 // ospray
+#include "common/Data.ih"
+#include "common/Intersect.ih"
 #include "common/Ray.ih"
 #include "common/World.ih"
 #include "geometry/Geometry.ih"
@@ -24,95 +26,40 @@
 
 struct StreamLines
 {
-  Geometry super;  //!< inherited geometry fields
+  Geometry super;
+  Data1D index;
+  Data1D vertex;
+  Data1D color;
   float radius;
-  const vec3fa *vertex;
-  int32 numVertices;
-  const uint32 *index;
-  const vec4f *color;
 };
+
+static void StreamLines_postIntersect(const Geometry *uniform self,
+    varying DifferentialGeometry &dg,
+    const varying Ray &ray,
+    uniform int64 flags)
+{
+  StreamLines *uniform self = (StreamLines * uniform) self;
+
+  dg.Ng = dg.Ns = ray.Ng;
+  dg.epsilon = self->radius * ulpEpsilon;
+
+  if (and(flags & DG_COLOR, valid(self->color))) {
+    const uint32 index = get_int32(self->index, ray.primID);
+    const vec4f col0 = get_vec4f(self->color, index);
+    const vec4f col1 = get_vec4f(self->color, index + 1);
+    dg.color = lerp(ray.u, col0, col1);
+  }
+}
 
 unmasked void StreamLines_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
-  uniform StreamLines *uniform self =
-      (uniform StreamLines * uniform) args->geometryUserPtr;
+  StreamLines *uniform self = (StreamLines * uniform) args->geometryUserPtr;
   uniform int primID         = args->primID;
-  const uniform uint32 index = self->index[primID];
-  const uniform vec3f A      = make_vec3f(self->vertex[index]);
-  const uniform vec3f B      = make_vec3f(self->vertex[index + 1]);
+  const uniform uint32 index = get_int32(self->index, primID);
+  const uniform vec3f A = get_vec3f(self->vertex, index);
+  const uniform vec3f B = get_vec3f(self->vertex, index + 1);
   box3fa *uniform out        = (box3fa * uniform) args->bounds_o;
   *out = make_box3fa(min(A, B) - self->radius, max(A, B) + self->radius);
-}
-
-// robust ray-sphere intersection
-inline void intersectSphere(varying Ray &ray,
-                            const uniform vec3f &center,
-                            float &t_in,
-                            float &t_out,
-                            const uniform float r)
-{
-  const float rd2        = 1.0f / dot(ray.dir, ray.dir);  // 1/a
-  const vec3f CO         = center - ray.org;
-  const float projCO     = dot(CO, ray.dir) * rd2;  // in ray-space
-  const vec3f perp       = CO - projCO * ray.dir;
-  const float l2         = dot(perp, perp);
-  const uniform float r2 = sqr(r);
-  if (l2 > r2)
-    return;
-
-  const float td        = sqrt((r2 - l2) * rd2);
-  const float sph_t_in  = projCO - td;
-  const float sph_t_out = projCO + td;
-
-  t_in  = min(t_in, sph_t_in);
-  t_out = max(t_out, sph_t_out);
-}
-
-// robust ray-cylinder intersection
-inline void intersectCylinder(varying Ray &ray,
-                              const uniform vec3f &v0,
-                              const uniform vec3f &v1,
-                              float &t_in,
-                              float &t_out,
-                              const uniform float r)
-{
-  const vec3f d         = ray.dir;
-  const uniform vec3f s = v1 - v0;  // axis
-  const vec3f sxd       = cross(s, d);
-  const float a         = dot(sxd, sxd);  // (s x d)^2
-  if (a == 0.f)
-    return;
-
-  const vec3f f   = v0 - ray.org;
-  const vec3f sxf = cross(s, f);
-  const float ra  = 1.0f / a;
-  const float ts =
-      dot(sxd, sxf) * ra;       // (s x d)(s x f) / (s x d)^2, in ray-space
-  const vec3f fp = f - ts * d;  // f' = v0 - closest point to axis
-
-  const uniform float s2 = dot(s, s);             // s^2
-  const vec3f perp       = cross(s, fp);          // s x f'
-  const float c = sqr(r) * s2 - dot(perp, perp);  //  r^2 s^2 - (s x f')^2
-  if (c < 0.f)
-    return;
-
-  float td         = sqrt(c * ra);
-  const float tin  = ts - td;
-  const float tout = ts + td;
-
-  // clip to cylinder caps
-  const float rsd = rcp(dot(s, d));
-  const float tA  = dot(s, f) * rsd;
-  const float tB  = tA + s2 * rsd;
-  // rsd (and thus tA and tB) can be NaN if the ray is perfectly perpendicular
-  // to the cylinder; filter NaNs by having tin/tout as 2nd argument to min/max
-  const float cyl_t_in  = max(min(tA, tB), tin);
-  const float cyl_t_out = min(max(tA, tB), tout);
-
-  if (cyl_t_in < cyl_t_out) {
-    t_in  = cyl_t_in;
-    t_out = cyl_t_out;
-  }
 }
 
 unmasked void StreamLines_intersect_kernel(
@@ -123,31 +70,32 @@ unmasked void StreamLines_intersect_kernel(
   if (!args->valid[programIndex])
     return;
 
-  uniform StreamLines *uniform self =
-      (uniform StreamLines * uniform) args->geometryUserPtr;
+  StreamLines *uniform self = (StreamLines * uniform) args->geometryUserPtr;
   uniform unsigned int primID = args->primID;
 
   // this assumes that the args->rayhit is actually a pointer toa varying ray!
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-  const uniform uint32 idx = self->index[primID];
-  const uniform vec3f A    = make_vec3f(self->vertex[idx]);
-  const uniform vec3f B    = make_vec3f(self->vertex[idx + 1]);
+  const uniform uint32 index = get_int32(self->index, primID);
+  const uniform vec3f A = get_vec3f(self->vertex, index);
+  const uniform vec3f B = get_vec3f(self->vertex, index + 1);
 
-  float t_in = inf, t_out = -inf;
-  intersectCylinder(*ray, A, B, t_in, t_out, self->radius);
-  intersectSphere(*ray, A, t_in, t_out, self->radius);
-  intersectSphere(*ray, B, t_in, t_out, self->radius);
+  const Intersections isect =
+      intersectCapsule(ray->org, ray->dir, A, B, self->radius);
 
   bool hit = false;
-  if (t_in < t_out) {
-    if (t_in > ray->t0 && t_in < ray->t) {
-      ray->t = t_in;
-      hit    = true;
-    } else if (t_out > ray->t0 && t_out < ray->t) {
-      ray->t = t_out;
-      hit    = true;
-    }
+  if (and(and(isect.entry.t > ray->t0, isect.entry.t < ray->t),
+          isect.entry.hit)) {
+    hit = true;
+    ray->t = isect.entry.t;
+    ray->u = isect.entry.u;
+    ray->Ng = isect.entry.N;
+  } else if (and(and(isect.exit.t > ray->t0, isect.exit.t < ray->t),
+                 isect.exit.hit)) {
+    hit = true;
+    ray->t = isect.exit.t;
+    ray->u = isect.exit.u;
+    ray->Ng = isect.exit.N;
   }
 
   if (hit) {
@@ -157,15 +105,6 @@ unmasked void StreamLines_intersect_kernel(
       ray->primID = primID;
       ray->geomID = self->super.geomID;
       ray->instID = args->context->instID[0];
-
-      const vec3f P = ray->org + ray->t * ray->dir;
-      float s       = dot(P - A, B - A) * rcpf(dot(B - A, B - A));
-      s             = min(max(s, 0.f), 1.f);
-
-      const vec3f PonAxis = A + s * (B - A);
-
-      ray->u  = s;
-      ray->Ng = normalize(P - PonAxis);
     }
   }
 }
@@ -177,28 +116,10 @@ unmasked void StreamLines_intersect(
 }
 
 unmasked void StreamLines_occluded(
-    const struct RTCIntersectFunctionNArguments *uniform args)
+    const struct RTCOccludedFunctionNArguments *uniform args)
 {
-  StreamLines_intersect_kernel(args, true);
-}
-
-static void StreamLines_postIntersect(const Geometry *uniform self,
-                                      varying DifferentialGeometry &dg,
-                                      const varying Ray &ray,
-                                      uniform int64 flags)
-{
-  StreamLines *uniform self = (StreamLines * uniform) self;
-
-  dg.Ng = dg.Ns = ray.Ng;
-  dg.epsilon    = self->radius * ulpEpsilon;
-
-  if ((flags & DG_COLOR)) {
-    const uniform vec4f *uniform color = self->color;
-    if (color) {
-      const varying uint32 index = self->index[ray.primID];
-      dg.color = (1.f - ray.u) * color[index] + ray.u * color[index + 1];
-    }
-  }
+  StreamLines_intersect_kernel(
+      (RTCIntersectFunctionNArguments * uniform) args, true);
 }
 
 // For simplicity streamlines are modelled of segments, each consisting of one
@@ -218,14 +139,15 @@ SampleAreaRes StreamLines_sampleArea(const Geometry *uniform const _self,
 
   vec3f localNormal;
   vec3f localPos;
-  if (areaPrimID < self->numVertices) {  // sphere
+  const uniform int32 spheres = self->vertex.numItems;
+  if (areaPrimID < spheres) {
     localNormal        = uniformSampleSphere(radius, s);
-    const vec3f center = make_vec3f(self->vertex[areaPrimID]);
+    const vec3f center = get_vec3f(self->vertex, areaPrimID);
     localPos           = center + localNormal;
-  } else {  // cylinder
-    const uint32 idx = self->index[areaPrimID - self->numVertices];
-    const vec3f v0   = make_vec3f(self->vertex[idx]);
-    const vec3f v1   = make_vec3f(self->vertex[idx + 1]);
+  } else { // cylinder
+    const uint32 idx = get_uint32(self->index, areaPrimID - spheres);
+    const vec3f v0 = get_vec3f(self->vertex, idx);
+    const vec3f v1 = get_vec3f(self->vertex, idx + 1);
 
     linear3f frame  = frame(v1 - v0);
     frame.vy        = normalize(frame.vy);
@@ -266,7 +188,7 @@ void StreamLines_getAreas(const Geometry *const uniform _self,
 
   // spheres at vertices
   const uniform float sphereArea = four_pi * sqr(self->radius * scaling);
-  const uniform int32 spheres    = self->numVertices;
+  const uniform int32 spheres = self->vertex.numItems;
 
   // cylinders for segments; area of a cylinder with unit-length
   const uniform float cyl1Area = two_pi * self->radius * sqr(scaling);
@@ -276,71 +198,70 @@ void StreamLines_getAreas(const Geometry *const uniform _self,
     if (primID < spheres) {  // sphere
       areas[i] = sphereArea;
     } else {  // cylinder
-      const uniform uint32 idx = self->index[primID - spheres];
-      const uniform vec3f v0   = make_vec3f(self->vertex[idx]);
-      const uniform vec3f v1   = make_vec3f(self->vertex[idx + 1]);
+      const uniform uint32 idx = get_uint32(self->index, primID - spheres);
+      const uniform vec3f v0 = get_vec3f(self->vertex, idx);
+      const uniform vec3f v1 = get_vec3f(self->vertex, idx + 1);
       areas[i]                 = cyl1Area * length(v0 - v1);
     }
   }
 }
 
+void StreamLines_Constructor(
+    StreamLines *uniform self, void *uniform cppEquivalent)
+{
+  Geometry_Constructor(&self->super, cppEquivalent, StreamLines_postIntersect);
+  Data1D_Constructor(&self->index);
+  Data1D_Constructor(&self->vertex);
+  Data1D_Constructor(&self->color);
+}
+
 export void *uniform StreamLines_create(void *uniform cppEquivalent)
 {
-  StreamLines *uniform geom = uniform new StreamLines;
-  Geometry_Constructor(
-      &geom->super, cppEquivalent, StreamLines_postIntersect, NULL);
-  return geom;
+  StreamLines *uniform self = uniform new StreamLines;
+  StreamLines_Constructor(self, cppEquivalent);
+  return self;
 }
 
 export void *uniform StreamLines_setCurve(void *uniform _self,
-                                          int32 uniform numVertices,
-                                          int32 uniform numSegments,
-                                          const uniform uint32 *uniform index,
-                                          const uniform vec4f *uniform color)
+    const Data1D *uniform index,
+    const Data1D *uniform color)
 {
   StreamLines *uniform self = (StreamLines * uniform) _self;
 
-  self->super.numPrimitives = numSegments;
+  self->index = *index;
+  Data1D_Constructor(&self->vertex); // not used by curve
+  self->color = *color;
+  self->super.numPrimitives = index->numItems;
 
   // TODO implement area sampling of curves for geometry lights
   self->super.getAreas   = NULL;
   self->super.sampleArea = NULL;
-  self->numVertices      = 0;     // not used by curve
-  self->vertex           = NULL;  // not used by curve
-  self->index            = index;
-  self->color            = color;
 }
 
 export void *uniform StreamLines_set(void *uniform _self,
-                                     void *uniform _embreeGeometry,
-                                     float uniform radius,
-                                     const uniform vec3fa *uniform vertex,
-                                     int32 uniform numVertices,
-                                     const uniform uint32 *uniform index,
-                                     int32 uniform numSegments,
-                                     const uniform vec4f *uniform color)
+    void *uniform _embreeGeometry,
+    float uniform radius,
+    const Data1D *uniform index,
+    const Data1D *uniform vertex,
+    const Data1D *uniform color)
 {
   StreamLines *uniform self = (StreamLines * uniform) _self;
 
-  self->vertex = vertex;
-  self->index  = index;
+  self->radius = radius;
+  self->index = *index;
+  self->vertex = *vertex;
+  self->color = *color;
 
-  // XXX different representation for area sampling, see above
-  self->super.numPrimitives = numVertices + numSegments;
   self->super.getAreas      = StreamLines_getAreas;
   self->super.sampleArea    = StreamLines_sampleArea;
-  self->numVertices         = numVertices;
-  self->color               = color;
-  self->radius              = radius;
+  self->super.numPrimitives = index->numItems;
 
-  RTCGeometry geom = (RTCGeometry)_embreeGeometry;
+  Geometry_setEmbreeUserGeometry(&self->super,
+      (RTCGeometry)_embreeGeometry,
+      StreamLines_bounds,
+      StreamLines_intersect,
+      StreamLines_occluded);
 
-  rtcSetGeometryUserData(geom, self);
-  rtcSetGeometryUserPrimitiveCount(geom, numSegments);
-  rtcSetGeometryBoundsFunction(
-      geom, (uniform RTCBoundsFunction)&StreamLines_bounds, self);
-  rtcSetGeometryIntersectFunction(
-      geom, (uniform RTCIntersectFunctionN)&StreamLines_intersect);
-  rtcSetGeometryOccludedFunction(
-      geom, (uniform RTCOccludedFunctionN)&StreamLines_occluded);
+  // XXX different representation for area sampling, see above
+  self->super.numPrimitives += vertex->numItems;
 }

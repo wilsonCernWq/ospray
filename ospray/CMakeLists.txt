@@ -14,12 +14,6 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
-option(EXP_NEW_BB_VOLUME_KERNELS
-       "Experimental new block/bricked volume layout" ON)
-mark_as_advanced(EXP_NEW_BB_VOLUME_KERNELS)
-
-ospray_build_component(ospcommon)
-
 # -------------------------------------------------------
 # Setup ospray include directories and source files
 # -------------------------------------------------------
@@ -32,8 +26,7 @@ set(OSPRAY_SOURCES
   common/OSPCommon.cpp
 
   include/ospray/ospray.h
-  include/ospray/OSPDataType.h
-  include/ospray/OSPTexture.h
+  include/ospray/OSPEnums.h
 
   include/ospray/ospray_cpp.h
   include/ospray/ospray_cpp/Camera.h
@@ -43,13 +36,14 @@ set(OSPRAY_SOURCES
   include/ospray/ospray_cpp/Light.h
   include/ospray/ospray_cpp/ManagedObject.h
   include/ospray/ospray_cpp/Material.h
-  include/ospray/ospray_cpp/PixelOp.h
+  include/ospray/ospray_cpp/ImageOperation.h
   include/ospray/ospray_cpp/Renderer.h
-  include/ospray/ospray_cpp/Texture2D.h
+  include/ospray/ospray_cpp/Texture.h
   include/ospray/ospray_cpp/TransferFunction.h
   include/ospray/ospray_cpp/Volume.h
   include/ospray/ospray_cpp/World.h
 )
+
 
 set(OSPRAY_ISPC_DEVICE_SOURCES
   ispc_tasksys.cpp
@@ -57,8 +51,10 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   api/ISPCDevice.h
   api/ISPCDevice.cpp
 
-  common/ObjectHandle.cpp
+  common/Data.ih
   common/Data.cpp
+  common/Group.cpp
+  common/Group.ispc
   common/Instance.cpp
   common/Instance.ispc
   common/Managed.cpp
@@ -70,14 +66,22 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   fb/FrameBuffer.ispc
   fb/FrameBuffer.cpp
+  fb/FrameBufferView.cpp
   fb/LocalFB.ispc
   fb/LocalFB.cpp
-  fb/PixelOp.cpp
-  fb/ToneMapperPixelOp.cpp
-  fb/ToneMapperPixelOp.ispc
-  fb/DebugPixelOp.cpp
+  fb/ImageOp.cpp
   fb/Tile.h
   fb/TileError.cpp
+
+  fb/frame_ops/Blur.cpp
+  fb/frame_ops/Debug.cpp
+  fb/frame_ops/Depth.cpp
+  fb/frame_ops/SSAO.cpp
+  fb/frame_ops/SSAO.ispc
+
+  fb/tile_ops/SaveTiles.cpp
+  fb/tile_ops/ToneMapper.cpp
+  fb/tile_ops/ToneMapper.ispc
 
   camera/Camera.cpp
   camera/Camera.ispc
@@ -108,8 +112,6 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   geometry/Spheres.ispc
   geometry/Cylinders.cpp
   geometry/Cylinders.ispc
-  geometry/Slices.ispc
-  geometry/Slices.cpp
   geometry/Isosurfaces.ispc
   geometry/Isosurfaces.cpp
 
@@ -152,8 +154,14 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   render/pathtracer/PathTracer.ispc
   render/pathtracer/PathTracer.cpp
+  render/pathtracer/PathSampler.ispc
   render/pathtracer/GeometryLight.ispc
+  render/pathtracer/VirtualLight.ispc
+  render/pathtracer/TransparentShadow.ispc
+  render/pathtracer/ShadowCatcher.ispc
+  render/pathtracer/NextEventEstimation.ispc
   render/pathtracer/bsdfs/MicrofacetAlbedoTables.ispc
+  render/pathtracer/volumes/VolumeSampler.ispc
   render/pathtracer/materials/Material.ispc
   render/pathtracer/materials/OBJ.ispc
   render/pathtracer/materials/OBJ.cpp
@@ -186,24 +194,20 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   texture/TextureVolume.cpp
   texture/TextureVolume.ispc
 
-  transferFunction/LinearTransferFunction.ispc
-  transferFunction/LinearTransferFunction.cpp
-  transferFunction/TransferFunction.ispc
-  transferFunction/TransferFunction.cpp
-
   volume/Volume.ispc
   volume/Volume.cpp
   volume/VolumetricModel.ispc
   volume/VolumetricModel.cpp
 
+  volume/transferFunction/LinearTransferFunction.ispc
+  volume/transferFunction/LinearTransferFunction.cpp
+  volume/transferFunction/TransferFunction.ispc
+  volume/transferFunction/TransferFunction.cpp
+
+
   volume/structured/GridAccelerator.ispc
   volume/structured/StructuredVolume.ispc
   volume/structured/StructuredVolume.cpp
-
-  volume/structured/bricked/BlockBrickedVolume.ispc
-  volume/structured/bricked/BlockBrickedVolume.cpp
-  volume/structured/bricked/GhostBlockBrickedVolume.ispc
-  volume/structured/bricked/GhostBlockBrickedVolume.cpp
 
   volume/structured/shared/SharedStructuredVolume.ispc
   volume/structured/shared/SharedStructuredVolume.cpp
@@ -271,12 +275,11 @@ if (WIN32)
   list(APPEND OSPRAY_ISPC_DEVICE_SOURCES ospray_module_ispc.def)
 endif()
 
-ospray_create_library(ospray
-  ${OSPRAY_SOURCES}
-COMPONENT lib
-)
-
-target_link_libraries(ospray PRIVATE ospray_common)
+add_library(ospray SHARED ${OSPRAY_SOURCES})
+target_link_libraries(ospray PRIVATE ospcommon::ospcommon)
+ospray_install_library(ospray COMPONENT lib)
+set_target_properties(ospray
+  PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
 
 target_include_directories(ospray
   PUBLIC
@@ -287,7 +290,7 @@ target_include_directories(ospray
 )
 
 add_library(ospray_sdk INTERFACE)
-target_link_libraries(ospray_sdk INTERFACE ospray ospray_common)
+target_link_libraries(ospray_sdk INTERFACE ospray ospcommon::ospcommon)
 ospray_install_library(ospray_sdk COMPONENT devel)
 
 ##############################################################
@@ -330,7 +333,7 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
 
   ## Build the module ##
 
-  include_directories_ispc(
+  ispc_include_directories(
     ${CMAKE_SOURCE_DIR}/ospray/include
     ${CMAKE_SOURCE_DIR}/ospray
     ${CMAKE_SOURCE_DIR}
@@ -338,10 +341,11 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
     ${EMBREE_INCLUDE_DIRS}
   )
 
-  ospray_create_library(ospray_module_ispc
-    ${OSPRAY_ISPC_DEVICE_SOURCES}
-  COMPONENT lib
-  )
+  add_library(ospray_module_ispc SHARED)
+
+  ispc_target_add_sources(ospray_module_ispc ${OSPRAY_ISPC_DEVICE_SOURCES})
+
+  ospray_install_library(ospray_module_ispc COMPONENT lib)
 
   target_link_libraries(ospray_module_ispc
   PUBLIC
@@ -356,6 +360,10 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
+
+  set_target_properties(ospray_module_ispc
+    PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
+
 endif()
 
 ##############################################################

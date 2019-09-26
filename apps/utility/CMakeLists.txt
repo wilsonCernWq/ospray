@@ -15,9 +15,10 @@
 ## ======================================================================== ##
 
 if (NOT WIN32)
-  ospray_create_application(ospRawToAmr raw2amr.cpp)
-  target_link_libraries(ospRawToAmr PRIVATE ospray_common)
-
-  ospray_create_application(ospRawToVtu raw2vtu.cpp)
-  target_link_libraries(ospRawToVtu PRIVATE ospray_common)
+  add_executable(ospConvertRawToAMR ospConvertRawToAMR.cpp rawToAMR.cpp)
+  target_link_libraries(ospConvertRawToAMR PRIVATE ospcommon::ospcommon)
+  install(TARGETS ospConvertRawToAMR
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    COMPONENT apps
+  )
 endif()

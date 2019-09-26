@@ -15,17 +15,21 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
-cd build
-cmake \
--D OSPRAY_ENABLE_TESTING=ON \
-..
+export LD_LIBRARY_PATH=`pwd`/build/install/lib:$LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=`pwd`/build/install/lib:$DYLD_LIBRARY_PATH
+export PATH=`pwd`/build/install/bin:$PATH
+
+mkdir build_regression_tests
+cd build_regression_tests
+
+cmake ../test_image_data
 
 make -j 4 ospray_test_data
 
 rm -rf failed
 mkdir failed
 
-regression_tests/ospray_test_suite --gtest_output=xml:tests.xml --baseline-dir=regression_tests/baseline/ --failed-dir=failed
+ospray_test_suite --gtest_output=xml:tests.xml --baseline-dir=regression_test_baseline/ --failed-dir=failed
 FAILED=$(echo $?)
 
 exit $FAILED

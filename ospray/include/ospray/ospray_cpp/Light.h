@@ -16,15 +16,14 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/ManagedObject.h>
+#include "ManagedObject.h"
 
 namespace ospray {
-  namespace cpp    {
+  namespace cpp {
 
     class Light : public ManagedObject_T<OSPLight>
     {
-    public:
-
+     public:
       Light(const std::string &light_type);
       Light(const Light &copy);
       Light(OSPLight existing);
@@ -34,23 +33,18 @@ namespace ospray {
 
     inline Light::Light(const std::string &light_type)
     {
-      auto c = ospNewLight(light_type.c_str());
-      if (c) {
-        ospObject = c;
-      } else {
-        throw std::runtime_error("Failed to create OSPLight (of type '"+light_type+"')!");
-      }
+      ospObject = ospNewLight(light_type.c_str());
     }
 
-    inline Light::Light(const Light &copy) :
-      ManagedObject_T<OSPLight>(copy.handle())
+    inline Light::Light(const Light &copy)
+        : ManagedObject_T<OSPLight>(copy.handle())
+    {
+      ospRetain(copy.handle());
+    }
+
+    inline Light::Light(OSPLight existing) : ManagedObject_T<OSPLight>(existing)
     {
     }
 
-    inline Light::Light(OSPLight existing) :
-      ManagedObject_T<OSPLight>(existing)
-    {
-    }
-
-  }// namespace cpp
-}// namespace ospray
+  }  // namespace cpp
+}  // namespace ospray

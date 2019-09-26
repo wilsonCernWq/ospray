@@ -33,10 +33,6 @@ namespace ospray {
 
     virtual void commit() override;
 
-    virtual int setRegion(const void *source,
-                          const vec3i &index,
-                          const vec3i &count) = 0;
-
     box3f bounds{empty};
 
     RTCGeometry embreeGeometry{nullptr};
@@ -44,6 +40,8 @@ namespace ospray {
    private:
     void createEmbreeGeometry();
   };
+
+  OSPTYPEFOR_SPECIALIZATION(Volume *, OSP_VOLUME);
 
 #define OSP_REGISTER_VOLUME(InternalClass, external_name) \
   OSP_REGISTER_OBJECT(::ospray::Volume, volume, InternalClass, external_name)

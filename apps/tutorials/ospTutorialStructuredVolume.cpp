@@ -14,12 +14,8 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#include <memory>
-#include <random>
 #include "GLFWOSPRayWindow.h"
 
-#include "ospcommon/library.h"
-#include "ospcommon/range.h"
 #include "ospray_testing.h"
 
 #include "tutorial_util.h"
@@ -34,16 +30,48 @@ static void setIsoValue(OSPGeometry geometry, float value)
 {
   // create and set a single iso value
   OSPData isoValuesData = ospNewData(1, OSP_FLOAT, &value);
-  ospSetData(geometry, "isovalues", isoValuesData);
+  ospSetData(geometry, "isovalue", isoValuesData);
   ospRelease(isoValuesData);
 }
 
-static void setSlice(OSPGeometry geometry, float value)
+static void setSliceGeometry(OSPGeometry sliceGeometry, float sliceExtent, float slicePosition)
 {
-  vec4f plane(-1.f, 0.f, 0.f, value);
-  OSPData planesData = ospNewData(1, OSP_VEC4F, &plane);
-  ospSetData(geometry, "planes", planesData);
-  ospRelease(planesData);
+  std::vector<vec3f> vertices;
+  vec4ui indices{0, 1, 2, 3};
+
+  vertices.push_back(vec3f{-slicePosition, -sliceExtent, -sliceExtent});
+  vertices.push_back(vec3f{-slicePosition, sliceExtent, -sliceExtent});
+  vertices.push_back(vec3f{-slicePosition, sliceExtent, sliceExtent});
+  vertices.push_back(vec3f{-slicePosition, -sliceExtent, sliceExtent});
+
+  OSPData positionData =
+      ospNewData(vertices.size(), OSP_VEC3F, vertices.data());
+
+  OSPData indexData = ospNewData(1, OSP_VEC4UI, &indices);
+
+  ospSetData(sliceGeometry, "vertex.position", positionData);
+  ospSetData(sliceGeometry, "index", indexData);
+
+  ospRelease(positionData);
+  ospRelease(indexData);
+}
+
+static OSPGeometricModel setSliceVolumeModel(OSPVolumetricModel volumeModel,
+  OSPGeometricModel sliceModel)
+{
+  OSPMaterial sliceMaterial = ospNewMaterial(renderer_type.c_str(), "default");
+  OSPTexture sliceTex = ospNewTexture("volume");
+  ospSetObject(sliceTex, "volume", volumeModel);
+  ospCommit(sliceTex);
+  ospSetObject(sliceMaterial, "map_Kd", sliceTex);
+  ospCommit(sliceMaterial);
+  ospSetObject(sliceModel, "material", sliceMaterial);
+  ospCommit(sliceModel);
+
+  ospRelease(sliceTex);
+  ospRelease(sliceMaterial);
+
+  return sliceModel;
 }
 
 int main(int argc, const char **argv)
@@ -57,8 +85,8 @@ int main(int argc, const char **argv)
   }
 
   // create the world which will contain all of our geometries / volumes
-  OSPWorld world       = ospNewWorld();
-  OSPInstance instance = ospNewInstance();
+  OSPWorld world = ospNewWorld();
+  OSPGroup group = ospNewGroup();
 
   std::vector<OSPGeometricModel> geometryModelHandles;
 
@@ -75,14 +103,19 @@ int main(int argc, const char **argv)
 
   OSPTransferFunction tfn =
       ospTestingNewTransferFunction(test_data.voxelRange, "jet");
+  OSPTransferFunction stfn =
+      ospTestingNewTransferFunction(test_data.voxelRange, "grayscale");
 
   auto volumeModel = ospNewVolumetricModel(volume);
+  auto sliceVolumeModel = ospNewVolumetricModel(volume);
   ospSetObject(volumeModel, "transferFunction", tfn);
+  ospSetObject(sliceVolumeModel, "transferFunction", stfn);
   ospSetFloat(volumeModel, "samplingRate", 0.5f);
   ospCommit(volumeModel);
+  ospCommit(sliceVolumeModel);
 
   ospRelease(tfn);
-
+  ospRelease(stfn);
   // Create isosurface geometry //
 
   // create iso geometry object and add it to the world
@@ -106,50 +139,54 @@ int main(int argc, const char **argv)
   // assign material to the geometry
   ospSetObject(isoModel, "material", material);
 
-  // Create slices geometry //
-
-  OSPGeometry sliceGeometry = ospNewGeometry("slices");
-  ospSetObject(sliceGeometry, "volume", volumeModel);
-  float sliceValue = 0.f;
-  setSlice(sliceGeometry, sliceValue);
-  OSPGeometricModel sliceModel = ospNewGeometricModel(sliceGeometry);
-
   // apply changes made
   ospCommit(isoGeometry);
   ospCommit(isoModel);
-  ospCommit(sliceGeometry);
-  ospCommit(sliceModel);
 
-  OSPData instances = ospNewData(1, OSP_OBJECT, &instance);
-  ospSetData(world, "instances", instances);
+  OSPInstance instance = ospNewInstance(group);
+  ospCommit(instance);
+
+  OSPData instances = ospNewData(1, OSP_INSTANCE, &instance);
+  ospSetData(world, "instance", instances);
   ospRelease(instances);
 
   // create OSPRay renderer
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   OSPData lightsData = ospTestingNewLights("ambient_only");
-  ospSetData(renderer, "lights", lightsData);
+  ospSetData(renderer, "light", lightsData);
   ospRelease(lightsData);
 
   ospSetInt(renderer, "aoSamples", 1);
 
   ospCommit(renderer);
 
+  // create slice geometry
+  float sliceExtent = 1.f;
+  float slicePosition = 0.f;
+  OSPGeometry sliceGeometry = ospNewGeometry("quads");
+  setSliceGeometry(sliceGeometry, sliceExtent, slicePosition);
+  ospCommit(sliceGeometry);
+  OSPGeometricModel sliceModel = ospNewGeometricModel(sliceGeometry);
+
   // Enable show/hide of various objects //
 
   bool showVolume     = true;
   bool showIsoSurface = false;
   bool showSlice      = false;
+  bool changeSliceTransferFunction   = false;
+
 
   auto updateScene = [&]() {
     geometryModelHandles.clear();
 
-    ospRemoveParam(instance, "geometries");
-    ospRemoveParam(instance, "volumes");
+    ospRemoveParam(group, "geometry");
+    ospRemoveParam(group, "volume");
+
 
     if (showVolume) {
-      OSPData volumes = ospNewData(1, OSP_OBJECT, &volumeModel);
-      ospSetObject(instance, "volumes", volumes);
+      OSPData volumes = ospNewData(1, OSP_VOLUMETRIC_MODEL, &volumeModel);
+      ospSetObject(group, "volume", volumes);
       ospRelease(volumes);
     }
 
@@ -157,18 +194,23 @@ int main(int argc, const char **argv)
       if (showIsoSurface)
         geometryModelHandles.push_back(isoModel);
 
-      if (showSlice)
-        geometryModelHandles.push_back(sliceModel);
+      if (showSlice) {
+        if (changeSliceTransferFunction)
+          geometryModelHandles.push_back(setSliceVolumeModel(sliceVolumeModel, sliceModel));
+          else
+            geometryModelHandles.push_back(setSliceVolumeModel(volumeModel, sliceModel));
+      }
 
-      OSPData geoms = ospNewData(
-          geometryModelHandles.size(), OSP_OBJECT, geometryModelHandles.data());
-      ospSetObject(instance, "geometries", geoms);
+      OSPData geoms = ospNewData(geometryModelHandles.size(),
+          OSP_GEOMETRIC_MODEL,
+          geometryModelHandles.data());
+      ospSetObject(group, "geometry", geoms);
       ospRelease(geoms);
     }
   };
 
   updateScene();
-  ospCommit(instance);
+  ospCommit(group);
   ospCommit(world);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
@@ -203,6 +245,11 @@ int main(int argc, const char **argv)
     if (ImGui::Checkbox("slice", &showSlice))
       updateWorld = true;
 
+    ImGui::NewLine();
+    if (ImGui::Checkbox("change slice TFN", &changeSliceTransferFunction)){
+      updateWorld = true;
+    }
+
     commitWorld = updateWorld;
 
     ImGui::NewLine();
@@ -212,8 +259,8 @@ int main(int argc, const char **argv)
     static float samplingRate = 0.5f;
     if (ImGui::SliderFloat("sampling rate", &samplingRate, 1e-3f, 4.f)) {
       commitWorld = true;
-      ospSetFloat(instance, "samplingRate", samplingRate);
-      glfwOSPRayWindow->addObjectToCommit(instance);
+      ospSetFloat(volumeModel, "samplingRate", samplingRate);
+      glfwOSPRayWindow->addObjectToCommit(volumeModel);
     }
 
     if (ImGui::SliderFloat(
@@ -230,18 +277,17 @@ int main(int argc, const char **argv)
       glfwOSPRayWindow->addObjectToCommit(material);
     }
 
-    if (ImGui::SliderFloat("slice position", &sliceValue, -1.f, 1.f)) {
+    if (ImGui::SliderFloat("slice position", &slicePosition, -1.f, 1.0f)) {
       commitWorld = true;
-      setSlice(sliceGeometry, sliceValue);
+      setSliceGeometry(sliceGeometry, sliceExtent, slicePosition);
       glfwOSPRayWindow->addObjectToCommit(sliceGeometry);
-      glfwOSPRayWindow->addObjectToCommit(sliceModel);
     }
 
     if (updateWorld)
       updateScene();
 
     if (commitWorld) {
-      glfwOSPRayWindow->addObjectToCommit(instance);
+      glfwOSPRayWindow->addObjectToCommit(group);
       glfwOSPRayWindow->addObjectToCommit(world);
     }
   });
@@ -254,9 +300,11 @@ int main(int argc, const char **argv)
   ospRelease(volumeModel);
   ospRelease(isoModel);
   ospRelease(isoGeometry);
-  ospRelease(sliceGeometry);
   ospRelease(sliceModel);
+  ospRelease(sliceGeometry);
+  ospRelease(sliceVolumeModel);
   ospRelease(material);
+  ospRelease(group);
   ospRelease(instance);
 
   // cleanly shut OSPRay down

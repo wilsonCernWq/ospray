@@ -23,40 +23,36 @@
 
 namespace ospray {
 
-    /*! the actual ospray volume object */
-    struct AMRVolume : public ospray::Volume
-    {
-      AMRVolume();
-      ~AMRVolume() override = default;
+  /*! the actual ospray volume object */
+  struct AMRVolume : public ospray::Volume
+  {
+    AMRVolume();
+    ~AMRVolume() override = default;
 
-      std::string toString() const override;
+    std::string toString() const override;
 
-      void commit() override;
+    void commit() override;
 
-      int setRegion(const void *source,
-                    const vec3i &index,
-                    const vec3i &count) override;
+    std::unique_ptr<amr::AMRData> data;
+    std::unique_ptr<amr::AMRAccel> accel;
 
-      //! Get the OSPDataType enum corresponding to the voxel type string.
-      OSPDataType getVoxelType();
+    Ref<Data> blockDataData;
+    Ref<Data> blockBoundsData;
+    Ref<Data> refinementLevelsData;
+    Ref<Data> cellWidthsData;
 
-      std::unique_ptr<amr::AMRData>  data;
-      std::unique_ptr<amr::AMRAccel> accel;
+    OSPDataType voxelType;
 
-      Ref<Data> brickInfoData;
-      Ref<Data> brickDataData;
+    //! Voxel value range (will be computed if not provided as a parameter).
+    vec2f voxelRange;
 
-      //! Voxel type.
-      std::string voxelType;
+    OSPAMRMethod amrMethod;
 
-      //! Voxel value range (will be computed if not provided as a parameter).
-      vec2f voxelRange {FLT_MAX, -FLT_MAX};
+    /*! Scale factor for the volume, mostly for internal use or data scaling
+      benchmarking. Note that this must be set **before** calling
+      'ospSetRegion' on the volume as the scaling is applied in that function.
+    */
+    vec3f scaleFactor{1};
+  };
 
-      /*! Scale factor for the volume, mostly for internal use or data scaling
-        benchmarking. Note that this must be set **before** calling
-        'ospSetRegion' on the volume as the scaling is applied in that function.
-      */
-      vec3f scaleFactor {1};
-    };
-
-} // ::ospray
+}  // namespace ospray

@@ -23,23 +23,14 @@
 
 namespace ospray {
 
-  VolumetricModel::VolumetricModel(Volume *volume)
+  VolumetricModel::VolumetricModel(Volume *_volume)
   {
-    if (volume == nullptr)
-      throw std::runtime_error("NULL Volume given to VolumetricModel!");
+    if (_volume == nullptr)
+      throw std::runtime_error("volumetric model received null volume");
 
-    instancedVolume = volume;
+    volume = _volume;
 
     this->ispcEquivalent = ispc::VolumetricModel_create(this, volume->getIE());
-  }
-
-  VolumetricModel::~VolumetricModel()
-  {
-    if (embreeInstanceGeometry)
-      rtcReleaseGeometry(embreeInstanceGeometry);
-
-    if (embreeSceneHandle)
-      rtcReleaseScene(embreeSceneHandle);
   }
 
   std::string VolumetricModel::toString() const
@@ -53,114 +44,33 @@ namespace ospray {
         (TransferFunction *)getParamObject("transferFunction", nullptr);
 
     if (transferFunction == nullptr)
-      throw std::runtime_error("no transfer function specified on the volume!");
-
-    // Get transform information //
-
-    instanceXfm = getParamAffine3f("xfm", affine3f(one));
-
-    // Create Embree instanced scene, if necessary //
-
-    if (lastEmbreeInstanceGeometryHandle != instancedVolume->embreeGeometry) {
-      if (embreeSceneHandle) {
-        rtcDetachGeometry(embreeSceneHandle, embreeID);
-        rtcReleaseScene(embreeSceneHandle);
-      }
-
-      embreeSceneHandle = rtcNewScene(ispc_embreeDevice());
-
-      if (embreeInstanceGeometry)
-        rtcReleaseGeometry(embreeInstanceGeometry);
-
-      embreeInstanceGeometry =
-          rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_INSTANCE);
-
-      bool useEmbreeDynamicSceneFlag = getParam1b("dynamicScene", 0);
-      bool useEmbreeCompactSceneFlag = getParam1b("compactMode", 0);
-      bool useEmbreeRobustSceneFlag  = getParam1b("robustMode", 0);
-
-      int sceneFlags = 0;
-      sceneFlags |= (useEmbreeDynamicSceneFlag ? RTC_SCENE_FLAG_DYNAMIC : 0);
-      sceneFlags |= (useEmbreeCompactSceneFlag ? RTC_SCENE_FLAG_COMPACT : 0);
-      sceneFlags |= (useEmbreeRobustSceneFlag ? RTC_SCENE_FLAG_ROBUST : 0);
-
-      rtcSetSceneFlags(embreeSceneHandle,
-                       static_cast<RTCSceneFlags>(sceneFlags));
-
-      lastEmbreeInstanceGeometryHandle = instancedVolume->embreeGeometry;
-      embreeID =
-          rtcAttachGeometry(embreeSceneHandle, instancedVolume->embreeGeometry);
-      rtcCommitScene(embreeSceneHandle);
-
-      rtcSetGeometryInstancedScene(embreeInstanceGeometry, embreeSceneHandle);
-    }
-
-    // Set Embree transform //
-
-    rtcSetGeometryTransform(embreeInstanceGeometry,
-                            0,
-                            RTC_FORMAT_FLOAT3X4_COLUMN_MAJOR,
-                            &instanceXfm);
-
-    rtcCommitGeometry(embreeInstanceGeometry);
-
-    // Calculate bounding information //
-
-    const box3f b = instancedVolume->bounds;
-    const vec3f v000(b.lower.x, b.lower.y, b.lower.z);
-    const vec3f v001(b.upper.x, b.lower.y, b.lower.z);
-    const vec3f v010(b.lower.x, b.upper.y, b.lower.z);
-    const vec3f v011(b.upper.x, b.upper.y, b.lower.z);
-    const vec3f v100(b.lower.x, b.lower.y, b.upper.z);
-    const vec3f v101(b.upper.x, b.lower.y, b.upper.z);
-    const vec3f v110(b.lower.x, b.upper.y, b.upper.z);
-    const vec3f v111(b.upper.x, b.upper.y, b.upper.z);
-
-    instanceBounds = empty;
-    instanceBounds.extend(xfmPoint(instanceXfm, v000));
-    instanceBounds.extend(xfmPoint(instanceXfm, v001));
-    instanceBounds.extend(xfmPoint(instanceXfm, v010));
-    instanceBounds.extend(xfmPoint(instanceXfm, v011));
-    instanceBounds.extend(xfmPoint(instanceXfm, v100));
-    instanceBounds.extend(xfmPoint(instanceXfm, v101));
-    instanceBounds.extend(xfmPoint(instanceXfm, v110));
-    instanceBounds.extend(xfmPoint(instanceXfm, v111));
-
-    auto rcp_xfm = rcp(instanceXfm);
+      throw std::runtime_error("volumetric model must have 'transferFunction'");
 
     // Finish getting/setting other appearance information //
-
-    box3f volumeClippingBox =
-        box3f(getParam3f("volumeClippingBoxLower", vec3f(0.f)),
-              getParam3f("volumeClippingBoxUpper", vec3f(0.f)));
+    volumeBounds = volume->bounds;
 
     ispc::VolumetricModel_set(ispcEquivalent,
-                              getParam1b("preIntegration", false),
-                              getParam1b("adaptiveSampling", true),
-                              getParam1f("adaptiveScalar", 15.0f),
-                              getParam1f("adaptiveMaxSamplingRate", 2.0f),
-                              getParam1f("adaptiveBacktrack", 0.03f),
-                              getParam1f("samplingRate", 0.125f),
+                              getParam<float>("samplingRate", 0.125f),
                               transferFunction->getIE(),
-                              (const ispc::box3f &)volumeClippingBox,
-                              (const ispc::box3f &)instanceBounds,
-                              (ispc::AffineSpace3f &)instanceXfm,
-                              (ispc::AffineSpace3f &)rcp_xfm);
+                              (const ispc::box3f &)volumeBounds,
+                              getParam<float>("densityScale", 1.f),
+                              getParam<float>("maximumDensity", 1.f),
+                              getParam<float>("anisotropy", 0.f));
   }
 
   RTCGeometry VolumetricModel::embreeGeometryHandle() const
   {
-    return embreeInstanceGeometry;
+    return volume->embreeGeometry;
   }
 
   box3f VolumetricModel::bounds() const
   {
-    return instanceBounds;
+    return volumeBounds;
   }
 
   void VolumetricModel::setGeomID(int geomID)
   {
-    ispc::Volume_set_geomID(instancedVolume->getIE(), geomID);
+    ispc::Volume_set_geomID(volume->getIE(), geomID);
   }
 
 }  // namespace ospray

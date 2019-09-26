@@ -24,11 +24,6 @@
 
 namespace ospray {
 
-  Subdivision::Subdivision()
-  {
-    this->ispcEquivalent = ispc::Subdivision_create(this);
-  }
-
   std::string Subdivision::toString() const
   {
     return "ospray::Subdivision";
@@ -36,200 +31,109 @@ namespace ospray {
 
   void Subdivision::commit()
   {
-    Geometry::commit();
+    vertexData = getParamDataT<vec3f>("vertex.position", true);
+    colorsData = getParamDataT<vec4f>("vertex.color");
+    texcoordData = getParamDataT<vec2f>("vertex.texcoord");
 
-    level = getParam1f("level", 5.f);
+    level = getParam<float>("level", 5.f);
 
-    vertexData = getParamData("vertex", getParamData("position"));
-    indexData  = getParamData("index");
-    facesData  = getParamData("face");
+    indexData = getParamDataT<uint32_t>("index", true);
+    indexLevelData = getParamDataT<float>("index.level");
 
-    edge_crease_indicesData = getParamData("edgeCrease.index");
-    edge_crease_weightsData = getParamData("edgeCrease.weight");
+    facesData = getParamDataT<uint32_t>("face");
 
-    vertex_crease_indicesData = getParamData("vertexCrease.index");
-    vertex_crease_weightsData = getParamData("vertexCrease.weight");
+    edge_crease_indicesData = getParamDataT<vec2ui>("edgeCrease.index");
+    edge_crease_weightsData = getParamDataT<float>("edgeCrease.weight");
 
-    colorsData     = getParamData("vertex.color", getParamData("color"));
-    texcoordData   = getParamData("vertex.texcoord", getParamData("texcoord"));
-    indexLevelData = getParamData("index.level");
+    vertex_crease_indicesData = getParamDataT<uint32_t>("vertexCrease.index");
+    vertex_crease_weightsData = getParamDataT<float>("vertexCrease.weight");
 
-    // check for valid params
-    if (!vertexData || vertexData->type != OSP_VEC3F)
-      throw std::runtime_error(
-          "subdivision must have 'vertex' array of type float3");
-    if (!indexData)
-      throw std::runtime_error("subdivision must have 'index' array");
+    if (!facesData) {
+      if (indexData->size() % 4 != 0)
+        throw std::runtime_error(toString()
+            + ": if no 'face' array is present then a pure quad mesh is assumed (the number of indices must be a multiple of 4)");
 
-    faces = nullptr;
-    if (facesData) {
-      if (indexData->type != OSP_INT && indexData->type != OSP_UINT)
-        throw std::runtime_error("subdivision 'face' data type must be (u)int");
-      generatedFacesData.clear();
-      numFaces = facesData->size();
-      faces    = (uint32_t *)facesData->data;
-    } else {
-      if (indexData->type != OSP_VEC4I && indexData->type != OSP_VEC4UI)
-        throw std::runtime_error(
-            "subdivision must have 'face' array or (u)int4 'index'");
-      // if face is not specified and index is of type (u)int4, a quad cage mesh
-      // is specified
-      numFaces = indexData->size() / 4;
-      generatedFacesData.resize(numFaces, 4);
-      faces = generatedFacesData.data();
+      auto data = new Data(OSP_UINT, vec3ui(indexData->size() / 4, 1, 1));
+      facesData = &(data->as<uint32_t>());
+      data->refDec();
+      for (auto &&face : *facesData)
+        face = 4;
     }
 
-    if (colorsData && colorsData->type != OSP_VEC4F)
-      throw std::runtime_error(
-          "unsupported subdivision 'vertex.color' data type");
-    if (texcoordData && texcoordData->type != OSP_VEC2F)
-      throw std::runtime_error(
-          "unsupported subdivision 'vertex.texcoord' data type");
-
-    createEmbreeGeometry();
-
-    postStatusMsg(2) << "  created subdivision (" << numFaces << " faces "
-                     << ", " << vertexData->size() << " vertices)\n";
-
-    vec2f *texcoord = texcoordData ? (vec2f *)texcoordData->data : nullptr;
-
-    ispc::Subdivision_set(getIE(), embreeGeometry, (ispc::vec2f *)texcoord);
+    postCreationInfo(vertexData->size());
   }
 
   size_t Subdivision::numPrimitives() const
   {
-    return indexData ? indexData->numItems / 4 : 0;
+    return facesData->size();
   }
 
-  void Subdivision::createEmbreeGeometry()
+  LiveGeometry Subdivision::createEmbreeGeometry()
   {
-    if (embreeGeometry)
-      rtcReleaseGeometry(embreeGeometry);
-
-    auto geom =
+    auto embreeGeo =
         rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_SUBDIVISION);
 
-    vec3f *vertex = (vec3f *)vertexData->data;
-    float *colors = colorsData ? (float *)colorsData->data : nullptr;
-    float *indexLevel =
-        indexLevelData ? (float *)indexLevelData->data : nullptr;
-    vec2f *texcoord = texcoordData ? (vec2f *)texcoordData->data : nullptr;
-
-    rtcSetSharedGeometryBuffer(geom,
-                               RTC_BUFFER_TYPE_VERTEX,
-                               0,
-                               RTC_FORMAT_FLOAT3,
-                               vertex,
-                               0,
-                               sizeof(vec3f),
-                               vertexData->size());
-    rtcSetSharedGeometryBuffer(geom,
-                               RTC_BUFFER_TYPE_INDEX,
-                               0,
-                               RTC_FORMAT_UINT,
-                               indexData->data,
-                               0,
-                               sizeof(unsigned int),
-                               indexData->size());
-    rtcSetSharedGeometryBuffer(geom,
-                               RTC_BUFFER_TYPE_FACE,
-                               0,
-                               RTC_FORMAT_UINT,
-                               faces,
-                               0,
-                               sizeof(unsigned int),
-                               numFaces);
+    setEmbreeGeometryBuffer(embreeGeo, RTC_BUFFER_TYPE_VERTEX, vertexData);
+    setEmbreeGeometryBuffer(embreeGeo, RTC_BUFFER_TYPE_INDEX, indexData);
+    setEmbreeGeometryBuffer(embreeGeo, RTC_BUFFER_TYPE_FACE, facesData);
 
     if (edge_crease_indicesData && edge_crease_weightsData) {
-      size_t edge_creases = edge_crease_indicesData->size();
-      if (edge_creases != edge_crease_weightsData->size())
-        postStatusMsg(1)
-            << "subdivision edge crease indices size does not match weights";
+      if (edge_crease_indicesData->size() != edge_crease_weightsData->size())
+        postStatusMsg(1) << toString()
+                + " ignoring edge creases, because size of arrays 'edgeCrease.index' and 'edgeCrease.weight' does not match";
       else {
-        rtcSetSharedGeometryBuffer(geom,
-                                   RTC_BUFFER_TYPE_EDGE_CREASE_INDEX,
-                                   0,
-                                   RTC_FORMAT_UINT2,
-                                   edge_crease_indicesData->data,
-                                   0,
-                                   2 * sizeof(unsigned int),
-                                   edge_creases);
-        rtcSetSharedGeometryBuffer(geom,
-                                   RTC_BUFFER_TYPE_EDGE_CREASE_WEIGHT,
-                                   0,
-                                   RTC_FORMAT_FLOAT,
-                                   edge_crease_weightsData->data,
-                                   0,
-                                   sizeof(float),
-                                   edge_creases);
+        setEmbreeGeometryBuffer(embreeGeo,
+            RTC_BUFFER_TYPE_EDGE_CREASE_INDEX,
+            edge_crease_indicesData);
+        setEmbreeGeometryBuffer(embreeGeo,
+            RTC_BUFFER_TYPE_EDGE_CREASE_WEIGHT,
+            edge_crease_weightsData);
       }
     }
 
     if (vertex_crease_indicesData && vertex_crease_weightsData) {
-      size_t vertex_creases = vertex_crease_indicesData->size();
-      if (vertex_creases != vertex_crease_weightsData->size())
-        postStatusMsg(1)
-            << "subdivision vertex crease indices size does not match weights";
+      if (vertex_crease_indicesData->size()
+          != vertex_crease_weightsData->size())
+        postStatusMsg(1) << toString()
+                + " ignoring vertex creases, because size of arrays 'vertexCrease.index' and 'vertexCrease.weight' does not match";
       else {
-        rtcSetSharedGeometryBuffer(geom,
-                                   RTC_BUFFER_TYPE_VERTEX_CREASE_INDEX,
-                                   0,
-                                   RTC_FORMAT_UINT,
-                                   vertex_crease_indicesData->data,
-                                   0,
-                                   sizeof(unsigned int),
-                                   vertex_creases);
-        rtcSetSharedGeometryBuffer(geom,
-                                   RTC_BUFFER_TYPE_VERTEX_CREASE_WEIGHT,
-                                   0,
-                                   RTC_FORMAT_FLOAT,
-                                   vertex_crease_weightsData->data,
-                                   0,
-                                   sizeof(float),
-                                   vertex_creases);
+        setEmbreeGeometryBuffer(embreeGeo,
+            RTC_BUFFER_TYPE_VERTEX_CREASE_INDEX,
+            vertex_crease_indicesData);
+        setEmbreeGeometryBuffer(embreeGeo,
+            RTC_BUFFER_TYPE_VERTEX_CREASE_WEIGHT,
+            vertex_crease_weightsData);
       }
     }
 
-    if (colors) {
-      rtcSetGeometryVertexAttributeCount(geom, 1);
-      rtcSetSharedGeometryBuffer(geom,
-                                 RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
-                                 0,
-                                 RTC_FORMAT_FLOAT4,
-                                 colors,
-                                 0,
-                                 sizeof(vec4f),
-                                 colorsData->size());
+    if (colorsData) {
+      rtcSetGeometryVertexAttributeCount(embreeGeo, 1);
+      setEmbreeGeometryBuffer(
+          embreeGeo, RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE, colorsData);
     }
 
-    if (texcoord) {
-      rtcSetGeometryVertexAttributeCount(geom, 2);
-      rtcSetSharedGeometryBuffer(geom,
-                                 RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
-                                 1,
-                                 RTC_FORMAT_FLOAT2,
-                                 texcoord,
-                                 0,
-                                 sizeof(vec2f),
-                                 texcoordData->size());
+    if (texcoordData) {
+      rtcSetGeometryVertexAttributeCount(embreeGeo, 2);
+      setEmbreeGeometryBuffer(
+          embreeGeo, RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE, texcoordData, 1);
     }
 
     if (!indexLevelData)
-      rtcSetGeometryTessellationRate(geom, level);
+      rtcSetGeometryTessellationRate(embreeGeo, level);
     else {
-      rtcSetSharedGeometryBuffer(geom,
-                                 RTC_BUFFER_TYPE_LEVEL,
-                                 0,
-                                 RTC_FORMAT_FLOAT,
-                                 indexLevel,
-                                 0,
-                                 sizeof(float),
-                                 indexLevelData->size());
+      setEmbreeGeometryBuffer(embreeGeo, RTC_BUFFER_TYPE_LEVEL, indexLevelData);
     }
 
-    rtcCommitGeometry(geom);
+    rtcCommitGeometry(embreeGeo);
 
-    embreeGeometry = geom;
+    LiveGeometry retval;
+    retval.ispcEquivalent = ispc::Subdivision_create(this);
+    retval.embreeGeometry = embreeGeo;
+
+    ispc::Subdivision_set(
+        retval.ispcEquivalent, retval.embreeGeometry, colorsData, texcoordData);
+
+    return retval;
   }
 
   OSP_REGISTER_GEOMETRY(Subdivision, subdivision);

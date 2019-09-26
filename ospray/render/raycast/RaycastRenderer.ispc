@@ -334,14 +334,12 @@ void RaycastRenderer_renderSample_volume(Renderer *uniform _self,
   if (!hasInterval(vInterval))
     return;
 
-  VolumetricModel *varying instance = vInterval.volumetricModel;
+  VolumetricModel *varying model = vInterval.volumetricModel;
 
   Ray &ray = sample.ray;
 
   ray.t0 = vInterval.interval.lower;
   ray.t  = vInterval.interval.upper;
-
-  float pSample = -1.f;
 
   // Ray offset for this sample, as a fraction of the nominal step size.
   float jitter = precomputedHalton2(sample.sampleID.z);
@@ -356,35 +354,28 @@ void RaycastRenderer_renderSample_volume(Renderer *uniform _self,
 
   ray.t0 += jitter;
 
-  foreach_unique(inst in instance)
+  foreach_unique(m in model)
   {
-    Volume *uniform volume       = inst->volume;
-    TransferFunction *uniform tf = inst->transferFunction;
+    Volume *uniform volume       = m->volume;
+    TransferFunction *uniform tf = m->transferFunction;
 
     while (ray.t0 <= ray.t) {
       const float sample = volume->sample(volume, ray.org + ray.t0 * ray.dir);
 
       if (!isnan(sample)) {
-        vec3f sampleColor = tf->getIntegratedColorForValue(tf, pSample, sample);
-        float sampleAlpha =
-            tf->getIntegratedOpacityForValue(tf, pSample, sample);
-
-        pSample = sample;
+        vec4f sampleColorOpacity = tf->get(tf, sample);
 
         const float clampedOpacity =
-            clamp(sampleAlpha / instance->samplingRate);
-
-        sampleColor = sampleColor * clampedOpacity;
-        sampleAlpha = clampedOpacity;
-
-        color = color + ((1.f - sampleAlpha) * sampleColor);
-        alpha = alpha + ((1.f - sampleAlpha) * sampleAlpha);
+            clamp(sampleColorOpacity.w / m->samplingRate);
+        color = color
+            + ((1.f - alpha) * clampedOpacity * make_vec3f(sampleColorOpacity));
+        alpha = alpha + ((1.f - alpha) * clampedOpacity);
       }
 
       if (alpha >= 0.99f)
         break;
 
-      volume->stepRay(volume, tf, ray, instance->samplingRate);
+      volume->stepRay(volume, tf, ray, m->samplingRate);
     }
   }
 }

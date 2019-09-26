@@ -17,13 +17,14 @@
 
 mkdir build
 cd build
-rm -rf *
 
-# NOTE(jda) - using Internal tasking system here temporarily to avoid installing TBB
+cmake --version
+
 cmake \
--D OSPRAY_ENABLE_TESTING=ON \
--D OSPRAY_AUTO_DOWNLOAD_TEST_IMAGES=OFF \
--D OSPRAY_MODULE_BILINEAR_PATCH=ON \
-..
+  -DBUILD_JOBS=4 \
+  -DBUILD_OSPRAY_CI_TESTS=ON \
+  -DCMAKE_INSTALL_LIBDIR=lib \
+  -DINSTALL_IN_SEPARATE_DIRECTORIES=OFF \
+  "$@" ../scripts/superbuild
 
-make -j 4 && make test
+cmake --build .

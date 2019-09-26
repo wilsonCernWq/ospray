@@ -23,7 +23,7 @@ namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE Boxes : public Geometry
   {
-    Boxes();
+    Boxes() = default;
     virtual ~Boxes() override = default;
 
     virtual std::string toString() const override;
@@ -32,15 +32,16 @@ namespace ospray {
 
     virtual size_t numPrimitives() const override;
 
+    LiveGeometry createEmbreeGeometry() override;
+
    protected:
     // Data members //
 
-    Ref<Data> boxData;
+    Ref<const DataT<box3f>> boxData;
 
     size_t numBoxes{0};
 
    private:
-    void createEmbreeGeometry() override;
   };
 
 }  // namespace ospray

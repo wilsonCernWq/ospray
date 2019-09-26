@@ -25,14 +25,17 @@ GLFWOSPRayWindow *GLFWOSPRayWindow::activeWindow = nullptr;
 
 static bool g_quitNextFrame = false;
 
-GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
-                                   const ospcommon::box3f &worldBounds,
+GLFWOSPRayWindow::GLFWOSPRayWindow(const vec2i &windowSize,
+                                   const box3f &worldBounds,
                                    OSPWorld world,
-                                   OSPRenderer renderer)
-    : windowSize(windowSize),
-      worldBounds(worldBounds),
-      world(world),
-      renderer(renderer)
+                                   OSPRenderer renderer,
+                                   OSPFrameBufferFormat fbFormat,
+                                   uint32_t fbChannels)
+  : worldBounds(worldBounds),
+    world(world),
+    renderer(renderer),
+    fbFormat(fbFormat),
+    fbChannels(fbChannels)
 {
   if (activeWindow != nullptr) {
     throw std::runtime_error("Cannot create more than one GLFWOSPRayWindow!");
@@ -73,13 +76,13 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
   // set GLFW callbacks
   glfwSetFramebufferSizeCallback(
       glfwWindow, [](GLFWwindow *, int newWidth, int newHeight) {
-        activeWindow->reshape(ospcommon::vec2i{newWidth, newHeight});
+        activeWindow->reshape(vec2i{newWidth, newHeight});
       });
 
   glfwSetCursorPosCallback(glfwWindow, [](GLFWwindow *, double x, double y) {
     ImGuiIO &io = ImGui::GetIO();
-    if (!io.WantCaptureMouse) {
-      activeWindow->motion(ospcommon::vec2f{float(x), float(y)});
+    if (!activeWindow->showUi || !io.WantCaptureMouse) {
+      activeWindow->motion(vec2f{float(x), float(y)});
     }
   });
 
@@ -103,7 +106,7 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
         if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS) {
           auto mouse      = activeWindow->previousMouse;
           auto windowSize = activeWindow->windowSize;
-          const ospcommon::vec2f pos(
+          const vec2f pos(
               mouse.x / static_cast<float>(windowSize.x),
               1.f - mouse.y / static_cast<float>(windowSize.y));
 
@@ -125,27 +128,12 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const ospcommon::vec2i &windowSize,
   arcballCamera = std::unique_ptr<ArcballCamera>(
       new ArcballCamera(worldBounds, windowSize));
 
+
   // create camera
   camera = ospNewCamera("perspective");
   ospSetFloat(camera, "aspect", windowSize.x / float(windowSize.y));
-
-  ospSetVec3f(camera,
-              "pos",
-              arcballCamera->eyePos().x,
-              arcballCamera->eyePos().y,
-              arcballCamera->eyePos().z);
-  ospSetVec3f(camera,
-              "dir",
-              arcballCamera->lookDir().x,
-              arcballCamera->lookDir().y,
-              arcballCamera->lookDir().z);
-  ospSetVec3f(camera,
-              "up",
-              arcballCamera->upDir().x,
-              arcballCamera->upDir().y,
-              arcballCamera->upDir().z);
-
-  ospCommit(camera);
+  updateCamera();
+  commitCamera();
 
   // finally, commit the renderer
   ospCommit(renderer);
@@ -177,10 +165,10 @@ void GLFWOSPRayWindow::setWorld(OSPWorld newWorld)
   world = newWorld;
 }
 
-void GLFWOSPRayWindow::setPixelOps(OSPData ops)
+void GLFWOSPRayWindow::setImageOps(OSPData ops)
 {
-  pixelOps = ops;
-  ospSetData(framebuffer, "pixelOperations", pixelOps);
+  imageOps = ops;
+  ospSetData(framebuffer, "imageOperation", imageOps);
   addObjectToCommit(framebuffer);
 }
 
@@ -224,7 +212,7 @@ void GLFWOSPRayWindow::mainLoop()
   ospRelease(renderer);
 }
 
-void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
+void GLFWOSPRayWindow::reshape(const vec2i &newWindowSize)
 {
   windowSize = newWindowSize;
 
@@ -236,11 +224,11 @@ void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
   // create new frame buffer
   framebuffer = ospNewFrameBuffer(windowSize.x,
                                   windowSize.y,
-                                  OSP_FB_SRGBA,
-                                  OSP_FB_COLOR | OSP_FB_ACCUM | OSP_FB_ALBEDO);
+                                  fbFormat,
+                                  fbChannels);
 
-  if (pixelOps) {
-    ospSetData(framebuffer, "pixelOperations", pixelOps);
+  if (imageOps) {
+    ospSetData(framebuffer, "imageOperation", imageOps);
   }
 
   ospCommit(framebuffer);
@@ -259,52 +247,61 @@ void GLFWOSPRayWindow::reshape(const ospcommon::vec2i &newWindowSize)
   ospCommit(camera);
 }
 
-void GLFWOSPRayWindow::motion(const ospcommon::vec2f &position)
+void GLFWOSPRayWindow::updateCamera()
 {
-  const ospcommon::vec2f mouse(position.x, position.y);
-  if (previousMouse != ospcommon::vec2f(-1)) {
+  ospSetFloat(camera, "aspect", windowSize.x / float(windowSize.y));
+  ospSetVec3f(camera,
+              "position",
+              arcballCamera->eyePos().x,
+              arcballCamera->eyePos().y,
+              arcballCamera->eyePos().z);
+  ospSetVec3f(camera,
+              "direction",
+              arcballCamera->lookDir().x,
+              arcballCamera->lookDir().y,
+              arcballCamera->lookDir().z);
+  ospSetVec3f(camera,
+              "up",
+              arcballCamera->upDir().x,
+              arcballCamera->upDir().y,
+              arcballCamera->upDir().z);
+}
+
+void GLFWOSPRayWindow::commitCamera()
+{
+  ospCommit(camera);
+}
+
+void GLFWOSPRayWindow::motion(const vec2f &position)
+{
+  const vec2f mouse(position.x, position.y);
+  if (previousMouse != vec2f(-1)) {
     const bool leftDown =
         glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     const bool rightDown =
         glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     const bool middleDown =
         glfwGetMouseButton(glfwWindow, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
-    const ospcommon::vec2f prev = previousMouse;
+    const vec2f prev = previousMouse;
 
     bool cameraChanged = leftDown || rightDown || middleDown;
 
     if (leftDown) {
-      const ospcommon::vec2f mouseFrom(
-          ospcommon::clamp(prev.x * 2.f / windowSize.x - 1.f, -1.f, 1.f),
-          ospcommon::clamp(prev.y * 2.f / windowSize.y - 1.f, -1.f, 1.f));
-      const ospcommon::vec2f mouseTo(
-          ospcommon::clamp(mouse.x * 2.f / windowSize.x - 1.f, -1.f, 1.f),
-          ospcommon::clamp(mouse.y * 2.f / windowSize.y - 1.f, -1.f, 1.f));
+      const vec2f mouseFrom(
+          clamp(prev.x * 2.f / windowSize.x - 1.f, -1.f, 1.f),
+          clamp(prev.y * 2.f / windowSize.y - 1.f, -1.f, 1.f));
+      const vec2f mouseTo(
+          clamp(mouse.x * 2.f / windowSize.x - 1.f, -1.f, 1.f),
+          clamp(mouse.y * 2.f / windowSize.y - 1.f, -1.f, 1.f));
       arcballCamera->rotate(mouseFrom, mouseTo);
     } else if (rightDown) {
       arcballCamera->zoom(mouse.y - prev.y);
     } else if (middleDown) {
-      arcballCamera->pan(ospcommon::vec2f(mouse.x - prev.x, prev.y - mouse.y));
+      arcballCamera->pan(vec2f(mouse.x - prev.x, prev.y - mouse.y));
     }
 
     if (cameraChanged) {
-      ospSetFloat(camera, "aspect", windowSize.x / float(windowSize.y));
-      ospSetVec3f(camera,
-                  "pos",
-                  arcballCamera->eyePos().x,
-                  arcballCamera->eyePos().y,
-                  arcballCamera->eyePos().z);
-      ospSetVec3f(camera,
-                  "dir",
-                  arcballCamera->lookDir().x,
-                  arcballCamera->lookDir().y,
-                  arcballCamera->lookDir().z);
-      ospSetVec3f(camera,
-                  "up",
-                  arcballCamera->upDir().x,
-                  arcballCamera->upDir().y,
-                  arcballCamera->upDir().z);
-
+      updateCamera();
       addObjectToCommit(camera);
     }
   }
@@ -360,15 +357,18 @@ void GLFWOSPRayWindow::display()
     auto *fb = ospMapFrameBuffer(framebuffer,
                                  showAlbedo ? OSP_FB_ALBEDO : OSP_FB_COLOR);
 
+    const GLint glFormat = showAlbedo ? GL_RGB : GL_RGBA;
+    const GLenum glType =
+      showAlbedo || fbFormat == OSP_FB_RGBA32F ? GL_FLOAT : GL_UNSIGNED_BYTE;
     glBindTexture(GL_TEXTURE_2D, framebufferTexture);
     glTexImage2D(GL_TEXTURE_2D,
                  0,
-                 showAlbedo ? GL_RGB : GL_RGBA,
+                 glFormat,
                  windowSize.x,
                  windowSize.y,
                  0,
-                 showAlbedo ? GL_RGB : GL_RGBA,
-                 showAlbedo ? GL_FLOAT : GL_UNSIGNED_BYTE,
+                 glFormat,
+                 glType,
                  fb);
 
     ospUnmapFrameBuffer(fb, framebuffer);

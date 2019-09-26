@@ -26,12 +26,6 @@ namespace ospray {
     managedObjectType = OSP_GEOMETRY;
   }
 
-  Geometry::~Geometry()
-  {
-    if (embreeGeometry)
-      rtcReleaseGeometry(embreeGeometry);
-  }
-
   std::string Geometry::toString() const
   {
     return "ospray::Geometry";
@@ -40,6 +34,15 @@ namespace ospray {
   Geometry *Geometry::createInstance(const char *type)
   {
     return createInstanceHelper<Geometry, OSP_GEOMETRY>(type);
+  }
+
+  void Geometry::postCreationInfo(size_t numVerts) const
+  {
+    std::stringstream ss;
+    ss << toString() << " created: #primitives=" << numPrimitives();
+    if (numVerts > 0)
+      ss << ", #vertices=" << numVerts;
+    postStatusMsg(2) << ss.str();
   }
 
 }  // namespace ospray

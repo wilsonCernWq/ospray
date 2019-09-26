@@ -23,7 +23,7 @@ namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE TriangleMesh : public Geometry
   {
-    TriangleMesh();
+    TriangleMesh() = default;
     virtual ~TriangleMesh() override = default;
 
     virtual std::string toString() const override;
@@ -32,30 +32,14 @@ namespace ospray {
 
     virtual size_t numPrimitives() const override;
 
+    LiveGeometry createEmbreeGeometry() override;
+
    protected:
-    bool huge_mesh{false};
-
-    int *index;       //!< mesh's triangle index array
-    float *vertex;    //!< mesh's vertex array
-    float *normal;    //!< mesh's vertex normal array
-    vec4f *color;     //!< mesh's vertex color array
-    vec2f *texcoord;  //!< mesh's vertex texcoord array
-
-    Ref<Data> indexData;    /*!< triangle indices (A,B,C,materialID) */
-    Ref<Data> vertexData;   /*!< vertex position (vec3fa) */
-    Ref<Data> normalData;   /*!< vertex normal array (vec3fa) */
-    Ref<Data> colorData;    /*!< vertex color array (vec3fa) */
-    Ref<Data> texcoordData; /*!< vertex texcoord array (vec2f) */
-
-    size_t numTris{0};
-    size_t numVerts{0};
-
-    size_t numCompsInTri{0};
-    size_t numCompsInVtx{0};
-    size_t numCompsInNor{0};
-
-   private:
-    void createEmbreeGeometry() override;
+    Ref<const DataT<vec3f>> vertexData;
+    Ref<const DataT<vec3f>> normalData;
+    Ref<const Data> colorData;
+    Ref<const DataT<vec2f>> texcoordData;
+    Ref<const DataT<vec3ui>> indexData;
   };
 
 }  // namespace ospray

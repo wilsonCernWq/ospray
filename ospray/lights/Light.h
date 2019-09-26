@@ -34,8 +34,12 @@ namespace ospray {
     //! toString is used to aid in printf debugging
     virtual std::string toString() const override;
 
-    bool isVisible; //!< either directly in camera, or via a straight path
+    vec3f color{1.f};      //!< RGB color of the emitted light
+    float intensity{1.f};  //!< Amount of light emitted
+    bool isVisible;  //!< either directly in camera, or via a straight path
   };
+
+  OSPTYPEFOR_SPECIALIZATION(Light *, OSP_LIGHT);
 
 #define OSP_REGISTER_LIGHT(InternalClass, external_name) \
   OSP_REGISTER_OBJECT(::ospray::Light, light, InternalClass, external_name)

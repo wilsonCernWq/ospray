@@ -37,13 +37,11 @@ typedef int ssize_t;
 #endif
 
 // ospcommon
-#include "ospcommon/AffineSpace.h"
+#include "ospcommon/math/AffineSpace.h"
 #include "ospcommon/memory/RefCount.h"
 #include "ospcommon/memory/malloc.h"
 
 // ospray
-#include "ospray/OSPDataType.h"
-#include "ospray/OSPTexture.h"
 #include "ospray/ospray.h"
 
 // std
@@ -92,6 +90,7 @@ typedef int ssize_t;
 namespace ospray {
 
   using namespace ospcommon;
+  using namespace ospcommon::math;
   using namespace ospcommon::memory;
 
   /*! basic types */
@@ -111,21 +110,6 @@ namespace ospray {
 
   void initFromCommandLine(int *ac = nullptr, const char ***av = nullptr);
 
-#ifndef Assert
-#ifdef NDEBUG
-# define Assert(expr) /* nothing */
-# define Assert2(expr,expl) /* nothing */
-# define AssertError(errMsg) /* nothing */
-#else
-# define Assert(expr)                                                   \
-  ((void)((expr) ? 0 : ((void)ospray::doAssertion(__FILE__, __LINE__, #expr, NULL), 0)))
-# define Assert2(expr,expl)                                             \
-  ((void)((expr) ? 0 : ((void)ospray::doAssertion(__FILE__, __LINE__, #expr, expl), 0)))
-# define AssertError(errMsg)                            \
-  doAssertion(__FILE__,__LINE__, (errMsg), NULL)
-#endif
-#endif
-
   extern "C" {
     /*! 64-bit malloc. allows for alloc'ing memory larger than 4GB */
     OSPRAY_CORE_INTERFACE void *malloc64(size_t size);
@@ -133,20 +117,22 @@ namespace ospray {
     OSPRAY_CORE_INTERFACE void free64(void *ptr);
   }
 
-  /*! Convert a type string to an OSPDataType. */
-  OSPRAY_CORE_INTERFACE OSPDataType typeForString(const char *string);
-  /*! Convert a type string to an OSPDataType. */
-  inline OSPDataType typeForString(const std::string &s)
-  { return typeForString(s.c_str()); }
+  OSPRAY_CORE_INTERFACE OSPDataType typeOf(const char *string);
+  inline OSPDataType typeOf(const std::string &s)
+  {
+    return typeOf(s.c_str());
+  }
 
-  /*! Convert a type string to an OSPDataType. */
-  OSPRAY_CORE_INTERFACE std::string stringForType(OSPDataType type);
+  OSPRAY_CORE_INTERFACE std::string stringFor(OSPDataType);
+  OSPRAY_CORE_INTERFACE std::string stringFor(OSPTextureFormat);
 
-  /*! size of OSPDataType */
-  OSPRAY_CORE_INTERFACE size_t sizeOf(const OSPDataType);
+  inline bool isObjectType(OSPDataType type)
+  {
+    return type & OSP_OBJECT;
+  }
 
-  /*! size of OSPTextureFormat */
-  OSPRAY_CORE_INTERFACE size_t sizeOf(const OSPTextureFormat);
+  OSPRAY_CORE_INTERFACE size_t sizeOf(OSPDataType);
+  OSPRAY_CORE_INTERFACE size_t sizeOf(OSPTextureFormat);
 
   OSPRAY_CORE_INTERFACE OSPError loadLocalModule(const std::string &name);
 
@@ -292,13 +278,21 @@ namespace ospray {
   // Infer (compile time) OSP_DATA_TYPE from input type ///////////////////////
 
   template <typename T>
-  struct OSPTypeFor { static constexpr int value = OSP_UNKNOWN; };
+  struct OSPTypeFor
+  {
+    static constexpr OSPDataType value = OSP_UNKNOWN;
+  };
 
-#define OSPTYPEFOR_SPECIALIZATION(type, osp_type) \
-  template <> struct OSPTypeFor<type> { static constexpr int value = osp_type; };
+#define OSPTYPEFOR_SPECIALIZATION(type, osp_type)                              \
+  template <>                                                                  \
+  struct OSPTypeFor<type>                                                      \
+  {                                                                            \
+    static constexpr OSPDataType value = osp_type;                             \
+  };
 
   OSPTYPEFOR_SPECIALIZATION(const char *, OSP_STRING);
   OSPTYPEFOR_SPECIALIZATION(const char [], OSP_STRING);
+  OSPTYPEFOR_SPECIALIZATION(bool, OSP_BOOL);
   OSPTYPEFOR_SPECIALIZATION(char, OSP_CHAR);
   OSPTYPEFOR_SPECIALIZATION(unsigned char, OSP_UCHAR);
   OSPTYPEFOR_SPECIALIZATION(short, OSP_SHORT);
@@ -322,7 +316,6 @@ namespace ospray {
   OSPTYPEFOR_SPECIALIZATION(float, OSP_FLOAT);
   OSPTYPEFOR_SPECIALIZATION(vec2f, OSP_VEC2F);
   OSPTYPEFOR_SPECIALIZATION(vec3f, OSP_VEC3F);
-  OSPTYPEFOR_SPECIALIZATION(vec3fa, OSP_VEC3FA);
   OSPTYPEFOR_SPECIALIZATION(vec4f, OSP_VEC4F);
   OSPTYPEFOR_SPECIALIZATION(double, OSP_DOUBLE);
   OSPTYPEFOR_SPECIALIZATION(box1i, OSP_BOX1I);
@@ -339,7 +332,22 @@ namespace ospray {
   OSPTYPEFOR_SPECIALIZATION(affine3f, OSP_AFFINE3F);
 
   OSPTYPEFOR_SPECIALIZATION(OSPObject, OSP_OBJECT);
-
-#undef OSPTYPEFOR_SPECIALIZATION
+  OSPTYPEFOR_SPECIALIZATION(OSPCamera, OSP_CAMERA);
+  OSPTYPEFOR_SPECIALIZATION(OSPData, OSP_DATA);
+  OSPTYPEFOR_SPECIALIZATION(OSPFrameBuffer, OSP_FRAMEBUFFER);
+  OSPTYPEFOR_SPECIALIZATION(OSPFuture, OSP_FUTURE);
+  OSPTYPEFOR_SPECIALIZATION(OSPGeometricModel, OSP_GEOMETRIC_MODEL);
+  OSPTYPEFOR_SPECIALIZATION(OSPGeometry, OSP_GEOMETRY);
+  OSPTYPEFOR_SPECIALIZATION(OSPGroup, OSP_GROUP);
+  OSPTYPEFOR_SPECIALIZATION(OSPImageOperation, OSP_IMAGE_OPERATION);
+  OSPTYPEFOR_SPECIALIZATION(OSPInstance, OSP_INSTANCE);
+  OSPTYPEFOR_SPECIALIZATION(OSPLight, OSP_LIGHT);
+  OSPTYPEFOR_SPECIALIZATION(OSPMaterial, OSP_MATERIAL);
+  OSPTYPEFOR_SPECIALIZATION(OSPRenderer, OSP_RENDERER);
+  OSPTYPEFOR_SPECIALIZATION(OSPTexture, OSP_TEXTURE);
+  OSPTYPEFOR_SPECIALIZATION(OSPTransferFunction, OSP_TRANSFER_FUNCTION);
+  OSPTYPEFOR_SPECIALIZATION(OSPVolume, OSP_VOLUME);
+  OSPTYPEFOR_SPECIALIZATION(OSPVolumetricModel, OSP_VOLUMETRIC_MODEL);
+  OSPTYPEFOR_SPECIALIZATION(OSPWorld, OSP_WORLD);
 
 } // ::ospray

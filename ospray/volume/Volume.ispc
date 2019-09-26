@@ -14,6 +14,7 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
+#include "common/Intersect.ih"
 #include "volume/Volume.ih"
 
 unmasked void Volume_embreeBounds(
@@ -38,25 +39,32 @@ unmasked void Volume_intersect_kernel(
   EmbreeIntersectionContext *uniform ctx =
       (EmbreeIntersectionContext * uniform) args->context;
 
-  varying VolumeInterval *uniform vInterval =
-      (varying VolumeInterval * uniform) ctx->userPtr;
+  varying VolumeIntervals *uniform vIntervals =
+      (varying VolumeIntervals * uniform) ctx->userPtr;
+  
+  varying VolumeInterval *varying vInterval =
+      (varying VolumeInterval * varying) (vIntervals->intervals + vIntervals->numVolumeIntervals);
 
   uniform int primID = args->primID;
 
   box3f *uniform box = &self->boundingBox;
-  vec2f t;
-  intersectBox(ray->org, ray->dir, *box, t.x, t.y);
 
-  const bool hit = t.x < t.y && ((t.x > ray->t0 && t.x < ray->t) ||
-                                 (t.y > ray->t0 && t.y < ray->t));
+  const Intersections isect = intersectBox(ray->org, ray->dir, *box);
 
-  if (hit) {
+  const float t_min = max(ray->t0, isect.entry.t);
+  const float t_max = min(ray->t, isect.exit.t);
+
+  if (t_min < t_max) {
     ray->instID = args->context->instID[0];
     ray->geomID = self->volumeID;
     ray->primID = 0;
 
-    vInterval->interval.lower = t.x;
-    vInterval->interval.upper = t.y;
+    vInterval->primID = 0;
+    vInterval->geomID = self->volumeID;
+    vInterval->instID = args->context->instID[0];
+    vIntervals->numVolumeIntervals++;
+    vInterval->interval.lower = t_min;
+    vInterval->interval.upper = t_max;
   }
 }
 
@@ -77,26 +85,14 @@ export void Volume_getBoundingBox(uniform box3f *uniform ret,
                                   void *uniform _self)
 {
   uniform Volume *uniform self = (uniform Volume * uniform) _self;
-  // If we have a clip box then the actual volume bounds are the intersection
-  // of the volume bounds and the clip box
-  cif(ne(self->volumeClippingBox.lower, self->volumeClippingBox.upper))
-  {
-    ret->lower = max(self->boundingBox.lower, self->volumeClippingBox.lower);
-    ret->upper = min(self->boundingBox.upper, self->volumeClippingBox.upper);
-  }
-  else
-  {
-    *ret = self->boundingBox;
-  }
+
+  *ret = self->boundingBox;
 }
 
 export void Volume_set(void *uniform _self,
-                       void *uniform _embreeGeometry,
-                       const uniform box3f &clippingBox)
+                       void *uniform _embreeGeometry)
 {
   Volume *uniform self = (Volume * uniform) _self;
-
-  self->volumeClippingBox = clippingBox;
 
   RTCGeometry geom = (RTCGeometry)_embreeGeometry;
 

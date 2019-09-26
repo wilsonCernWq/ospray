@@ -16,13 +16,13 @@
 
 // ospray
 #include "Device.h"
-#include "objectFactory.h"
 #include "common/OSPCommon.h"
+#include "objectFactory.h"
+#include "ospray/version.h"
 // ospcommon
-#include "ospcommon/library.h"
+#include "ospcommon/os/library.h"
 #include "ospcommon/utility/getEnvVar.h"
-#include "ospcommon/sysinfo.h"
-#include "ospcommon/tasking/tasking_system_handle.h"
+#include "ospcommon/tasking/tasking_system_init.h"
 
 #include <map>
 
@@ -68,14 +68,6 @@ namespace ospray {
 
     void Device::commit()
     {
-      int cpuFeatures = ospcommon::getCPUFeatures();
-
-      if ((cpuFeatures & ospcommon::CPU_FEATURE_SSE41) == 0) {
-        handleError(OSP_UNSUPPORTED_CPU,
-                    "OSPRay only runs on CPUs that support at least SSE4.1");
-        return;
-      }
-
       auto OSPRAY_DEBUG = utility::getEnvVar<int>("OSPRAY_DEBUG");
       debugMode = OSPRAY_DEBUG.value_or(getParam<bool>("debug", 0));
 
@@ -180,5 +172,20 @@ namespace ospray {
       return embreeConfig.str();
     }
 
+    int64_t Device::getProperty(const OSPDeviceProperty prop)
+    {
+      /* documented properties */
+      switch (prop)
+      {
+      case OSP_DEVICE_VERSION           :
+          return 10000*OSPRAY_VERSION_MAJOR + 100*OSPRAY_VERSION_MINOR + OSPRAY_VERSION_PATCH;
+      case OSP_DEVICE_VERSION_MAJOR     : return OSPRAY_VERSION_MAJOR;
+      case OSP_DEVICE_VERSION_MINOR     : return OSPRAY_VERSION_MINOR;
+      case OSP_DEVICE_VERSION_PATCH     : return OSPRAY_VERSION_PATCH;
+      case OSP_DEVICE_SO_VERSION        : return OSPRAY_SOVERSION;
+      default: handleError(OSP_INVALID_ARGUMENT, "unknown readable property");
+      return 0;
+      }
+    }
   } // ::ospray::api
 } // ::ospray

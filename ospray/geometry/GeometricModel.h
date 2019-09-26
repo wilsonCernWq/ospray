@@ -30,31 +30,33 @@ namespace ospray {
 
     void commit() override;
 
-    RTCGeometry embreeGeometryHandle() const;
+    Geometry &geometry();
 
-    void setGeomID(int id);
+    void setGeomIE(void *geomIE, int geomID);
 
    private:
-    // Helper functions //
+    void setMaterial();
+    void setMaterialList(const DataT<Material *> *);
 
-    void setMaterial(Material *mat);
-    void setMaterialList(Data *matListData);
-
-    // Data //
-
-    Ref<Geometry> geometry;
-
-    Ref<Data> prim_materialIDData; /*!< data array for per-prim material ID
-                                      (uint32) */
-    Ref<Data> colorData;
+    Ref<Geometry> geom;
+    Ref<const DataT<uint32_t>> prim_materialIDData;
+    Ref<const DataT<vec4f>> colorData;
     Material **materialList{nullptr};  //!< per-primitive material list
     Ref<Material> material;
-    Ref<Data> materialListData;  //!< data array for per-prim materials
-    std::vector<void *>
-        ispcMaterialPtrs;  //!< pointers to ISPC equivalent materials
+    Ref<const DataT<Material *>> materialListData;
+    std::vector<void *> ispcMaterialPtrs;
 
     friend struct PathTracer;  // TODO: fix this!
     friend struct Renderer;
   };
+
+  OSPTYPEFOR_SPECIALIZATION(GeometricModel *, OSP_GEOMETRIC_MODEL);
+
+  // Inlined members //////////////////////////////////////////////////////////
+
+  inline Geometry &GeometricModel::geometry()
+  {
+    return *geom;
+  }
 
 }  // namespace ospray

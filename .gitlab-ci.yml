@@ -71,42 +71,46 @@ variables:
 
 build-arch-gcc:
   <<: *build_job_docker
+  script:
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF
 
 build-arch-clang:
   <<: *build_job_docker
   script:
     - export CC=clang
     - export CXX=clang++
-    - scripts/build_gitlab/linux.sh
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF
 
 build-arch-gcc-warnings:
   <<: *build_job_docker
   script:
-    - scripts/build_gitlab/linux.sh -DOSPRAY_STRICT_BUILD=ON -DOSPRAY_WARN_AS_ERRORS=ON -DOSPRAY_MODULE_MPI=ON
-  allow_failure: true
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON
 
 build-arch-clang-warnings:
   <<: *build_job_docker
   script:
     - export CC=clang
     - export CXX=clang++
-    - scripts/build_gitlab/linux.sh -DOSPRAY_STRICT_BUILD=ON -DOSPRAY_WARN_AS_ERRORS=ON -DOSPRAY_MODULE_MPI=ON
-  allow_failure: true
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON
 
 build-ubuntu1604-gcc:
   <<: *build_job_docker
   image: ospray/docker-images:ubuntu16.04
+  script:
+    - scripts/build_gitlab/linux.sh -G Ninja
   artifacts:
     paths:
-      - $CI_PROJECT_DIR
+      - build/install
     expire_in: 3 day
 
-build-ubuntu1404-gcc:
+build-ubuntu1804-gcc:
   <<: *build_job_docker
-  image: ospray/docker-images:ubuntu14.04
+  image: ospray/docker-images:ubuntu18.04
+  script:
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF
   artifacts:
     paths:
-      - $CI_PROJECT_DIR
+      - build/install
     expire_in: 3 day
 
 build-centos6-gcc:
@@ -114,15 +118,13 @@ build-centos6-gcc:
   script:
     - module load cmake
     - module load gcc/4.8.2
-    - module load embree
-    - module load tbb
-    - module load ispc
     - export CC=gcc
     - export CXX=g++
     - scripts/build_gitlab/linux.sh
   artifacts:
     paths:
-      - $CI_PROJECT_DIR
+      - build/install
+    expire_in: 3 day
 
 build-centos6-icc:
   <<: *build_job_docker_modules
@@ -130,9 +132,6 @@ build-centos6-icc:
     - module load cmake
     - module load gcc/4.8.2
     - module load intel
-    - module load embree
-    - module load tbb
-    - module load ispc
     - export CC=icc
     - export CXX=icpc
     - scripts/build_gitlab/linux.sh
@@ -143,9 +142,6 @@ build-centos6-icc15:
     - module load cmake
     - module load gcc/4.8.2
     - module load intel/2015
-    - module load embree
-    - module load tbb
-    - module load ispc
     - export CC=icc
     - export CXX=icpc
     - scripts/build_gitlab/linux.sh
@@ -155,18 +151,13 @@ build-centos7-gcc:
   image: ospray/docker-images:centos7
   artifacts:
     paths:
-      - $CI_PROJECT_DIR
+      - build/install
     expire_in: 3 day
 
 build-debug:
   <<: *build_job_docker
   script:
-    - scripts/build_gitlab/linux.sh -DCMAKE_BUILD_TYPE=Debug
-
-build-mpi:
-  <<: *build_job_docker
-  script:
-    - scripts/build_gitlab/linux.sh -DOSPRAY_MODULE_MPI=ON
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DCMAKE_BUILD_TYPE=Debug
 
 build-osx-clang:
   <<: *build_job_shell
@@ -179,47 +170,44 @@ build-osx-clang:
 build-windows-msvc14:
   <<: *build_job_shell
   script:
-    - scripts\build_gitlab\win.bat "Visual Studio 14 2015 Win64" "v140" "ON"
+    - scripts\build_gitlab\win.bat "Visual Studio 14 2015 Win64" "v140"
   tags:
     - msvc14
     - win7
   artifacts:
     paths:
-      - build/Release
-      - build/regression_tests
+      - build/install
     expire_in: 3 day
 
 build-windows-msvc15:
   <<: *build_job_shell
   script:
-    - scripts\build_gitlab\win.bat "Visual Studio 15 2017 Win64" "v141" "OFF"
+    - scripts\build_gitlab\win.bat "Visual Studio 15 2017 Win64" "v141"
   tags:
     - msvc15
     - win7
   artifacts:
     paths:
-      - build/Release
-      - build/regression_tests
+      - build/install
     expire_in: 3 day
 
 build-windows-icc:
   <<: *build_job_shell
   script:
-    - scripts\build_gitlab\win.bat "Visual Studio 14 2015 Win64" "Intel C++ Compiler 18.0" "ON"
+    - scripts\build_gitlab\win.bat "Visual Studio 14 2015 Win64" "Intel C++ Compiler 18.0"
   tags:
     - icc18
     - win7
   artifacts:
     paths:
-      - build/Release
-      - build/regression_tests
+      - build/install
     expire_in: 3 day
 
 build-scan-kw:
   stage: build
   image: ospray-kw-centos7
   script:
-    - /tmp/build-scan-kw.sh
+    - scripts/build_gitlab/build-scan-kw.sh
     - test -s $CI_PROJECT_DIR/kw_build_number
   tags:
     - kw-scan-docker
@@ -227,23 +215,10 @@ build-scan-kw:
     paths:
         - $CI_PROJECT_DIR/kw_build_number
     expire_in: 3 day
+  allow_failure: true
 
 
 ### TEST JOBS ###
-
-test-gen-centos7-gcc:
-  <<: *test_job
-  image: ospray/docker-images:centos7
-  script:
-    - cd $CI_PROJECT_DIR/build
-    - ../scripts/tests/generate_baseline.sh
-  artifacts:
-    paths:
-     - $CI_PROJECT_DIR/build/img
-    expire_in: 1 week
-  dependencies:
-      - build-centos7-gcc
-  when: manual
 
 test-centos7-gcc:
   <<: *test_job
@@ -257,18 +232,19 @@ test-centos6-gcc:
   dependencies:
     - build-centos6-gcc
   script:
-    - module load tbb
+    - module load cmake
+    - module load gcc/4.8.2
     - scripts/tests/run_tests.sh
   tags:
     - modules
 
-test-ubuntu1404-gcc:
+test-ubuntu1804-gcc:
   <<: *test_job
-  image: ospray/docker-images:ubuntu14.04
+  image: ospray/docker-images:ubuntu18.04
   script:
     - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib64/ scripts/tests/run_tests.sh
   dependencies:
-    - build-ubuntu1404-gcc
+    - build-ubuntu1804-gcc
 
 test-ubuntu1604-gcc:
   <<: *test_job
@@ -302,28 +278,6 @@ test-windows-msvc14:
   dependencies:
     - build-windows-msvc14
 
-benchmark-centos7-gcc:
-  stage: test-build
-  image: ospray/docker-images:centos7
-  script:
-    - cd $CI_PROJECT_DIR/build
-    - mkdir benchmarks
-    - make ospray_bench_data
-    - ln -s /opt/ospray/benchmark/test_data $CI_PROJECT_DIR/build/test_data
-    - ../scripts/bench/run_benchmark_datasets.py --output benchmarks/stats.csv --baseline benchmarks/baseline/stats.csv --reference benchmarks/baseline --renderer scivis
-  tags:
-    - docker
-    - ospray-benchmark
-  artifacts:
-    paths:
-      - $CI_PROJECT_DIR/build/bench_output
-      - $CI_PROJECT_DIR/build/benchmarks/stats.csv
-    expire_in: 1 week
-    when: always
-  dependencies:
-    - build-centos7-gcc
-  when: manual
-
 test-kw-critical:
   stage: test-src
   image: ospray-kw-centos7
@@ -333,6 +287,7 @@ test-kw-critical:
     - build-scan-kw
   tags:
     - kw-scan-docker
+  allow_failure: true
 
 source-protex-scan:
   stage: build
@@ -362,10 +317,6 @@ pdf:
   script:
     - cd doc
     - make pdf
-  only:
-    - devel
-    - /^release-.*$/
-    - master
   artifacts:
     paths:
       - readme.pdf
@@ -376,8 +327,6 @@ web:
   script:
     - cd doc
     - make www
-  only:
-    - master
   artifacts:
     paths:
       - doc/www/*
@@ -402,7 +351,6 @@ release-linux-icc:
   tags:
     - icc
     - centos6
-    - mpi
   artifacts:
     paths:
       - build_release/*.gz
@@ -418,7 +366,6 @@ release-osx-clang:
   tags:
     - clang
     - osx
-    - mpi
   artifacts:
     paths:
       - build_release/*.gz
@@ -432,7 +379,6 @@ release-windows:
   tags:
     - msvc
     - win7
-    - mpi
   artifacts:
     paths:
       - build_release\ospray*.zip

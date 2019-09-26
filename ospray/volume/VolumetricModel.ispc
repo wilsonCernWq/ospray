@@ -21,7 +21,7 @@
 #include "math/vec.ih"
 
 export void *uniform VolumetricModel_create(void *uniform cppE,
-                                           void *uniform volume)
+                                            void *uniform volume)
 {
   VolumetricModel *uniform self = uniform new VolumetricModel;
 
@@ -31,29 +31,20 @@ export void *uniform VolumetricModel_create(void *uniform cppE,
 }
 
 export void VolumetricModel_set(void *uniform _self,
-                               uniform bool preIntegration,
-                               uniform bool adaptiveSampling,
-                               uniform float adaptiveScalar,
-                               uniform float adaptiveMaxSamplingRate,
-                               uniform float adaptiveBacktrack,
-                               uniform float samplingRate,
-                               void *uniform transferFunction,
-                               const uniform box3f &clippingBox,
-                               const uniform box3f &instanceBounds,
-                               const uniform AffineSpace3f &xfm,
-                               const uniform AffineSpace3f &rcp_xfm)
+                                uniform float samplingRate,
+                                void *uniform transferFunction,
+                                const uniform box3f &bounds,
+                                uniform float densityScale,
+                                uniform float maximumDensity,
+                                uniform float anisotropy)
 {
   VolumetricModel *uniform self = (VolumetricModel * uniform) _self;
 
-  self->preIntegration          = preIntegration;
-  self->adaptiveSampling        = adaptiveSampling;
-  self->adaptiveScalar          = adaptiveScalar;
-  self->adaptiveMaxSamplingRate = adaptiveMaxSamplingRate;
-  self->adaptiveBacktrack       = adaptiveBacktrack;
-  self->samplingRate            = samplingRate;
-  self->transferFunction        = (TransferFunction * uniform) transferFunction;
-  self->volumeClippingBox       = clippingBox;
-  self->boundingBox             = instanceBounds;
-  self->xfm                     = xfm;
-  self->rcp_xfm                 = rcp_xfm;
+  self->samplingRate     = samplingRate;
+  self->samplingStep     = self->volume->samplingStep;
+  self->transferFunction = (TransferFunction * uniform) transferFunction;
+  self->boundingBox      = bounds;
+  self->densityScale     = densityScale;
+  self->maximumDensity   = maximumDensity;
+  self->anisotropy       = anisotropy;
 }

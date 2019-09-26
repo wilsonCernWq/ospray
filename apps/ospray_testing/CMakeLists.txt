@@ -14,11 +14,15 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
-ospray_create_library(ospray_testing
+add_library(ospray_testing SHARED
   ospray_testing.cpp
 
   geometry/Boxes.cpp
+  geometry/CornellBox.cpp
+  geometry/Curves.cpp
+  geometry/Cylinders.cpp
   geometry/RandomSpheres.cpp
+  geometry/Streamlines.cpp
   geometry/SubdivisionCube.cpp
 
   lights/AmbientOnly.cpp
@@ -32,9 +36,16 @@ ospray_create_library(ospray_testing
   volume/GravitySpheresVolume.cpp
   volume/SimpleStructuredVolume.cpp
   volume/SimpleUnstructuredVolume.cpp
+
+  ../utility/rawToAMR.cpp
 )
 
-target_link_libraries(ospray_testing PUBLIC ospray PRIVATE ospray_common)
+target_link_libraries(ospray_testing PUBLIC ospray PRIVATE ospcommon::ospcommon)
+
+ospray_install_library(ospray_testing COMPONENT apps)
+
+set_target_properties(ospray_testing
+  PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
 
 target_include_directories(ospray_testing
   PUBLIC

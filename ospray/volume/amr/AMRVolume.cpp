@@ -17,148 +17,124 @@
 #include "AMRVolume.h"
 // ospray
 #include "common/Data.h"
-#include "transferFunction/TransferFunction.h"
+#include "volume/transferFunction/TransferFunction.h"
 // ospcommon
 #include "ospcommon/tasking/parallel_for.h"
 #include "ospcommon/utility/getEnvVar.h"
 // ispc exports
 #include "AMRVolume_ispc.h"
-#include "method_finest_ispc.h"
 #include "method_current_ispc.h"
+#include "method_finest_ispc.h"
 #include "method_octant_ispc.h"
 // stl
-#include <set>
 #include <map>
+#include <set>
 
 namespace ospray {
 
-    AMRVolume::AMRVolume()
-    {
-      ispcEquivalent = ispc::AMRVolume_create(this);
-    }
-
-    std::string AMRVolume::toString() const
-    {
-      return "ospray::AMRVolume";
-    }
-
-    /*! Copy voxels into the volume at the given index (non-zero
-      return value indicates success). */
-    int AMRVolume::setRegion(const void *, const vec3i &, const vec3i &)
-    {
-      FATAL("'setRegion()' doesn't make sense for AMR volumes; "
-            "they can only be set from existing data");
-    }
-
-    //! Allocate storage and populate the volume.
-    void AMRVolume::commit()
-    {
-      Volume::commit();
-
-      // Make the voxel value range visible to the application.
-      if (findParam("voxelRange") == nullptr)
-        setParam("voxelRange", voxelRange);
-      else
-        voxelRange = getParam2f("voxelRange", voxelRange);
-
-      auto methodStringFromEnv =
-          utility::getEnvVar<std::string>("OSPRAY_AMR_METHOD");
-
-      std::string methodString =
-          methodStringFromEnv.value_or(getParamString("amrMethod","current"));
-
-      if (methodString == "finest" || methodString == "finestLevel")
-        ispc::AMR_install_finest(getIE());
-      else if (methodString == "current" || methodString == "currentLevel")
-        ispc::AMR_install_current(getIE());
-      else if (methodString == "octant")
-        ispc::AMR_install_octant(getIE());
-
-      if (data != nullptr) //TODO: support data updates
-        return;
-
-      brickInfoData = getParamData("brickInfo");
-      assert(brickInfoData);
-      assert(brickInfoData->data);
-
-      brickDataData = getParamData("brickData");
-      assert(brickDataData);
-      assert(brickDataData->data);
-
-      data  = make_unique<amr::AMRData>(*brickInfoData,*brickDataData);
-      accel = make_unique<amr::AMRAccel>(*data);
-
-      // finding coarset cell size + finest level cell width
-      float coarsestCellWidth = 0.f;
-      float finestLevelCellWidth = data->brick[0].cellWidth;
-      box3i rootLevelBox = empty;
-
-      for (auto &b : data->brick) {
-        if (b.level == 0)
-          rootLevelBox.extend(b.box);
-        finestLevelCellWidth = min(finestLevelCellWidth, b.cellWidth);
-        coarsestCellWidth    = max(coarsestCellWidth, b.cellWidth);
-      }
-
-      vec3i rootGridDims = rootLevelBox.size() + vec3i(1);
-      ospLogF(1) << "found root level dimensions of " << rootGridDims;
-      ospLogF(1) << "coarsest cell width is " << coarsestCellWidth << std::endl;
-
-      auto rateFromEnv =
-          utility::getEnvVar<float>("OSPRAY_AMR_SAMPLING_STEP");
-
-      float samplingStep = rateFromEnv.value_or(0.1f * coarsestCellWidth);
-
-      bounds = accel->worldBounds;
-
-      const vec3f gridSpacing = getParam3f("gridSpacing", vec3f(1.f));
-      const vec3f gridOrigin  = getParam3f("gridOrigin", vec3f(0.f));
-
-      voxelType =  getParamString("voxelType", "unspecified");
-      auto voxelTypeID = getVoxelType();
-
-      switch (voxelTypeID) {
-      case OSP_UCHAR:
-        break;
-      case OSP_SHORT:
-        break;
-      case OSP_USHORT:
-        break;
-      case OSP_FLOAT:
-        break;
-      case OSP_DOUBLE:
-        break;
-      default:
-        throw std::runtime_error("amrVolume unsupported voxel type '"
-                                 + voxelType + "'");
-      }
-
-      ispc::AMRVolume_set(getIE(), (ispc::box3f&)bounds, samplingStep,
-                          (const ispc::vec3f&)gridOrigin,
-                          (const ispc::vec3f&)gridSpacing);
-
-      ispc::AMRVolume_setAMR(getIE(),
-                             accel->node.size(),
-                             &accel->node[0],
-                             accel->leaf.size(),
-                             &accel->leaf[0],
-                             accel->level.size(),
-                             &accel->level[0],
-                             voxelTypeID,
-                             (ispc::box3f &)bounds);
-
-      tasking::parallel_for(accel->leaf.size(),[&](size_t leafID) {
-        ispc::AMRVolume_computeValueRangeOfLeaf(getIE(), leafID);
-      });
-    }
-
-  OSPDataType AMRVolume::getVoxelType()
+  AMRVolume::AMRVolume()
   {
-    return (voxelType == "") ? typeForString(getParamString("voxelType", "unspecified")):
-                      typeForString(voxelType.c_str());
+    ispcEquivalent = ispc::AMRVolume_create(this);
   }
 
-    OSP_REGISTER_VOLUME(AMRVolume, AMRVolume);
-    OSP_REGISTER_VOLUME(AMRVolume, amr_volume);
+  std::string AMRVolume::toString() const
+  {
+    return "ospray::AMRVolume";
+  }
 
-} // ::ospray
+  //! Allocate storage and populate the volume.
+  void AMRVolume::commit()
+  {
+    Volume::commit();
+
+    voxelRange = getParam<vec2f>("voxelRange", vec2f(FLT_MAX, -FLT_MAX));
+
+    amrMethod = getParam<OSPAMRMethod>("method", OSP_AMR_CURRENT);
+
+    if(amrMethod == OSP_AMR_CURRENT)
+      ispc::AMR_install_current(getIE());
+    else if(amrMethod == OSP_AMR_FINEST)
+      ispc::AMR_install_finest(getIE());
+    else if(amrMethod == OSP_AMR_OCTANT)
+      ispc::AMR_install_octant(getIE());
+
+    if (data != nullptr)  // TODO: support data updates
+      return;
+
+    blockBoundsData = getParamData("block.bounds");
+    if (blockBoundsData.ptr == nullptr)
+      throw std::runtime_error("amr volume must have 'block.bounds' array");
+
+    refinementLevelsData = getParamData("block.level");
+    if (refinementLevelsData.ptr == nullptr)
+      throw std::runtime_error("amr volume must have 'block.level' array");
+
+    cellWidthsData = getParamData("block.cellWidth");
+    if (cellWidthsData.ptr == nullptr)
+      throw std::runtime_error("amr volume must have 'block.cellWidth' array");
+
+    blockDataData = getParamData("block.data");
+    if (blockDataData.ptr == nullptr)
+      throw std::runtime_error("amr volume must have 'block.data' array");
+
+    data  = make_unique<amr::AMRData>(*blockBoundsData,
+                                     *refinementLevelsData,
+                                     *cellWidthsData,
+                                     *blockDataData);
+    accel = make_unique<amr::AMRAccel>(*data);
+
+    float coarsestCellWidth = *std::max_element(
+        cellWidthsData->as<float>().begin(), cellWidthsData->as<float>().end());
+
+    float samplingStep = 0.1f * coarsestCellWidth;
+
+    bounds = accel->worldBounds;
+
+    const vec3f gridSpacing = getParam<vec3f>("gridSpacing", vec3f(1.f));
+    const vec3f gridOrigin  = getParam<vec3f>("gridOrigin", vec3f(0.f));
+
+    voxelType = (OSPDataType)getParam<int>("voxelType", OSP_UNKNOWN);
+
+    switch (voxelType) {
+    case OSP_UCHAR:
+      break;
+    case OSP_SHORT:
+      break;
+    case OSP_USHORT:
+      break;
+    case OSP_FLOAT:
+      break;
+    case OSP_DOUBLE:
+      break;
+    default:
+      throw std::runtime_error("amr volume 'voxelType' is invalid type " +
+                               stringFor(voxelType) +
+                               ". Must be one of: OSP_UCHAR, OSP_SHORT, "
+                               "OSP_USHORT, OSP_FLOAT, OSP_DOUBLE");
+    }
+
+    ispc::AMRVolume_set(getIE(),
+                        (ispc::box3f &)bounds,
+                        samplingStep,
+                        (const ispc::vec3f &)gridOrigin,
+                        (const ispc::vec3f &)gridSpacing);
+
+    ispc::AMRVolume_setAMR(getIE(),
+                           accel->node.size(),
+                           &accel->node[0],
+                           accel->leaf.size(),
+                           &accel->leaf[0],
+                           accel->level.size(),
+                           &accel->level[0],
+                           voxelType,
+                           (ispc::box3f &)bounds);
+
+    tasking::parallel_for(accel->leaf.size(), [&](size_t leafID) {
+      ispc::AMRVolume_computeValueRangeOfLeaf(getIE(), leafID);
+    });
+  }
+
+  OSP_REGISTER_VOLUME(AMRVolume, AMRVolume);
+  OSP_REGISTER_VOLUME(AMRVolume, amr_volume);
+
+}  // namespace ospray

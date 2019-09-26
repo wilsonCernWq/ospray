@@ -17,7 +17,6 @@
 // ospray
 #include "UnstructuredVolume.h"
 #include "../../common/Data.h"
-#include "ospray/OSPUnstructured.h"
 
 // ospcommon
 #include "ospcommon/tasking/parallel_for.h"
@@ -30,7 +29,7 @@ namespace ospray {
 
   namespace {
     // Map cell type to its vertices count
-    inline uint32_t getVerticesCount(uint8_t cellType)
+    inline uint32_t getVerticesCount(OSPUnstructuredCellType cellType)
     {
       switch (cellType) {
       case OSP_TETRAHEDRON:
@@ -41,9 +40,10 @@ namespace ospray {
         return 6;
       case OSP_PYRAMID:
         return 5;
+      case OSP_UNKNOWN_CELL_TYPE:
+        break;
       }
 
-      // Unknown cell type
       return 1;
     }
   }  // namespace
@@ -72,28 +72,30 @@ namespace ospray {
     Volume::commit();
 
     // check if value buffer has changed
-    if (getVertexValueData() != vertexValuePrev ||
-        getCellValueData() != cellValuePrev) {
-      vertexValuePrev = getVertexValueData();
-      cellValuePrev   = getCellValueData();
+    if (getParamData("vertex.value") != vertexValuePrev ||
+        getParamData("cell.value") != cellValuePrev) {
+      vertexValuePrev = getParamData("vertex.value");
+      cellValuePrev   = getParamData("cell.value");
 
       // rebuild BVH, resync ISPC, etc...
       finished = false;
     }
 
-    auto methodStringFromEnv =
-        utility::getEnvVar<std::string>("OSPRAY_HEX_METHOD");
-    std::string methodString =
-        methodStringFromEnv.value_or(getParamString("hexMethod", "fast"));
-    if ((methodString == "fast") || (methodString == "planar")) {
+    OSPUnstructuredMethod method =
+        (OSPUnstructuredMethod)getParam<int>("hexMethod", OSP_FAST);
+    if (method == OSP_FAST)
       ispc::UnstructuredVolume_method_fast(ispcEquivalent);
-    } else if ((methodString == "iterative") || (methodString == "nonplanar")) {
+    else if (method == OSP_ITERATIVE)
       ispc::UnstructuredVolume_method_iterative(ispcEquivalent);
+    else {
+      throw std::runtime_error(
+          "unstructured volume 'hexMethod' has invalid type. Must be one of: "
+          "OSP_FAST, OSP_ITERATIVE");
     }
 
     ispc::UnstructuredVolume_disableCellGradient(ispcEquivalent);
 
-    if (getParam1b("precomputedNormals", false)) {
+    if (getParam<bool>("precomputedNormals", false)) {
       if (faceNormals.empty()) {
         calculateFaceNormals();
         ispc::UnstructuredVolume_setFaceNormals(
@@ -112,23 +114,28 @@ namespace ospray {
       return;
 
     // read arrays given through API
-    Data *vertexData        = getParamData("vertex", getParamData("vertices"));
-    Data *vertexValueData   = getVertexValueData();
-    Data *indexData         = getParamData("index", getParamData("indices"));
+    Data *vertexData        = getParamData("vertex.position");
+    Data *vertexValueData   = getParamData("vertex.value");
+    Data *indexData         = getParamData("index");
     Data *indexPrefixedData = getParamData("indexPrefixed");
     Data *cellData          = getParamData("cell");
-    Data *cellValueData     = getCellValueData();
+    Data *cellValueData     = getParamData("cell.value");
     Data *cellTypeData      = getParamData("cell.type");
 
     // make sure that all necessary arrays are provided
-    if (!vertexData)
+    if (!vertexData) {
       throw std::runtime_error("unstructured volume must have 'vertex' array");
-    if (!indexData && !indexPrefixedData)
+    }
+
+    if (!indexData && !indexPrefixedData) {
       throw std::runtime_error(
           "unstructured volume must have 'index' or 'indexPrefixed' array");
-    if (!vertexValueData && !cellValueData)
+    }
+
+    if (!vertexValueData && !cellValueData) {
       throw std::runtime_error(
           "unstructured volume must have 'vertex.value' or 'cell.value' array");
+    }
 
     // if index array is prefixed with cell size
     if (indexPrefixedData) {
@@ -139,49 +146,57 @@ namespace ospray {
     }
 
     // retrieve array pointers
-    vertex      = (vec3f *)vertexData->data;
-    index       = (uint32_t *)indexData->data;
-    vertexValue = vertexValueData ? (float *)vertexValueData->data : nullptr;
-    cellValue   = cellValueData ? (float *)cellValueData->data : nullptr;
+    vertex = (vec3f *)vertexData->data();
+    index = (uint32_t *)indexData->data();
+    vertexValue = vertexValueData ? (float *)vertexValueData->data() : nullptr;
+    cellValue = cellValueData ? (float *)cellValueData->data() : nullptr;
 
     // set index integer size based on index data type
     switch (indexData->type) {
     case OSP_INT:
     case OSP_UINT:
-    case OSP_VEC4UI:
     case OSP_VEC4I:
+    case OSP_VEC4UI:
       index32Bit = true;
       break;
     case OSP_LONG:
     case OSP_ULONG:
       index32Bit = false;
       break;
-    default:
+    default: {
       throw std::runtime_error(
-          "unsupported unstructured volume index data type");
+          "unstructured volume 'index' array has invalid type " +
+          stringFor(indexData->type) +
+          ". Must be one of: OSP_INT, OSP_UINT, OSP_VEC4I, OSP_VEC4UI, "
+          "OSP_LONG, OSP_ULONG");
+    }
     }
 
     // 'cell' parameter is optional
     if (cellData) {
       // intialize cells with data given through API
       nCells = cellData->size();
-      cell   = (uint32_t *)cellData->data;
+      cell = (uint32_t *)cellData->data();
 
       // set cell integer size based on cell data type
       switch (cellData->type) {
       case OSP_INT:
       case OSP_UINT:
-      case OSP_VEC4UI:
       case OSP_VEC4I:
+      case OSP_VEC4UI:
         cell32Bit = true;
         break;
       case OSP_LONG:
       case OSP_ULONG:
         cell32Bit = false;
         break;
-      default:
+      default: {
         throw std::runtime_error(
-            "unsupported unstructured volume cell array data type");
+            "unstructured volume 'cell' array has invalid type " +
+            stringFor(cellData->type) +
+            ". Must be one of: OSP_INT, OSP_UINT, OSP_VEC4I, OSP_VEC4UI, "
+            "OSP_LONG, OSP_ULONG");
+      }
       }
     } else {
       // if cells array was not provided through API allocate it
@@ -213,15 +228,18 @@ namespace ospray {
 
     // 'cell.type' parameter is optional
     if (cellTypeData) {
-      cellType = (uint8_t *)cellTypeData->data;
+      cellType = (OSPUnstructuredCellType *)cellTypeData->data();
 
       // check if number of cell types matches number of cells
-      if (cellTypeData->size() != nCells)
+      if (cellTypeData->size() != nCells) {
         throw std::runtime_error(
-            "cell type array for unstructured volume has wrong size");
+            "unstructured volume 'cell.type' array length does not match "
+            "number of cells");
+      }
+
     } else {
       // create cell type array
-      cellType              = new uint8_t[nCells];
+      cellType              = new OSPUnstructuredCellType[nCells];
       cellTypeArrayToDelete = true;
 
       // map type values from indices array
@@ -254,18 +272,13 @@ namespace ospray {
                            cell,
                            cell32Bit,
                            cellSkipIds,
-                           cellType,
+                           (uint8_t *)cellType,
                            bvh.rootRef(),
                            bvh.nodePtr(),
                            bvh.itemListPtr(),
                            samplingStep);
 
     finished = true;
-  }
-
-  int UnstructuredVolume::setRegion(const void *, const vec3i &, const vec3i &)
-  {
-    NOT_IMPLEMENTED;
   }
 
   box4f UnstructuredVolume::getCellBBox(size_t id)
@@ -351,6 +364,11 @@ namespace ospray {
       case OSP_PYRAMID:
         calculateCellNormals(taskIndex, pyramidFaces, 5);
         break;
+      case OSP_UNKNOWN_CELL_TYPE: {
+        throw std::runtime_error(
+            "unstructured volume has invalid cell type. Must be one of: "
+            "OSP_TETRAHEDRON, OSP_HEXAHEDRON, OSP_WEDGE, OSP_PYRAMID");
+      }
       }
     });
   }
@@ -364,7 +382,7 @@ namespace ospray {
     float d            = std::min(std::min(dx, dy), dz);
     float samplingStep = d * 0.01f;
 
-    return getParam1f("samplingStep", samplingStep);
+    return getParam<float>("samplingStep", samplingStep);
   }
 
   OSP_REGISTER_VOLUME(UnstructuredVolume, unstructured_volume);

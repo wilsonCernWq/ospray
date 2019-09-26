@@ -20,6 +20,7 @@
 // ospray
 #include "common/Data.h"
 #include "common/Instance.h"
+#include "geometry/GeometricModel.h"
 #include "lights/Light.h"
 // ispc exports
 #include "GeometryLight_ispc.h"
@@ -47,26 +48,18 @@ namespace ospray {
 
   void PathTracer::generateGeometryLights(const World &world)
   {
-    auto *instances = world.instances.ptr;
-
-    if (!instances)
+    if (!world.instances)
       return;
 
-    auto inst_begin = instances->begin<Instance *>();
-    auto inst_end   = instances->end<Instance *>();
-
-    std::for_each(inst_begin, inst_end, [&](Instance *instance) {
-      auto *geometries = instance->geometricModels.ptr;
+    for (auto &&instance : *world.instances) {
+      auto geometries = instance->group->geometricModels;
 
       if (!geometries)
         return;
 
-      auto begin = geometries->begin<GeometricModel *>();
-      auto end   = geometries->end<GeometricModel *>();
-
       affine3f xfm = instance->xfm();
 
-      std::for_each(begin, end, [&](GeometricModel *model) {
+      for (auto &&model : *geometries) {
         if (model->materialList) {
           // check whether the modelmetry has any emissive materials
           bool hasEmissive = false;
@@ -92,8 +85,8 @@ namespace ospray {
             }
           }
         }
-      });
-    });
+      }
+    }
   }
 
   void PathTracer::destroyGeometryLights()
@@ -106,32 +99,32 @@ namespace ospray {
   {
     Renderer::commit();
 
-    world = (World *)getParamObject("world", getParamObject("world"));
+    world = (World *)getParamObject("world");
 
     destroyGeometryLights();
     lightArray.clear();
     geometryLights = 0;
 
-    const bool useGeometryLights = getParam1b("useGeometryLights", true);
+    const bool useGeometryLights = getParam<bool>("geometryLights", true);
 
     if (world && useGeometryLights) {
       generateGeometryLights(*world);
       geometryLights = lightArray.size();
     }
 
-    lightData = (Data *)getParamData("lights");
+    lightData = (Data *)getParamData("light");
     if (lightData) {
       for (uint32_t i = 0; i < lightData->size(); i++)
-        lightArray.push_back(((Light **)lightData->data)[i]->getIE());
+        lightArray.push_back(((Light **)lightData->data())[i]->getIE());
     }
 
     void **lightPtr = lightArray.empty() ? nullptr : &lightArray[0];
 
-    const int32 rouletteDepth = getParam1i("rouletteDepth", 5);
-    const float maxRadiance =
-        getParam1f("maxContribution", getParam1f("maxRadiance", inf));
+    const int32 rouletteDepth = getParam<int>("rouletteDepth", 5);
+    const float maxRadiance   = getParam<float>("maxContribution", inf);
     Texture2D *backplate = (Texture2D *)getParamObject("backplate", nullptr);
-    vec4f shadowCatcherPlane = getParam4f("shadowCatcherPlane", vec4f(0.f));
+    vec4f shadowCatcherPlane =
+        getParam<vec4f>("shadowCatcherPlane", vec4f(0.f));
 
     ispc::PathTracer_set(getIE(),
                          rouletteDepth,

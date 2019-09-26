@@ -24,7 +24,7 @@ namespace ospray {
     TransferFunction::TransferFunction()
     {
       opacities.emplace_back(0.0f);
-      opacities.emplace_back(0.1f);
+      opacities.emplace_back(1.0f);
     }
 
     OSPTransferFunction TransferFunction::createTransferFunction(
@@ -37,8 +37,8 @@ namespace ospray {
       OSPData cData = ospNewData(colors.size(), OSP_VEC3F, colors.data());
       OSPData oData = ospNewData(opacities.size(), OSP_FLOAT, opacities.data());
 
-      ospSetData(transferFunction, "colors", cData);
-      ospSetData(transferFunction, "opacities", oData);
+      ospSetData(transferFunction, "color", cData);
+      ospSetData(transferFunction, "opacity", oData);
 
       // the transfer function will apply over this volume value range
       ospSetVec2f(transferFunction, "valueRange", value_range.x, value_range.y);

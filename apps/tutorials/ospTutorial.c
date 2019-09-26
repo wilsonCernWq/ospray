@@ -72,10 +72,10 @@ int main(int argc, const char **argv) {
   float cam_view [] = {0.1f, 0.f, 1.f};
 
   // triangle mesh data
-  float vertex[] = { -1.0f, -1.0f, 3.0f, 0.f,
-                     -1.0f,  1.0f, 3.0f, 0.f,
-                      1.0f, -1.0f, 3.0f, 0.f,
-                      0.1f,  0.1f, 0.3f, 0.f };
+  float vertex[] = { -1.0f, -1.0f, 3.0f,
+                     -1.0f,  1.0f, 3.0f,
+                      1.0f, -1.0f, 3.0f,
+                      0.1f,  0.1f, 0.3f };
   float color[] =  { 0.9f, 0.5f, 0.5f, 1.0f,
                      0.8f, 0.8f, 0.8f, 1.0f,
                      0.8f, 0.8f, 0.8f, 1.0f,
@@ -92,48 +92,58 @@ int main(int argc, const char **argv) {
   // create and setup camera
   OSPCamera camera = ospNewCamera("perspective");
   ospSetFloat(camera, "aspect", imgSize_x/(float)imgSize_y);
-  ospSetVec3fv(camera, "pos", cam_pos);
-  ospSetVec3fv(camera, "dir", cam_view);
-  ospSetVec3fv(camera, "up",  cam_up);
+  ospSetParam(camera, "position", OSP_VEC3F, cam_pos);
+  ospSetParam(camera, "direction", OSP_VEC3F, cam_view);
+  ospSetParam(camera, "up", OSP_VEC3F, cam_up);
   ospCommit(camera); // commit each object to indicate modifications are done
 
 
   // create and setup model and mesh
   OSPGeometry mesh = ospNewGeometry("triangles");
-  OSPData data = ospNewData(4, OSP_VEC3FA, vertex, 0); // OSP_VEC3F format is also supported for vertex positions
+
+  OSPData data = ospNewSharedData1D(vertex, OSP_VEC3F, 4);
+  // alternatively with an OSPRay managed OSPData
+  // OSPData managed = ospNewData1D(OSP_VEC3F, 4);
+  // ospCopyData1D(data, managed, 0);
+
   ospCommit(data);
-  ospSetData(mesh, "vertex", data);
+  ospSetData(mesh, "vertex.position", data);
   ospRelease(data); // we are done using this handle
 
-  data = ospNewData(4, OSP_VEC4F, color, 0);
+  data = ospNewSharedData1D(color, OSP_VEC4F, 4);
   ospCommit(data);
   ospSetData(mesh, "vertex.color", data);
-  ospRelease(data); // we are done using this handle
+  ospRelease(data);
 
-  data = ospNewData(2, OSP_VEC3I, index, 0); // OSP_VEC4I format is also supported for triangle indices
+  data = ospNewSharedData1D(index, OSP_VEC3UI, 2);
   ospCommit(data);
   ospSetData(mesh, "index", data);
-  ospRelease(data); // we are done using this handle
+  ospRelease(data);
 
   ospCommit(mesh);
 
   // put the mesh into a model
   OSPGeometricModel model = ospNewGeometricModel(mesh);
   ospCommit(model);
-  ospRelease(mesh); // we are done using this handle
+  ospRelease(mesh);
 
-  // put the model into an instance
-  OSPInstance instance = ospNewInstance();
-  OSPData geometricModels = ospNewData(1, OSP_OBJECT, &model, 0);
-  ospSetData(instance, "geometries", geometricModels);
-  ospCommit(instance);
+  // put the model into a group (collection of models)
+  OSPGroup group = ospNewGroup();
+  OSPData geometricModels = ospNewSharedData1D(&model, OSP_GEOMETRIC_MODEL, 1);
+  ospSetData(group, "geometry", geometricModels);
+  ospCommit(group);
   ospRelease(model);
   ospRelease(geometricModels);
 
+  // put the group into an instance (give the group a world transform)
+  OSPInstance instance = ospNewInstance(group);
+  ospCommit(instance);
+  ospRelease(group);
+
   // put the instance in the world
   OSPWorld world = ospNewWorld();
-  OSPData instances = ospNewData(1, OSP_OBJECT, &instance, 0);
-  ospSetData(world, "instances", instances);
+  OSPData instances = ospNewSharedData1D(&instance, OSP_INSTANCE, 1);
+  ospSetData(world, "instance", instances);
   ospCommit(world);
   ospRelease(instance);
   ospRelease(instances);
@@ -144,13 +154,13 @@ int main(int argc, const char **argv) {
   // create and setup light for Ambient Occlusion
   OSPLight light = ospNewLight("ambient");
   ospCommit(light);
-  OSPData lights = ospNewData(1, OSP_LIGHT, &light, 0);
+  OSPData lights = ospNewSharedData1D(&light, OSP_LIGHT, 1);
   ospCommit(lights);
 
   // complete setup of renderer
   ospSetInt(renderer, "aoSamples", 1);
   ospSetFloat(renderer, "bgColor", 1.0f); // white, transparent
-  ospSetObject(renderer, "lights", lights);
+  ospSetObject(renderer, "light", lights);
   ospCommit(renderer);
 
   // create and setup framebuffer

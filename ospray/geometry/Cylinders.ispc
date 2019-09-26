@@ -15,48 +15,55 @@
 // ======================================================================== //
 
 // ospray
+#include "common/Data.ih"
+#include "common/Intersect.ih"
 #include "common/Ray.ih"
 #include "common/World.ih"
 #include "geometry/Geometry.ih"
 #include "math/box.ih"
 #include "math/vec.ih"
 
-struct CylinderTexCoord
-{
-  vec2f v0;
-  vec2f v1;
-};
-
 struct Cylinders
 {
-  Geometry super;  //!< inherited geometry fields
-
-  uint8 *data;
-
-  float radius;
-  int materialID;
-  int offset_v0;
-  int offset_v1;
-  int offset_radius;
-  int32 bytesPerCylinder;
-
-  CylinderTexCoord *texcoord;
+  Geometry super;
+  Data1D vertex0;
+  Data1D vertex1;
+  Data1D radius;
+  Data1D texcoord0;
+  Data1D texcoord1;
+  float global_radius;
 };
+
+static void Cylinders_postIntersect(const Geometry *uniform _self,
+    varying DifferentialGeometry &dg,
+    const varying Ray &ray,
+    uniform int64 flags)
+{
+  Cylinders *uniform self = (Cylinders * uniform) _self;
+  dg.Ng = dg.Ns = ray.Ng;
+
+  float radius = self->global_radius;
+  cif (valid(self->radius))
+    radius = get_float(self->radius, ray.primID);
+
+  dg.epsilon = radius * ulpEpsilon;
+
+  cif (and(flags & DG_TEXCOORD,
+      and(valid(self->texcoord0), valid(self->texcoord1)))) {
+    const vec2f tc0 = get_vec2f(self->texcoord0, ray.primID);
+    const vec2f tc1 = get_vec2f(self->texcoord1, ray.primID);
+    dg.st = lerp(ray.u, tc0, tc1);
+  }
+}
 
 unmasked void Cylinders_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
-  uniform Cylinders *uniform self =
-      (uniform Cylinders * uniform) args->geometryUserPtr;
+  Cylinders *uniform self = (Cylinders * uniform) args->geometryUserPtr;
   uniform int primID = args->primID;
-
-  uniform uint8 *uniform cylinderPtr =
-      self->data + self->bytesPerCylinder * primID;
-  uniform bool offr = self->offset_radius >= 0;
-  uniform float radius =
-      offr ? *((float *uniform)(cylinderPtr + self->offset_radius))
-           : self->radius;
-  uniform vec3f v0 = *((vec3f * uniform)(cylinderPtr + self->offset_v0));
-  uniform vec3f v1 = *((vec3f * uniform)(cylinderPtr + self->offset_v1));
+  uniform float radius = valid(self->radius) ? get_float(self->radius, primID)
+                                             : self->global_radius;
+  uniform vec3f v0 = get_vec3f(self->vertex0, primID);
+  uniform vec3f v1 = get_vec3f(self->vertex1, primID);
 
   uniform vec3f a2 = sqr(v0 - v1);
   uniform float d2 = a2.x + a2.y + a2.z;
@@ -67,89 +74,50 @@ unmasked void Cylinders_bounds(const RTCBoundsFunctionArguments *uniform args)
   *out                = make_box3fa(min(v0, v1) - dr, max(v0, v1) + dr);
 }
 
-void Cylinders_intersect_kernel(const RTCIntersectFunctionNArguments *uniform
-                                    args,
-                                const uniform bool isOcclusionTest)
+void Cylinders_intersect_kernel(
+    const RTCIntersectFunctionNArguments *uniform args,
+    const uniform bool isOcclusionTest)
 {
   // make sure to set the mask
   if (!args->valid[programIndex])
     return;
 
-  uniform Cylinders *uniform self =
-      (uniform Cylinders * uniform) args->geometryUserPtr;
+  Cylinders *uniform self = (Cylinders * uniform) args->geometryUserPtr;
   uniform unsigned int primID = args->primID;
 
   // this assumes that the args->rayhit is actually a pointer toa varying ray!
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-  uint8 *uniform cylinderPtr = self->data + self->bytesPerCylinder * primID;
-  uniform float radius       = self->radius;
-  if (self->offset_radius >= 0) {
-    radius = *((float *uniform)(cylinderPtr + self->offset_radius));
-  }
-  const uniform vec3f v0 = *((vec3f * uniform)(cylinderPtr + self->offset_v0));
-  const uniform vec3f v1 = *((vec3f * uniform)(cylinderPtr + self->offset_v1));
+  uniform float radius = valid(self->radius) ? get_float(self->radius, primID)
+                                             : self->global_radius;
+  uniform vec3f v0 = get_vec3f(self->vertex0, primID);
+  uniform vec3f v1 = get_vec3f(self->vertex1, primID);
 
-  const vec3f d         = ray->dir;
-  const uniform vec3f s = v1 - v0;  // axis
-  const vec3f sxd       = cross(s, d);
-  const float a         = dot(sxd, sxd);  // (s x d)^2
-  if (a == 0.f)
-    return;
-
-  const vec3f f   = v0 - ray->org;
-  const vec3f sxf = cross(s, f);
-  const float ra  = 1.0f / a;
-  const float ts =
-      dot(sxd, sxf) * ra;       // (s x d)(s x f) / (s x d)^2, in ray-space
-  const vec3f fp = f - ts * d;  // f' = v0 - closest point to axis
-
-  const uniform float s2 = dot(s, s);                  // s^2
-  const vec3f perp       = cross(s, fp);               // s x f'
-  const float c = sqr(radius) * s2 - dot(perp, perp);  //  r^2 s^2 - (s x f')^2
-  if (c < 0.f)
-    return;
-
-  float td          = sqrt(c * ra);
-  const float t_in  = ts - td;
-  const float t_out = ts + td;
-
-  // clip to cylinder caps
-  const float sf  = dot(s, f);
-  const float sd  = dot(s, d);
-  const float rsd = rcp(sd);
-  const float tA  = sf * rsd;
-  const float tB  = tA + s2 * rsd;
-  // rsd (and thus tA and tB) can be NaN if the ray is perfectly perpendicular
-  // to the cylinder; filter NaNs by having ray t as 2nd argument to min/max
-  const float tmin = max(min(tA, tB), ray->t0);
-  const float tmax = min(max(tA, tB), ray->t);
+  const Intersections isect =
+      intersectCylinder(ray->org, ray->dir, v0, v1, radius);
 
   bool hit = false;
-  // avoid short-circuiting &&
-  if (and(tmin < t_in, t_in <= tmax)) {
+  if (and(and(isect.entry.t > ray->t0, isect.entry.t <= ray->t),
+          isect.entry.hit)) {
     hit = true;
-    td *= -1.f;
-    ray->t = t_in;
-  } else if (and(tmin < t_out, t_out <= tmax)) {
-    hit    = true;
-    ray->t = t_out;
+    ray->t = isect.entry.t;
+    ray->u = isect.entry.u;
+    ray->Ng = isect.entry.N;
+  } else if (and(and(isect.exit.t > ray->t0, isect.exit.t <= ray->t),
+                 isect.exit.hit)) {
+    hit = true;
+    ray->t = isect.exit.t;
+    ray->u = isect.exit.u;
+    ray->Ng = isect.exit.N;
   }
 
   if (hit) {
-    cif(isOcclusionTest)
-    {
+    if (isOcclusionTest) {
       ray->t = neg_inf;
-    }
-    else
-    {
+    } else {
       ray->instID = args->context->instID[0];
       ray->primID = primID;
       ray->geomID = self->super.geomID;
-      // cannot easily be moved to postIntersect
-      // we need hit in object-space, in postIntersect it is in world-space
-      ray->u  = (ray->t * sd - sf) * rcp(s2);
-      ray->Ng = td * d - fp - ray->u * s;
     }
   }
 }
@@ -161,24 +129,10 @@ unmasked void Cylinders_intersect(
 }
 
 unmasked void Cylinders_occluded(
-    const struct RTCIntersectFunctionNArguments *uniform args)
+    const struct RTCOccludedFunctionNArguments *uniform args)
 {
-  Cylinders_intersect_kernel(args, true);
-}
-
-static void Cylinders_postIntersect(const Geometry *uniform _self,
-                                    varying DifferentialGeometry &dg,
-                                    const varying Ray &ray,
-                                    uniform int64 flags)
-{
-  uniform Cylinders *uniform self = (uniform Cylinders * uniform) _self;
-  dg.Ng = dg.Ns = ray.Ng;
-  dg.epsilon    = self->radius * ulpEpsilon;
-
-  if (flags & DG_TEXCOORD && self->texcoord) {
-    CylinderTexCoord tc = self->texcoord[ray.primID];
-    dg.st               = lerp(ray.u, tc.v0, tc.v1);
-  }
+  Cylinders_intersect_kernel(
+      (RTCIntersectFunctionNArguments * uniform) args, true);
 }
 
 SampleAreaRes Cylinders_sampleArea(const Geometry *uniform const _self,
@@ -188,12 +142,13 @@ SampleAreaRes Cylinders_sampleArea(const Geometry *uniform const _self,
                                    const vec2f &s)
 {
   const Cylinders *const uniform self = (const Cylinders *uniform)_self;
-  uint8 *cylinderPtr = self->data + self->bytesPerCylinder * primID;
-  float radius       = self->radius;
-  if (self->offset_radius >= 0)
-    radius = *((float *)(cylinderPtr + self->offset_radius));
-  vec3f v0 = *((vec3f *)(cylinderPtr + self->offset_v0));
-  vec3f v1 = *((vec3f *)(cylinderPtr + self->offset_v1));
+
+  float radius = self->global_radius;
+  cif (valid(self->radius))
+    radius = get_float(self->radius, primID);
+
+  vec3f v0 = get_vec3f(self->vertex0, primID);
+  vec3f v1 = get_vec3f(self->vertex1, primID);
 
   linear3f frame  = frame(v1 - v0);
   frame.vy        = normalize(frame.vy);
@@ -230,64 +185,63 @@ void Cylinders_getAreas(const Geometry *const uniform _self,
         "transformation detected! Importance sampling for emissive "
         "materials and thus resulting image may be wrong.\n");
   // use average as approximation to closest uniform scaling
-  const uniform float scaling = reduce_add(scaling3) / 3.f;
+  const uniform float scale = two_pi * reduce_add(scaling3) / 3.f;
 
-  uniform float radius       = self->radius;
-  const uniform int64 stride = self->bytesPerCylinder;
+  uniform float radius = self->global_radius;
+
   // TODO vectorize this loop, with foreach or ProgramCount & ProgramIndex
   for (uniform int32 i = 0; i < numPrims; i++) {
-    uint8 *uniform cylinderPtr = self->data + primIDs[i] * stride;
-    if (self->offset_radius >= 0)
-      radius = *((float *uniform)(cylinderPtr + self->offset_radius));
-    const uniform float circ = two_pi * radius * scaling;
-    uniform vec3f v0 = *((vec3f * uniform)(cylinderPtr + self->offset_v0));
-    uniform vec3f v1 = *((vec3f * uniform)(cylinderPtr + self->offset_v1));
-    areas[i]         = circ * length(v0 - v1) * scaling;
+    cif (valid(self->radius))
+      radius = get_float(self->radius, i);
+
+    const uniform vec3f v0 = get_vec3f(self->vertex0, i);
+    const uniform vec3f v1 = get_vec3f(self->vertex1, i);
+    areas[i] = scale * radius * length(v0 - v1);
   }
+}
+
+void Cylinders_Constructor(Cylinders *uniform self, void *uniform cppEquivalent)
+{
+  Geometry_Constructor(&self->super, cppEquivalent, Cylinders_postIntersect);
+  self->super.getAreas = Cylinders_getAreas;
+  self->super.sampleArea = Cylinders_sampleArea;
+  Data1D_Constructor(&self->vertex0);
+  Data1D_Constructor(&self->vertex1);
+  Data1D_Constructor(&self->radius);
+  Data1D_Constructor(&self->texcoord0);
+  Data1D_Constructor(&self->texcoord1);
+  self->global_radius = 0.01;
 }
 
 export void *uniform Cylinders_create(void *uniform cppEquivalent)
 {
-  uniform Cylinders *uniform geom = uniform new uniform Cylinders;
-  Geometry_Constructor(
-      &geom->super, cppEquivalent, Cylinders_postIntersect, NULL);
-  return geom;
+  Cylinders *uniform self = uniform new Cylinders;
+  Cylinders_Constructor(self, cppEquivalent);
+  return self;
 }
 
 export void CylindersGeometry_set(void *uniform _self,
-                                  void *uniform _embreeGeometry,
-                                  void *uniform data,
-                                  void *uniform texcoord,
-                                  uniform int numCylinders,
-                                  uniform int bytesPerCylinder,
-                                  uniform float radius,
-                                  uniform int offset_v0,
-                                  uniform int offset_v1,
-                                  uniform int offset_radius)
+    void *uniform _embreeGeometry,
+    const Data1D *uniform vertex0,
+    const Data1D *uniform vertex1,
+    const Data1D *uniform radius,
+    const Data1D *uniform texcoord0,
+    const Data1D *uniform texcoord1,
+    uniform float global_radius)
 {
   Cylinders *uniform self = (Cylinders * uniform) _self;
 
-  self->super.numPrimitives = numCylinders;
-  self->super.getAreas      = Cylinders_getAreas;
-  self->super.sampleArea    = Cylinders_sampleArea;
+  self->vertex0 = *vertex0;
+  self->vertex1 = *vertex1;
+  self->radius = *radius;
+  self->texcoord0 = *texcoord0;
+  self->texcoord1 = *texcoord1;
+  self->global_radius = global_radius;
+  self->super.numPrimitives = vertex0->numItems;
 
-  self->texcoord         = (CylinderTexCoord * uniform) texcoord;
-  self->radius           = radius;
-  self->data             = (uint8 * uniform) data;
-  self->bytesPerCylinder = bytesPerCylinder;
-  self->offset_v0        = offset_v0;
-  self->offset_v1        = offset_v1;
-  self->offset_radius    = offset_radius;
-
-  RTCGeometry geom = (RTCGeometry)_embreeGeometry;
-
-  rtcSetGeometryUserData(geom, self);
-  rtcSetGeometryUserPrimitiveCount(geom, numCylinders);
-  rtcSetGeometryBoundsFunction(
-      geom, (RTCBoundsFunction)&Cylinders_bounds, self);
-  rtcSetGeometryIntersectFunction(geom,
-                                  (RTCIntersectFunctionN)&Cylinders_intersect);
-  rtcSetGeometryOccludedFunction(geom,
-                                 (RTCOccludedFunctionN)&Cylinders_occluded);
-  rtcCommitGeometry(geom);
+  Geometry_setEmbreeUserGeometry(&self->super,
+      (RTCGeometry)_embreeGeometry,
+      Cylinders_bounds,
+      Cylinders_intersect,
+      Cylinders_occluded);
 }

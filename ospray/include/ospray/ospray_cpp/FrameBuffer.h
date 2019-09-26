@@ -16,9 +16,8 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/World.h>
-#include <ospray/ospray_cpp/PixelOp.h>
-#include <ospray/ospray_cpp/Renderer.h>
+#include "Renderer.h"
+#include "World.h"
 
 namespace ospray {
   namespace cpp {
@@ -29,19 +28,13 @@ namespace ospray {
       FrameBuffer() =
           default;  // NOTE(jda) - this does *not* create the underlying
       //            OSP object
-      FrameBuffer(const ospcommon::vec2i &size,
+      FrameBuffer(const vec2i &size,
                   OSPFrameBufferFormat format = OSP_FB_SRGBA,
                   int channels                = OSP_FB_COLOR);
       FrameBuffer(const FrameBuffer &copy);
-      FrameBuffer(FrameBuffer &&move);
       FrameBuffer(OSPFrameBuffer existing);
 
       FrameBuffer &operator=(const FrameBuffer &copy);
-      FrameBuffer &operator=(FrameBuffer &&move);
-
-      ~FrameBuffer();
-
-      void renderFrame();
 
       float renderFrame(const Renderer &renderer,
                         const Camera &camera,
@@ -50,16 +43,11 @@ namespace ospray {
       void *map(OSPFrameBufferChannel channel) const;
       void unmap(void *ptr) const;
       void clear() const;
-
-     private:
-      void free() const;
-
-      bool owner = true;
     };
 
     // Inlined function definitions ///////////////////////////////////////////
 
-    inline FrameBuffer::FrameBuffer(const ospcommon::vec2i &size,
+    inline FrameBuffer::FrameBuffer(const vec2i &size,
                                     OSPFrameBufferFormat format,
                                     int channels)
     {
@@ -67,14 +55,9 @@ namespace ospray {
     }
 
     inline FrameBuffer::FrameBuffer(const FrameBuffer &copy)
-        : ManagedObject_T<OSPFrameBuffer>(copy.handle()), owner(false)
+        : ManagedObject_T<OSPFrameBuffer>(copy.handle())
     {
-    }
-
-    inline FrameBuffer::FrameBuffer(FrameBuffer &&move)
-        : ManagedObject_T<OSPFrameBuffer>(move.handle())
-    {
-      move.ospObject = nullptr;
+      ospRetain(copy.handle());
     }
 
     inline FrameBuffer::FrameBuffer(OSPFrameBuffer existing)
@@ -84,22 +67,9 @@ namespace ospray {
 
     inline FrameBuffer &FrameBuffer::operator=(const FrameBuffer &copy)
     {
-      free();
       ospObject = copy.ospObject;
+      ospRetain(copy.handle());
       return *this;
-    }
-
-    inline FrameBuffer &FrameBuffer::operator=(FrameBuffer &&move)
-    {
-      free();
-      ospObject      = move.ospObject;
-      move.ospObject = nullptr;
-      return *this;
-    }
-
-    inline FrameBuffer::~FrameBuffer()
-    {
-      free();
     }
 
     inline float FrameBuffer::renderFrame(const Renderer &renderer,
@@ -123,13 +93,6 @@ namespace ospray {
     inline void FrameBuffer::clear() const
     {
       ospResetAccumulation(handle());
-    }
-
-    inline void FrameBuffer::free() const
-    {
-      if (owner && handle()) {
-        ospRelease(handle());
-      }
     }
 
   }  // namespace cpp

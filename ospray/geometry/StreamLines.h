@@ -22,7 +22,7 @@ namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE StreamLines : public Geometry
   {
-    StreamLines();
+    StreamLines() = default;
     virtual ~StreamLines() override = default;
 
     virtual std::string toString() const override;
@@ -31,24 +31,19 @@ namespace ospray {
 
     virtual size_t numPrimitives() const override;
 
+    LiveGeometry createEmbreeGeometry() override;
+
    protected:
-    Ref<Data> vertexData;  //!< refcounted data array for vertex data
-    Ref<Data> indexData;   //!< refcounted data array for segment data
-    Ref<Data> colorData;   //!< refcounted data array for vertex color data
-    Ref<Data> radiusData;  //!< refcounted data array for vertex radius data
+    Ref<const DataT<uint32_t>> indexData;
+    Ref<const DataT<vec3f>> vertexData;
+    Ref<const DataT<vec4f>> colorData;
+    Ref<const DataT<float>> radiusData;
 
+    float radius{0.01}; // default radius, if no per-vertex radius
     bool useCurve{false};
-    float globalRadius{0.01f};
-    const vec3fa *vertex{nullptr};
-    size_t numVertices{0};
-    const uint32 *index{nullptr};
-    size_t numSegments{0};
-    std::vector<vec4f> vertexCurve;
-    std::vector<uint32> indexCurve;
 
-   private:
-    void createEmbreeGeometry() override;
+    std::vector<vec4f> vertexCurve;
+    std::vector<uint32_t> indexCurve;
   };
-  /*! @} */
 
 }  // namespace ospray

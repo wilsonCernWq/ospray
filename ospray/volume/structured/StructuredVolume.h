@@ -45,12 +45,6 @@ namespace ospray {
     //! Allocate storage and populate the volume, called through the OSPRay API.
     virtual void commit() override;
 
-    //! Copy voxels into the volume at the given index
-    /*! \returns 0 on error, any non-zero value indicates success */
-    virtual int setRegion(const void *source_pointer,
-                          const vec3i &target_index,
-                          const vec3i &source_count) override = 0;
-
    protected:
     //! Create the equivalent ISPC volume container.
     virtual void createEquivalentISPC() = 0;
@@ -77,9 +71,6 @@ namespace ospray {
     //! building..
     virtual void buildAccelerator();
 
-    //! Get the OSPDataType enum corresponding to the voxel type string.
-    OSPDataType getVoxelType();
-
     //! Volume size in voxels per dimension.
     vec3i dimensions;
 
@@ -93,10 +84,9 @@ namespace ospray {
     bool finished{false};
 
     //! Voxel value range (will be computed if not provided as a parameter).
-    vec2f voxelRange{FLT_MAX, -FLT_MAX};
+    vec2f voxelRange;
 
-    //! Voxel type.
-    std::string voxelType;
+    OSPDataType voxelType;
 
     /*! Scale factor for the volume, mostly for internal use or data scaling
         benchmarking. Note that this must be set **before** calling

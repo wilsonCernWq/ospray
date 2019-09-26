@@ -18,9 +18,11 @@
 // stl
 #include <vector>
 // ospcommon
-#include "ospcommon/box.h"
+#include "ospcommon/math/box.h"
 #include "ospcommon/tasking/parallel_for.h"
+
 using namespace ospcommon;
+using namespace ospcommon::math;
 
 namespace ospray {
   namespace testing {
@@ -80,7 +82,7 @@ namespace ospray {
       ospSetObject(volume, "voxelData", voxelData);
       ospRelease(voxelData);
 
-      ospSetString(volume, "voxelType", "float");
+      ospSetInt(volume, "voxelType", OSP_FLOAT);
       ospSetVec3i(volume, "dimensions", dims.x, dims.y, dims.z);
 
       const auto range  = voxelRange.toVec2();

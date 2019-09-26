@@ -102,9 +102,10 @@ unmasked void Isosurfaces_intersect(
 }
 
 unmasked void Isosurfaces_occluded(
-    const struct RTCIntersectFunctionNArguments *uniform args)
+    const struct RTCOccludedFunctionNArguments *uniform args)
 {
-  Isosurfaces_intersect_kernel(args, true);
+  Isosurfaces_intersect_kernel(
+      (RTCIntersectFunctionNArguments * uniform) args, true);
 }
 
 static void Isosurfaces_postIntersect(const Geometry *uniform geometry,
@@ -129,9 +130,7 @@ static void Isosurfaces_postIntersect(const Geometry *uniform geometry,
 
   if (flags & DG_COLOR) {
     TransferFunction *uniform xf = self->volumetricModel->transferFunction;
-    const vec3f sampleColor =
-        xf->getColorForValue(xf, self->isovalues[ray.primID]);
-    dg.color = make_vec4f(sampleColor.x, sampleColor.y, sampleColor.z, 1.f);
+    dg.color = xf->get(xf, self->isovalues[ray.primID]);
   }
 }
 
@@ -139,7 +138,7 @@ export void *uniform Isosurfaces_create(void *uniform cppEquivalent)
 {
   uniform Isosurfaces *uniform isosurfaces = uniform new uniform Isosurfaces;
   Geometry_Constructor(
-      &isosurfaces->super, cppEquivalent, Isosurfaces_postIntersect, NULL);
+      &isosurfaces->super, cppEquivalent, Isosurfaces_postIntersect);
   return isosurfaces;
 }
 
@@ -152,19 +151,15 @@ export void *uniform Isosurfaces_set(void *uniform _self,
   Isosurfaces *uniform self       = (Isosurfaces * uniform) _self;
   VolumetricModel *uniform volume = (VolumetricModel * uniform) _volume;
 
-  self->super.numPrimitives = numIsovalues;
   self->isovalues           = isovalues;
   self->volumetricModel     = volume;
+  self->super.numPrimitives = 1; // for embree it is just one prim
 
-  RTCGeometry geom = (RTCGeometry)_embreeGeometry;
+  Geometry_setEmbreeUserGeometry(&self->super,
+      (RTCGeometry)_embreeGeometry,
+      Isosurfaces_bounds,
+      Isosurfaces_intersect,
+      Isosurfaces_occluded);
 
-  rtcSetGeometryUserData(geom, self);
-  rtcSetGeometryUserPrimitiveCount(geom, 1);
-  rtcSetGeometryBoundsFunction(
-      geom, (uniform RTCBoundsFunction)&Isosurfaces_bounds, self);
-  rtcSetGeometryIntersectFunction(
-      geom, (uniform RTCIntersectFunctionN)&Isosurfaces_intersect);
-  rtcSetGeometryOccludedFunction(
-      geom, (uniform RTCOccludedFunctionN)&Isosurfaces_occluded);
-  rtcCommitGeometry(geom);
+  self->super.numPrimitives = numIsovalues;
 }

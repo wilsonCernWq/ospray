@@ -22,8 +22,8 @@
   per patch. */
 
 // ospcomon: vec3f, box3f, etcpp - generic helper stuff
-#include "ospcommon/box.h"
-#include "ospcommon/vec.h"
+#include "ospcommon/math/box.h"
+#include "ospcommon/math/vec.h"
 // ospray: everything that's related to the ospray ray tracing core
 #include "ospray/geometry/Geometry.h"
 
@@ -66,17 +66,16 @@ namespace ospray {
         vec3f controlPoint[2][2];
       };
 
-      /*! constructor - will create the 'ispc equivalent' */
-      BilinearPatches();
-
-      /*! destructor - supposed to clean up all alloced memory */
-      virtual ~BilinearPatches() override;
+      BilinearPatches()                   = default;
+      virtual ~BilinearPatches() override = default;
 
       /*! the commit() message that gets called upon the app calling
           "ospCommit(<thisGeometry>)" */
       virtual void commit() override;
 
       virtual size_t numPrimitives() const override;
+
+      LiveGeometry createEmbreeGeometry() override;
 
      protected:
       /*! the input data array. the data array contains a list of
@@ -85,9 +84,6 @@ namespace ospray {
           as a plain array of floats (with 12 floats per patch), or as
           a array of vec3fs. */
       Ref<Data> patchesData;
-
-     private:
-      void createEmbreeGeometry() override;
     };
 
   }  // namespace blp

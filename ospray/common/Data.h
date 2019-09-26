@@ -16,112 +16,311 @@
 
 #pragma once
 
-// ospray
-#include "Managed.h"
+#include <iterator>
+#include "./Managed.h"
+
+// including "Data_ispc.h" breaks app code using SDK headers
+#ifndef __ISPC_STRUCT_Data1D__
+#define __ISPC_STRUCT_Data1D__
+namespace ispc {
+  struct Data1D
+  {
+    uint8_t *addr;
+    int64_t byteStride;
+    uint32_t numItems;
+    bool huge;
+  };
+} // namespace ispc
+#endif
 
 namespace ospray {
+
+  template <typename T, int DIM = 1>
+  struct OSPRAY_SDK_INTERFACE DataT;
 
   /*! \brief defines a data array (aka "buffer") type that contains
       'n' items of a given type */
   struct OSPRAY_SDK_INTERFACE Data : public ManagedObject
   {
-    Data(size_t numItems, OSPDataType type, const void *data, int flags = 0);
+    Data(const void *sharedData,
+        OSPDataType,
+        const vec3ui &numItems,
+        const vec3l &byteStride);
+    Data(OSPDataType, const vec3ui &numItems);
 
     virtual ~Data() override;
-
-    /*! commit this object - for this object type, make sure that all
-        listeners that have registered know that we have changed */
-    virtual void commit() override;
-
-    /*! pretty-print this object, for debugging purposes */
     virtual std::string toString() const override;
 
-    /*! return number of items in this data buffer */
     size_t size() const;
+    char *data() const;
+    char *data(const vec3ui &idx) const;
+    bool compact() const; // all strides are natural
+    void copy(const Data &source, const vec3ui &destinationIndex);
 
-    /*! Iterator begin/end for Data arrays */
-    template <typename T>
-    T *begin();
+    template <typename T, int DIM = 1>
+    const DataT<T, DIM> &as() const;
 
-    template <typename T>
-    T *end();
+    template <typename T, int DIM>
+    typename std::enable_if<std::is_pointer<T>::value, bool>::type is() const;
 
-    template <typename T>
-    const T *begin() const;
+    template <typename T, int DIM>
+    typename std::enable_if<!std::is_pointer<T>::value, bool>::type is() const;
 
-    template <typename T>
-    const T *end() const;
+   protected:
+    char *addr{nullptr};
+    bool shared;
 
-    template <typename T>
-    T &at(size_t i);
+   public:
+    OSPDataType type{OSP_UNKNOWN};
+    vec3ui numItems;
 
-    template <typename T>
-    const T &at(size_t i) const;
+   protected:
+    vec3l byteStride;
 
-    // Data members //
+   public:
+    int dimensions{0};
 
-    void *data;       /*!< pointer to data */
-    size_t numItems;  /*!< number of items */
-    size_t numBytes;  /*!< total num bytes (sizeof(type)*numItems) */
-    int flags;        /*!< creation flags */
-    OSPDataType type; /*!< element type */
+    ispc::Data1D ispc;
+    static ispc::Data1D empytData1D; // dummy, zero-initialized
+
+   private:
+    void init(); // init dimensions and byteStride
+  };
+
+  OSPTYPEFOR_SPECIALIZATION(Data *, OSP_DATA);
+
+  template <typename T>
+  class Iter : public std::iterator<std::forward_iterator_tag, T>
+  {
+    const Data &data;
+    vec3ui idx;
+
+   public:
+    Iter(const Data &data, vec3ui idx) : data(data), idx(idx) {}
+    Iter &operator++()
+    {
+      if (++idx.x >= data.numItems.x) {
+        idx.x = 0;
+        if (++idx.y >= data.numItems.y) {
+          idx.y = 0;
+          ++idx.z;
+        }
+      }
+      return *this;
+    }
+    Iter operator++(int)
+    {
+      Iter retv(*this);
+      ++(*this);
+      return retv;
+    }
+    bool operator!=(Iter &other) const
+    {
+      return &data != &other.data || idx != other.idx;
+    }
+    T &operator*() const
+    {
+      return *reinterpret_cast<T *>(data.data(idx));
+    }
+  };
+
+  template <typename T>
+  class Iter1D : public std::iterator<std::forward_iterator_tag, T>
+  {
+    char *addr{nullptr};
+    int64_t byteStride{1};
+
+   public:
+    Iter1D(char *addr, int64_t byteStride) : addr(addr), byteStride(byteStride)
+    {}
+    Iter1D &operator++()
+    {
+      addr += byteStride;
+      return *this;
+    }
+    Iter1D operator++(int)
+    {
+      Iter1D retv(*this);
+      ++(*this);
+      return retv;
+    }
+    bool operator==(const Iter1D &other) const
+    {
+      return addr == other.addr;
+    }
+    bool operator!=(const Iter1D &other) const
+    {
+      return addr != other.addr;
+    }
+    T &operator*() const
+    {
+      return *reinterpret_cast<T *>(addr);
+    }
+    T *operator->() const
+    {
+      return reinterpret_cast<T *>(addr);
+    }
+  };
+
+  template <typename T, int DIM>
+  struct OSPRAY_SDK_INTERFACE DataT : public Data
+  {
+    static_assert(DIM == 2 || DIM == 3, "only 1D, 2D or 3D DataT supported");
+    using value_type = T;
+    using interator = Iter<T>;
+
+    Iter<T> begin() const
+    {
+      return Iter<T>(*this, vec3ui(0));
+    }
+    Iter<T> end() const
+    {
+      return Iter<T>(*this, vec3ui(0, 0, numItems.z));
+    }
+
+    T &operator[](const vec_t<int64_t, DIM> &idx)
+    {
+      return *reinterpret_cast<T *>(data(idx));
+    }
+    const T &operator[](const vec_t<int64_t, DIM> &idx) const
+    {
+      return const_cast<DataT<T, DIM> *>(this)->operator[](idx);
+    }
+
+    T *data() const
+    {
+      return reinterpret_cast<T *>(addr);
+    }
+  };
+
+  template <typename T>
+  struct OSPRAY_SDK_INTERFACE DataT<T, 1> : public Data
+  {
+    using value_type = T;
+    using interator = Iter1D<T>;
+
+    Iter1D<T> begin() const
+    {
+      return Iter1D<T>(addr, ispc.byteStride);
+    }
+    Iter1D<T> end() const
+    {
+      return Iter1D<T>(addr + ispc.byteStride * ispc.numItems, ispc.byteStride);
+    }
+
+    T &operator[](int64_t idx)
+    {
+      return *reinterpret_cast<T *>(addr + ispc.byteStride * idx);
+    }
+    const T &operator[](int64_t idx) const
+    {
+      return const_cast<DataT<T, 1> *>(this)->operator[](idx);
+    }
+
+    T *data() const
+    {
+      return reinterpret_cast<T *>(addr);
+    }
+
+    int64_t stride() const
+    {
+      return ispc.byteStride;
+    }
   };
 
   // Inlined definitions //////////////////////////////////////////////////////
 
-  template <typename T>
-  inline T *Data::begin()
+  inline const ispc::Data1D *ispc(Ref<const Data> &dataRef)
   {
-    return static_cast<T *>(data);
+    return dataRef && dataRef->dimensions == 1 ? &dataRef->ispc
+                                               : &Data::empytData1D;
   }
 
   template <typename T>
-  inline T *Data::end()
+  const ispc::Data1D *ispc(Ref<const DataT<T, 1>> &dataRef)
   {
-    return begin<T>() + numItems;
+    return dataRef ? &dataRef->ispc : &Data::empytData1D;
   }
 
-  template <typename T>
-  inline const T *Data::begin() const
+  inline size_t Data::size() const
   {
-    return static_cast<const T *>(data);
+    return numItems.x * size_t(numItems.y) * numItems.z;
   }
 
-  template <typename T>
-  inline const T *Data::end() const
+  inline char *Data::data() const
   {
-    return begin<const T>() + numItems;
+    return addr;
   }
 
-  template <typename T>
-  inline T &Data::at(size_t i)
+  inline char *Data::data(const vec3ui &idx) const
   {
-    return *(begin<T>() + i);
+    return addr + idx.x * byteStride.x + idx.y * byteStride.y
+        + idx.z * byteStride.z;
   }
 
-  template <typename T>
-  inline const T &Data::at(size_t i) const
+  template <typename T, int DIM>
+  inline typename std::enable_if<std::is_pointer<T>::value, bool>::type
+  Data::is() const
   {
-    return *(begin<T>() + i);
+    auto toType = OSPTypeFor<T>::value;
+    return (type == toType || (toType == OSP_OBJECT && isObjectType(type)))
+        && dimensions <= DIM; // can iterate with higher dimensionality
   }
 
-  // Helper functions /////////////////////////////////////////////////////////
-
-  inline std::vector<void *> createArrayOfIE(Data &data)
+  template <typename T, int DIM>
+  inline typename std::enable_if<!std::is_pointer<T>::value, bool>::type
+  Data::is() const
   {
-    if (data.type != OSP_OBJECT)
-      throw std::runtime_error("cannot createArrayOfIE() with non OSP_OBJECT!");
+    // can iterate with higher dimensionality
+    return type == OSPTypeFor<T>::value && dimensions <= DIM;
+  }
 
+  template <typename T, int DIM>
+  inline const DataT<T, DIM> &Data::as() const
+  {
+    if (is<T, DIM>())
+      return (DataT<T, DIM> &)*this;
+    else {
+      std::stringstream ss;
+      ss << "Incompatible type or dimension for DataT; requested type[dim]: "
+         << stringFor(OSPTypeFor<T>::value) << "[" << DIM
+         << "], actual: " << stringFor(type) << "[" << dimensions << "].";
+      throw std::runtime_error(ss.str());
+    }
+  }
+
+  template <typename T, int DIM>
+  inline const DataT<T, DIM> *ManagedObject::getParamDataT(
+      const char *name, bool required)
+  {
+    auto data = getParamData(name);
+
+    if (data && data->is<T, DIM>())
+      return &(data->as<T, DIM>());
+    else {
+      if (required)
+        throw std::runtime_error(toString() + " must have '" + name
+            + "' array with element type " + stringFor(OSPTypeFor<T>::value));
+      else {
+        if (data)
+          postStatusMsg(1) << toString() << " ignoring '" << name
+                           << "' array with wrong element type (should be "
+                           << stringFor(OSPTypeFor<T>::value) << ")";
+        return nullptr;
+      }
+    }
+  }
+
+  template <typename T, int DIM>
+  inline typename std::enable_if<std::is_base_of<ManagedObject, T>::value,
+      std::vector<void *>>::type
+  createArrayOfIE(const DataT<T *, DIM> &data)
+  {
     std::vector<void *> retval;
-    retval.resize(data.size());
 
-    auto begin = data.begin<ManagedObject *>();
-    auto end   = data.end<ManagedObject *>();
-    std::transform(begin, end, retval.begin(), [](ManagedObject *obj) {
-      return obj->getIE();
-    });
+    for (auto &&obj : data)
+      retval.push_back(obj->getIE());
 
     return retval;
   }
-
-}  // namespace ospray
+} // namespace ospray

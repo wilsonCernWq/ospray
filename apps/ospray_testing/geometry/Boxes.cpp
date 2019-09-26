@@ -16,12 +16,13 @@
 
 #include "Geometry.h"
 // ospcommon
-#include "ospcommon/box.h"
-#include "ospcommon/multidim_index_sequence.h"
+#include "ospcommon/math/box.h"
+#include "ospcommon/utility/multidim_index_sequence.h"
 
 #include <vector>
 
 using namespace ospcommon;
+using namespace ospcommon::math;
 
 namespace ospray {
   namespace testing {
@@ -68,7 +69,7 @@ namespace ospray {
       auto boxData =
           ospNewData(numBoxes.total_indices(), OSP_BOX3F, boxes.data());
 
-      ospSetData(boxGeometry, "boxes", boxData);
+      ospSetData(boxGeometry, "box", boxData);
       ospRelease(boxData);
 
       ospCommit(boxGeometry);
@@ -76,7 +77,7 @@ namespace ospray {
       auto colorData =
           ospNewData(numBoxes.total_indices(), OSP_VEC4F, color.data());
 
-      ospSetData(model, "color", colorData);
+      ospSetData(model, "prim.color", colorData);
       ospRelease(colorData);
 
       // create OBJ material and assign to geometry
@@ -89,15 +90,19 @@ namespace ospray {
 
       ospCommit(model);
 
-      OSPInstance instance = ospNewInstance();
-      auto instances       = ospNewData(1, OSP_OBJECT, &model);
-      ospSetData(instance, "geometries", instances);
+      OSPGroup group = ospNewGroup();
+      auto models = ospNewData(1, OSP_GEOMETRIC_MODEL, &model);
+      ospSetData(group, "geometry", models);
+      ospCommit(group);
+      ospRelease(models);
+
+      OSPInstance instance = ospNewInstance(group);
       ospCommit(instance);
-      ospRelease(instances);
 
       OSPTestingGeometry retval;
       retval.geometry = boxGeometry;
       retval.model    = model;
+      retval.group    = group;
       retval.instance = instance;
       retval.bounds   = reinterpret_cast<osp_box3f &>(bounds);
 

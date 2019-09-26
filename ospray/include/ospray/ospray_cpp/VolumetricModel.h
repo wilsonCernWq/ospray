@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/Volume.h>
-#include <ospray/ospray_cpp/TransferFunction.h>
+#include "TransferFunction.h"
+#include "Volume.h"
 
 namespace ospray {
   namespace cpp {
@@ -50,6 +50,7 @@ namespace ospray {
     inline VolumetricModel::VolumetricModel(const VolumetricModel &copy)
         : ManagedObject_T<OSPVolumetricModel>(copy.handle())
     {
+      ospRetain(copy.handle());
     }
 
     inline VolumetricModel::VolumetricModel(OSPVolumetricModel existing)
@@ -62,7 +63,8 @@ namespace ospray {
       setTransferFunction(m.handle());
     }
 
-    inline void VolumetricModel::setTransferFunction(OSPTransferFunction m) const
+    inline void VolumetricModel::setTransferFunction(
+        OSPTransferFunction m) const
     {
       set("transferFunction", m);
     }

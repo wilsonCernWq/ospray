@@ -125,7 +125,8 @@ namespace ospray {
     }
   }
 
-  size_t sizeOf(const OSPDataType type) {
+  size_t sizeOf(OSPDataType type)
+  {
     switch (type) {
     case OSP_VOID_PTR:
     case OSP_OBJECT:
@@ -133,8 +134,12 @@ namespace ospray {
     case OSP_DATA:
     case OSP_DEVICE:
     case OSP_FRAMEBUFFER:
-    case OSP_GEOMETRY:
+    case OSP_FUTURE:
     case OSP_GEOMETRIC_MODEL:
+    case OSP_GEOMETRY:
+    case OSP_GROUP:
+    case OSP_IMAGE_OPERATION:
+    case OSP_INSTANCE:
     case OSP_LIGHT:
     case OSP_MATERIAL:
     case OSP_RENDERER:
@@ -142,10 +147,9 @@ namespace ospray {
     case OSP_TRANSFER_FUNCTION:
     case OSP_VOLUME:
     case OSP_VOLUMETRIC_MODEL:
-    case OSP_PIXEL_OP:
     case OSP_WORLD:
-    case OSP_INSTANCE:
     case OSP_STRING:    return sizeof(void *);
+    case OSP_BOOL:      return sizeof(bool);
     case OSP_CHAR:      return sizeof(int8);
     case OSP_UCHAR:     return sizeof(uint8);
     case OSP_VEC2UC:    return sizeof(vec2uc);
@@ -173,7 +177,6 @@ namespace ospray {
     case OSP_VEC2F:     return sizeof(vec2f);
     case OSP_VEC3F:     return sizeof(vec3f);
     case OSP_VEC4F:     return sizeof(vec4f);
-    case OSP_VEC3FA:    return sizeof(vec3fa);
     case OSP_DOUBLE:    return sizeof(double);
     case OSP_BOX1I:     return sizeof(box1i);
     case OSP_BOX2I:     return sizeof(box2i);
@@ -187,7 +190,7 @@ namespace ospray {
     case OSP_LINEAR3F:  return sizeof(linear3f);
     case OSP_AFFINE2F:  return sizeof(affine2f);
     case OSP_AFFINE3F:  return sizeof(affine3f);
-    case OSP_UNKNOWN:   break;
+    case OSP_UNKNOWN:   return 0;
     }
 
     std::stringstream error;
@@ -196,9 +199,10 @@ namespace ospray {
     throw std::runtime_error(error.str());
   }
 
-  OSPDataType typeForString(const char *string)
+  OSPDataType typeOf(const char *string)
   {
     if (string == nullptr)             return(OSP_UNKNOWN);
+    if (strcmp(string, "bool"  ) == 0) return(OSP_BOOL);
     if (strcmp(string, "char"  ) == 0) return(OSP_CHAR);
     if (strcmp(string, "double") == 0) return(OSP_DOUBLE);
     if (strcmp(string, "float" ) == 0) return(OSP_FLOAT);
@@ -222,7 +226,7 @@ namespace ospray {
     return(OSP_UNKNOWN);
   }
 
-  std::string stringForType(OSPDataType type)
+  std::string stringFor(OSPDataType type)
   {
     switch (type) {
     case OSP_VOID_PTR:          return "void_ptr";
@@ -231,19 +235,22 @@ namespace ospray {
     case OSP_DATA:              return "data";
     case OSP_DEVICE:            return "device";
     case OSP_FRAMEBUFFER:       return "framebuffer";
-    case OSP_GEOMETRY:          return "geometry";
+    case OSP_FUTURE:            return "future";
     case OSP_GEOMETRIC_MODEL:   return "geometric_model";
+    case OSP_GEOMETRY:          return "geometry";
+    case OSP_GROUP:             return "group";
+    case OSP_IMAGE_OPERATION:   return "image_operation";
+    case OSP_INSTANCE:          return "instance";
     case OSP_LIGHT:             return "light";
     case OSP_MATERIAL:          return "material";
-    case OSP_WORLD:             return "world";
-    case OSP_INSTANCE:          return "instance";
     case OSP_RENDERER:          return "renderer";
     case OSP_TEXTURE:           return "texture";
     case OSP_TRANSFER_FUNCTION: return "transfer_function";
     case OSP_VOLUME:            return "volume";
     case OSP_VOLUMETRIC_MODEL:  return "volumetric_model";
-    case OSP_PIXEL_OP:          return "pixel_op";
+    case OSP_WORLD:             return "world";
     case OSP_STRING:            return "string";
+    case OSP_BOOL:              return "bool";
     case OSP_CHAR:              return "char";
     case OSP_UCHAR:             return "uchar";
     case OSP_VEC2UC:            return "vec2uc";
@@ -271,7 +278,6 @@ namespace ospray {
     case OSP_VEC2F:             return "vec2f";
     case OSP_VEC3F:             return "vec3f";
     case OSP_VEC4F:             return "vec4f";
-    case OSP_VEC3FA:            return "vec3fa";
     case OSP_DOUBLE:            return "double";
     case OSP_BOX1I:             return "box1i";
     case OSP_BOX2I:             return "box2i";
@@ -285,18 +291,54 @@ namespace ospray {
     case OSP_LINEAR3F:          return "linear3f";
     case OSP_AFFINE2F:          return "affine2f";
     case OSP_AFFINE3F:          return "affine3f";
-    case OSP_UNKNOWN:           break;
+    case OSP_UNKNOWN:
+      return "unknown";
     }
 
     std::stringstream error;
-    error << __FILE__ << ":" << __LINE__ << ": unknown OSPDataType "
+    error << __FILE__ << ":" << __LINE__ << ": undefined OSPDataType "
           << (int)type;
     throw std::runtime_error(error.str());
   }
 
-  size_t sizeOf(const OSPTextureFormat type)
+  std::string stringFor(OSPTextureFormat format)
   {
-    switch (type) {
+    switch (format) {
+    case OSP_TEXTURE_RGBA8:
+      return "rgba8";
+    case OSP_TEXTURE_SRGBA:
+      return "srgba";
+    case OSP_TEXTURE_RGBA32F:
+      return "rgba32f";
+    case OSP_TEXTURE_RGB8:
+      return "rgb8";
+    case OSP_TEXTURE_SRGB:
+      return "srgb";
+    case OSP_TEXTURE_RGB32F:
+      return "rgb32f";
+    case OSP_TEXTURE_R8:
+      return "r8";
+    case OSP_TEXTURE_L8:
+      return "l8";
+    case OSP_TEXTURE_RA8:
+      return "ra8";
+    case OSP_TEXTURE_LA8:
+      return "la8";
+    case OSP_TEXTURE_R32F:
+      return "r32f";
+    case OSP_TEXTURE_FORMAT_INVALID:
+      return "invalid";
+    }
+
+    std::stringstream error;
+    error << __FILE__ << ":" << __LINE__ << ": undefined OSPTextureFormat "
+          << (int)format;
+    throw std::runtime_error(error.str());
+  }
+
+  size_t sizeOf(OSPTextureFormat format)
+  {
+    switch (format) {
       case OSP_TEXTURE_RGBA8:
       case OSP_TEXTURE_SRGBA:          return sizeof(uint32);
       case OSP_TEXTURE_RGBA32F:        return sizeof(vec4f);
@@ -308,12 +350,12 @@ namespace ospray {
       case OSP_TEXTURE_RA8:
       case OSP_TEXTURE_LA8:            return sizeof(vec2uc);
       case OSP_TEXTURE_R32F:           return sizeof(float);
-      case OSP_TEXTURE_FORMAT_INVALID: break;
+      case OSP_TEXTURE_FORMAT_INVALID: return 0;
     }
 
     std::stringstream error;
     error << __FILE__ << ":" << __LINE__ << ": unknown OSPTextureFormat "
-          << (int)type;
+          << (int)format;
     throw std::runtime_error(error.str());
   }
 
@@ -325,7 +367,7 @@ namespace ospray {
   OSPError loadLocalModule(const std::string &name)
   {
     std::string libName = "ospray_module_" + name;
-    loadLibrary(libName);
+    loadLibrary(libName, false);
 
     std::string initSymName = "ospray_init_module_" + name;
     void*initSym = getSymbol(initSymName);
@@ -370,13 +412,13 @@ namespace ospray {
       auto &device = api::currentDevice();
 
       device.lastErrorCode = e;
-      device.lastErrorMsg  = message;
+      device.lastErrorMsg  = "#ospray: " + message;
 
       device.error_fcn(e, message.c_str());
     } else {
       // NOTE: No device, but something should still get printed for the user to
       //       debug the calling application.
-      std::cerr << "#osp: INITIALIZATION ERROR --> " << message << std::endl;
+      std::cerr << "#ospray: INITIALIZATION ERROR --> " << message << std::endl;
     }
   }
 

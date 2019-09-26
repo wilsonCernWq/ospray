@@ -23,7 +23,7 @@
 
 namespace ospray {
 
-  class UnstructuredVolume : public Volume
+  class OSPRAY_SDK_INTERFACE UnstructuredVolume : public Volume
   {
    public:
     UnstructuredVolume();
@@ -35,19 +35,7 @@ namespace ospray {
     //! Allocate storage and populate the volume, called through the OSPRay API.
     void commit() override;
 
-    //! Copy voxels into the volume at the given index
-    /*! \returns 0 on error, any non-zero value indicates success */
-    int setRegion(const void *source_pointer,
-                  const vec3i &target_index,
-                  const vec3i &source_count) override;
-
    private:
-
-    // Helper functions for getting data array parameter
-    inline Data* getCellValueData()
-      { return getParamData("cell.value", getParamData("cellField")); }
-    inline Data* getVertexValueData()
-      { return getParamData("vertex.value", getParamData("field")); }
 
     // Read 32/64-bit integer value from given array
     inline uint64_t readInteger(const uint32_t* array,
@@ -117,7 +105,7 @@ namespace ospray {
     bool index32Bit{false};
 
     // Array of cell types
-    uint8_t* cellType{nullptr};
+    OSPUnstructuredCellType* cellType{nullptr};
     bool cellTypeArrayToDelete{false}; // to detect that deallocation is needed
 
     // Array of values defined per-cell

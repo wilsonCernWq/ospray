@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <ospray/ospray_cpp/ManagedObject.h>
+#include "ManagedObject.h"
 
 namespace ospray {
   namespace cpp    {
@@ -34,17 +34,13 @@ namespace ospray {
 
     inline Geometry::Geometry(const std::string &type)
     {
-      OSPGeometry c = ospNewGeometry(type.c_str());
-      if (c) {
-        ospObject = c;
-      } else {
-        throw std::runtime_error("Failed to create OSPGeometry!");
-      }
+      ospObject = ospNewGeometry(type.c_str());
     }
 
     inline Geometry::Geometry(const Geometry &copy) :
       ManagedObject_T<OSPGeometry>(copy.handle())
     {
+      ospRetain(copy.handle());
     }
 
     inline Geometry::Geometry(OSPGeometry existing) :

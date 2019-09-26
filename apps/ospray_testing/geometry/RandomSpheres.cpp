@@ -18,8 +18,9 @@
 // stl
 #include <random>
 // ospcommon
-#include "ospcommon/box.h"
-using namespace ospcommon;
+#include "ospcommon/math/box.h"
+
+using namespace ospcommon::math;
 
 namespace ospray {
   namespace testing {
@@ -58,7 +59,7 @@ namespace ospray {
 
       // populate the spheres
       box3f bounds;
-      std::vector<Sphere> spheres(numSpheres);
+      static std::vector<Sphere> spheres(numSpheres);
       std::vector<vec4f> colors(numSpheres);
 
       for (auto &s : spheres) {
@@ -79,18 +80,22 @@ namespace ospray {
       }
 
       // create a data object with all the sphere information
-      OSPData spheresData =
-          ospNewData(numSpheres * sizeof(Sphere), OSP_UCHAR, spheres.data());
+      OSPData positionData =
+          ospNewSharedData((char *)spheres.data() + offsetof(Sphere, center),
+              OSP_VEC3F,
+              numSpheres,
+              sizeof(Sphere));
+      OSPData radiusData =
+          ospNewSharedData((char *)spheres.data() + offsetof(Sphere, radius),
+              OSP_FLOAT,
+              numSpheres,
+              sizeof(Sphere));
 
       // create the sphere geometry, and assign attributes
       OSPGeometry spheresGeometry = ospNewGeometry("spheres");
 
-      ospSetData(spheresGeometry, "spheres", spheresData);
-      ospSetInt(spheresGeometry, "bytes_per_sphere", int(sizeof(Sphere)));
-      ospSetInt(
-          spheresGeometry, "offset_center", int(offsetof(Sphere, center)));
-      ospSetInt(
-          spheresGeometry, "offset_radius", int(offsetof(Sphere, radius)));
+      ospSetData(spheresGeometry, "sphere.position", positionData);
+      ospSetData(spheresGeometry, "sphere.radius", radiusData);
 
       // commit the spheres geometry
       ospCommit(spheresGeometry);
@@ -99,7 +104,7 @@ namespace ospray {
 
       OSPData colorData = ospNewData(numSpheres, OSP_VEC4F, colors.data());
 
-      ospSetData(model, "color", colorData);
+      ospSetData(model, "prim.color", colorData);
 
       // create glass material and assign to geometry
       OSPMaterial glassMaterial =
@@ -110,23 +115,29 @@ namespace ospray {
       ospSetObject(model, "material", glassMaterial);
 
       // release handles we no longer need
-      ospRelease(spheresData);
+      ospRelease(positionData);
+      ospRelease(radiusData);
       ospRelease(colorData);
       ospRelease(glassMaterial);
 
       ospCommit(model);
 
-      OSPInstance instance = ospNewInstance();
-      auto instances       = ospNewData(1, OSP_OBJECT, &model);
-      ospSetData(instance, "geometries", instances);
+      OSPGroup group = ospNewGroup();
+      auto models = ospNewData(1, OSP_GEOMETRIC_MODEL, &model);
+      ospSetData(group, "geometry", models);
+      ospCommit(group);
+      ospRelease(models);
+
+      OSPInstance instance = ospNewInstance(group);
       ospCommit(instance);
-      ospRelease(instances);
 
       OSPTestingGeometry retval;
       retval.geometry = spheresGeometry;
       retval.model    = model;
+      retval.group    = group;
       retval.instance = instance;
-      retval.bounds   = reinterpret_cast<osp_box3f &>(bounds);
+
+      std::memcpy(&retval.bounds, &bounds, sizeof(bounds));
 
       return retval;
     }

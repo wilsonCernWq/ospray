@@ -24,9 +24,9 @@ namespace ospray {
 
   GeometricModel::GeometricModel(Geometry *_geometry)
   {
-    geometry = _geometry;
+    geom = _geometry;
 
-    this->ispcEquivalent = ispc::GeometricModel_create(this, geometry->getIE());
+    this->ispcEquivalent = ispc::GeometricModel_create(this);
 
     setMaterialList(nullptr);
   }
@@ -36,25 +36,23 @@ namespace ospray {
     return "ospray::GeometricModel";
   }
 
-  void GeometricModel::setMaterial(Material *mat)
+  void GeometricModel::setMaterial()
   {
-    OSPMaterial ospMat = (OSPMaterial)mat;
-    auto *data         = new Data(1, OSP_OBJECT, &ospMat);
-    setMaterialList(data);
+    auto *data = new Data(&material.ptr, OSP_MATERIAL, vec3ui(1), vec3l(0));
+    setMaterialList(&(data->as<Material *>()));
     data->refDec();
   }
 
-  void GeometricModel::setMaterialList(Data *matListData)
+  void GeometricModel::setMaterialList(const DataT<Material *> *matListData)
   {
-    if (!matListData || matListData->numItems == 0) {
+    if (!matListData || matListData->size() == 0) {
       ispc::GeometricModel_setMaterialList(this->getIE(), 0, nullptr);
       return;
     }
 
     materialListData = matListData;
-    materialList     = (Material **)materialListData->data;
-
-    const int numMaterials = materialListData->numItems;
+    materialList = materialListData->data();
+    const int numMaterials = materialListData->size();
     ispcMaterialPtrs.resize(numMaterials);
     for (int i = 0; i < numMaterials; i++)
       ispcMaterialPtrs[i] = materialList[i]->getIE();
@@ -65,20 +63,24 @@ namespace ospray {
 
   void GeometricModel::commit()
   {
-    colorData = getParamData("color", getParamData("prim.color"));
+    colorData = getParamDataT<vec4f>("prim.color");
 
-    if (colorData && colorData->numItems != geometry->numPrimitives()) {
-      throw std::runtime_error(
-          "number of colors does not match number of primitives!");
+    if (colorData && colorData->size() != geom->numPrimitives()) {
+      postStatusMsg(1)
+          << toString()
+          << " number of colors does not match number of primitives, ignoring 'prim.color'";
+      colorData = nullptr;
     }
 
-    prim_materialIDData       = getParamData("prim.materialID");
-    Data *materialListDataPtr = getParamData("materialList");
+    prim_materialIDData = getParamDataT<uint32_t>("prim.materialID");
+    auto materialListDataPtr = getParamDataT<Material *>("materialList");
 
-    if (prim_materialIDData &&
-        prim_materialIDData->numItems != geometry->numPrimitives()) {
-      throw std::runtime_error(
-          "number of prim.materialID does not match number of primitives!");
+    if (prim_materialIDData
+        && prim_materialIDData->size() != geom->numPrimitives()) {
+      postStatusMsg(1)
+          << toString()
+          << " number of primitive material IDs does not match number of primitives, ignoring 'prim.materialID'";
+      prim_materialIDData = nullptr;
     }
 
     material = (Material *)getParamObject("material");
@@ -86,22 +88,17 @@ namespace ospray {
     if (materialListDataPtr && prim_materialIDData)
       setMaterialList(materialListDataPtr);
     else if (material)
-      setMaterial(material.ptr);
+      setMaterial();
 
-    ispc::GeometricModel_set(
-        getIE(),
-        colorData ? colorData->data : nullptr,
-        prim_materialIDData ? prim_materialIDData->data : nullptr);
+    ispc::GeometricModel_set(getIE(),
+        colorData ? colorData->data() : nullptr,
+        prim_materialIDData ? prim_materialIDData->data() : nullptr);
   }
 
-  RTCGeometry GeometricModel::embreeGeometryHandle() const
+  void GeometricModel::setGeomIE(void *geomIE, int geomID)
   {
-    return geometry->embreeGeometry;
-  }
-
-  void GeometricModel::setGeomID(int geomID)
-  {
-    ispc::Geometry_set_geomID(geometry->getIE(), geomID);
+    ispc::Geometry_set_geomID(geomIE, geomID);
+    ispc::GeometricModel_setGeomIE(getIE(), geomIE);
   }
 
 }  // namespace ospray
