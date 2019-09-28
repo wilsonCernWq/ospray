@@ -45,8 +45,6 @@ int main(int argc, const char **argv)
   OSPTestingGeometry subdivisionGeometry =
       ospTestingNewGeometry("subdivision_cube", renderer_type.c_str());
   instanceHandles.push_back(subdivisionGeometry.instance);
-  ospRelease(subdivisionGeometry.geometry);
-  ospRelease(subdivisionGeometry.model);
 
   // add in a ground plane geometry
   OSPInstance plane = createGroundPlane(renderer_type);
@@ -55,23 +53,21 @@ int main(int argc, const char **argv)
   OSPData geomInstances =
       ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
 
-  ospSetData(world, "instance", geomInstances);
+  ospSetObject(world, "instance", geomInstances);
   ospRelease(geomInstances);
 
   for (auto inst : instanceHandles)
     ospRelease(inst);
+
+  OSPData lightsData = ospTestingNewLights("ambient_and_directional");
+  ospSetObject(world, "light", lightsData);
+  ospRelease(lightsData);
 
   // commit the world
   ospCommit(world);
 
   // create OSPRay renderer
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
-
-  OSPData lightsData = ospTestingNewLights("ambient_and_directional");
-  ospSetData(renderer, "light", lightsData);
-  ospRelease(lightsData);
-
-  ospCommit(renderer);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
   // frame buffer and camera directly
@@ -102,7 +98,7 @@ int main(int argc, const char **argv)
       OSPData vertexCreaseWeightsData = ospNewData(
           vertexCreaseWeights.size(), OSP_FLOAT, vertexCreaseWeights.data());
 
-      ospSetData(subdivisionGeometry.geometry,
+      ospSetObject(subdivisionGeometry.geometry,
                  "vertexCrease.weight",
                  vertexCreaseWeightsData);
       ospRelease(vertexCreaseWeightsData);
@@ -125,7 +121,7 @@ int main(int argc, const char **argv)
       OSPData edgeCreaseWeightsData = ospNewData(
           edgeCreaseWeights.size(), OSP_FLOAT, edgeCreaseWeights.data());
 
-      ospSetData(subdivisionGeometry.geometry,
+      ospSetObject(subdivisionGeometry.geometry,
                  "edgeCrease.weight",
                  edgeCreaseWeightsData);
       ospRelease(edgeCreaseWeightsData);
@@ -138,6 +134,10 @@ int main(int argc, const char **argv)
 
   // start the GLFW main loop, which will continuously render
   glfwOSPRayWindow->mainLoop();
+
+  ospRelease(subdivisionGeometry.geometry);
+  ospRelease(subdivisionGeometry.model);
+  ospRelease(subdivisionGeometry.group);
 
   // cleanly shut OSPRay down
   ospShutdown();

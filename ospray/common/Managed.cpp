@@ -46,8 +46,14 @@ namespace ospray {
   {
     for (auto p = params_begin(); p != params_end(); ++p) {
       if (!(*p)->query)
-        postStatusMsg() << "Found unused parameter '" << (*p)->name << "'";
+        postStatusMsg(1) << toString() << ": found unused parameter '"
+                         << (*p)->name << "'";
     }
+  }
+
+  box3f ManagedObject::getBounds() const
+  {
+    return box3f(empty);
   }
 
   ManagedObject *ManagedObject::getParamObject(const char *name,
@@ -56,14 +62,7 @@ namespace ospray {
     return getParam<ManagedObject *>(name, valIfNotFound);
   }
 
-  Data *ManagedObject::getParamData(const char *name, Data *valIfNotFound)
-  {
-    auto *obj = getParam<Data *>(name, valIfNotFound);
 
-    if (obj == nullptr)
-      obj = (Data *)getParamObject(name, (ManagedObject *)valIfNotFound);
-
-    return obj;
-  }
+  OSPTYPEFOR_DEFINITION(ManagedObject *);
 
 }  // namespace ospray

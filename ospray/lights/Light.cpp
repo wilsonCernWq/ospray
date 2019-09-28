@@ -21,6 +21,11 @@
 
 namespace ospray {
 
+  Light::Light()
+  {
+    managedObjectType = OSP_LIGHT;
+  }
+
   void Light::commit()
   {
     color     = getParam<vec3f>("color", vec3f(1.f));
@@ -40,4 +45,6 @@ namespace ospray {
     return createInstanceHelper<Light, OSP_LIGHT>(type);
   }
 
-}
+  OSPTYPEFOR_DEFINITION(Light *);
+
+} // namespace ospray

@@ -33,29 +33,19 @@ int main(int argc, const char **argv)
   // create the world
   OSPWorld world = ospNewWorld();
 
-  std::vector<OSPInstance> instanceHandles;
-
   // generate streamlies
   OSPTestingGeometry streamlines =
       ospTestingNewGeometry("streamlines", renderer_type.c_str());
-  instanceHandles.push_back(streamlines.instance);
-  ospRelease(streamlines.model);
 
-  OSPData geomInstances =
-      ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
+  ospSetObjectAsData(world, "instance", OSP_INSTANCE, streamlines.instance);
 
-  ospSetData(world, "instance", geomInstances);
-  ospRelease(geomInstances);
+  OSPData lightsData = ospTestingNewLights("ambient_and_directional");
+  ospSetObject(world, "light", lightsData);
+  ospRelease(lightsData);
 
   ospCommit(world);
 
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
-
-  OSPData lightsData = ospTestingNewLights("ambient_and_directional");
-  ospSetData(renderer, "light", lightsData);
-  ospRelease(lightsData);
-
-  ospCommit(renderer);
 
   // enable/disable smoothing/radius on streamlines
   bool smooth = false;
@@ -75,7 +65,7 @@ int main(int argc, const char **argv)
     if (ImGui::Checkbox("per-vertex radius", &radius)) {
       update = true;
       if (radius)
-        ospSetData(streamlines.geometry, "vertex.radius", streamlines.auxData);
+        ospSetObject(streamlines.geometry, "vertex.radius", streamlines.auxData);
       else
         ospRemoveParam(streamlines.geometry, "vertex.radius");
     }
@@ -95,6 +85,10 @@ int main(int argc, const char **argv)
 
   // start the GLFW main loop, which will continuously render
   glfwOSPRayWindow->mainLoop();
+
+  ospRelease(streamlines.geometry);
+  ospRelease(streamlines.model);
+  ospRelease(streamlines.group);
 
   // cleanly shut OSPRay down
   ospShutdown();

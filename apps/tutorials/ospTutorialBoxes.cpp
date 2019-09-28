@@ -39,35 +39,24 @@ int main(int argc, const char **argv)
   // create the world which will contain all of our geometries
   OSPWorld world = ospNewWorld();
 
-  std::vector<OSPInstance> instanceHandles;
-
   // add in boxes geometry
   OSPTestingGeometry boxes =
       ospTestingNewGeometry("boxes", renderer_type.c_str());
-  instanceHandles.push_back(boxes.instance);
+
+  ospSetObjectAsData(world, "instance", OSP_INSTANCE, boxes.instance);
+
   ospRelease(boxes.geometry);
   ospRelease(boxes.model);
+  ospRelease(boxes.group);
+  ospRelease(boxes.instance);
 
-  OSPData geomInstances =
-      ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
-
-  ospSetData(world, "instance", geomInstances);
-  ospRelease(geomInstances);
-
-  for (auto inst : instanceHandles)
-    ospRelease(inst);
-
-  // commit the world
+  OSPData lightsData = ospTestingNewLights("ambient_only");
+  ospSetObject(world, "light", lightsData);
+  ospRelease(lightsData);
   ospCommit(world);
 
   // create OSPRay renderer
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
-
-  OSPData lightsData = ospTestingNewLights("ambient_only");
-  ospSetData(renderer, "light", lightsData);
-  ospRelease(lightsData);
-
-  ospCommit(renderer);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
   // frame buffer and camera directly

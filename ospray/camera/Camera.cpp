@@ -26,6 +26,11 @@ namespace ospray {
   {
   }
 
+  Camera::Camera()
+  {
+    managedObjectType = OSP_CAMERA;
+  }
+
   Camera *Camera::createInstance(const char *type)
   {
     return createInstanceHelper<Camera, OSP_CAMERA>(type);
@@ -69,5 +74,7 @@ namespace ospray {
   {
     NOT_IMPLEMENTED;
   }
+
+  OSPTYPEFOR_DEFINITION(Camera *);
 
 }  // namespace ospray

@@ -54,6 +54,8 @@ namespace ospray {
 
         rtcAttachGeometry(geometryScene, eInst);
 
+        rtcReleaseGeometry(eInst);
+
         numGeomInstances++;
       }
 
@@ -65,6 +67,8 @@ namespace ospray {
         rtcCommitGeometry(eInst);
 
         rtcAttachGeometry(volumeScene, eInst);
+
+        rtcReleaseGeometry(eInst);
 
         numVolumeInstances++;
       }
@@ -112,6 +116,7 @@ namespace ospray {
     freeAndNullifyEmbreeScene(embreeSceneHandleVolumes);
 
     instances = getParamDataT<Instance *>("instance");
+    lights = getParamDataT<Light *>("light");
 
     // get rid of stride for now
     if (instances && !instances->compact()) {
@@ -162,5 +167,21 @@ namespace ospray {
                     embreeSceneHandleGeometries,
                     embreeSceneHandleVolumes);
   }
+
+  box3f World::getBounds() const
+  {
+    box3f sceneBounds;
+
+    box4f bounds; // NOTE(jda) - Embree expects box4f, NOT box3f...
+    rtcGetSceneBounds(embreeSceneHandleGeometries, (RTCBounds *)&bounds);
+    sceneBounds.extend(box3f(vec3f(bounds.lower[0]), vec3f(bounds.upper[0])));
+
+    rtcGetSceneBounds(embreeSceneHandleVolumes, (RTCBounds *)&bounds);
+    sceneBounds.extend(box3f(vec3f(bounds.lower[0]), vec3f(bounds.upper[0])));
+
+    return sceneBounds;
+  }
+
+  OSPTYPEFOR_DEFINITION(World *);
 
 }  // namespace ospray

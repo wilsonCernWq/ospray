@@ -237,6 +237,14 @@ extern "C" {
 
   OSPRAY_INTERFACE OSPWorld ospNewWorld();
 
+  typedef struct
+  {
+    float lower[3];
+    float upper[3];
+  } OSPBounds;
+
+  OSPRAY_INTERFACE OSPBounds ospGetBounds(OSPObject);
+
   // Object + Parameter Lifetime Management ///////////////////////////////////
 
   OSPRAY_INTERFACE void ospSetParam(OSPObject, const char *id, OSPDataType, const void *mem);
@@ -276,8 +284,7 @@ extern "C" {
   OSPRAY_INTERFACE OSPRenderer ospNewRenderer(const char *type);
 
   // Render a frame
-  OSPRAY_INTERFACE float ospRenderFrame(OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld);
-  OSPRAY_INTERFACE OSPFuture ospRenderFrameAsync(OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld);
+  OSPRAY_INTERFACE OSPFuture ospRenderFrame(OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld);
 
   // Ask if all events tracked by an OSPFuture handle have been completed
   OSPRAY_INTERFACE int ospIsReady(OSPFuture, OSPSyncEvent OSP_DEFAULT_VAL(OSP_TASK_FINISHED));
@@ -291,7 +298,8 @@ extern "C" {
   // Get the completion state of the given task [0.f-1.f]
   OSPRAY_INTERFACE float ospGetProgress(OSPFuture);
 
-  typedef struct {
+  typedef struct
+  {
     int hasHit;
     float worldPosition[3];
     OSPInstance instance;
@@ -310,5 +318,3 @@ extern "C" {
 #ifdef __cplusplus
 } // extern "C"
 #endif
-
-#include "detail/ospray_util.h"

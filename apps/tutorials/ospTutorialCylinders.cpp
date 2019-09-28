@@ -45,8 +45,7 @@ int main(int argc, const char **argv)
   instanceHandles.push_back(cylinders.instance);
   ospRelease(cylinders.geometry);
   ospRelease(cylinders.model);
-
-  instanceHandles.push_back(cylinders.instance);
+  ospRelease(cylinders.group);
 
   // add in a ground plane geometry
   OSPInstance planeInstance = createGroundPlane(renderer_type, 2.0f);
@@ -56,7 +55,7 @@ int main(int argc, const char **argv)
   OSPData geomInstances =
       ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
 
-  ospSetData(world, "instance", geomInstances);
+  ospSetObject(world, "instance", geomInstances);
   ospRelease(geomInstances);
 
   for (auto inst : instanceHandles)
@@ -69,10 +68,8 @@ int main(int argc, const char **argv)
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   OSPData lightsData = ospTestingNewLights("ambient_only");
-  ospSetData(renderer, "light", lightsData);
+  ospSetObject(renderer, "light", lightsData);
   ospRelease(lightsData);
-
-  ospCommit(renderer);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
   // frame buffer and camera directly

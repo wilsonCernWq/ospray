@@ -47,20 +47,16 @@ int main(int argc, const char **argv)
   instanceHandles.push_back(boxes.instance);
   ospRelease(boxes.geometry);
   ospRelease(boxes.model);
+  ospRelease(boxes.group);
 
   OSPData geomInstances =
       ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
 
-  ospSetData(world, "instance", geomInstances);
+  ospSetObject(world, "instance", geomInstances);
   ospRelease(geomInstances);
 
   for (auto inst : instanceHandles)
     ospRelease(inst);
-
-  ospCommit(world);
-
-  // create OSPRay renderer
-  OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   // Set up area light in the ceiling
   OSPLight light = ospNewLight("quad");
@@ -73,12 +69,15 @@ int main(int argc, const char **argv)
   ospCommit(light);
   OSPData lights = ospNewData(1, OSP_LIGHT, &light);
   ospCommit(lights);
-  ospSetData(renderer, "light", lights);
+  ospSetObject(world, "light", lights);
 
-  // finalize the renderer
-  ospCommit(renderer);
+  ospCommit(world);
+
   ospRelease(light);
   ospRelease(lights);
+
+  // create OSPRay renderer
+  OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
   // frame buffer and camera directly

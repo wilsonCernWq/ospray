@@ -16,42 +16,61 @@
 
 #pragma once
 
-// ospray stuff
-#include "./Data.h"
-#include "./Managed.h"
-#include "Instance.h"
-#include "lights/Light.h"
-// stl
-#include <vector>
-// embree
-#include "embree3/rtcore.h"
+#include "ManagedObject.h"
 
 namespace ospray {
+  namespace cpp {
 
-  struct OSPRAY_SDK_INTERFACE World : public ManagedObject
-  {
-    World();
-    virtual ~World() override;
+    class Future : public ManagedObject_T<OSPFuture>
+    {
+     public:
+      Future(const Future &copy);
+      Future(OSPFuture existing = nullptr);
+      ~Future() override;
 
-    std::string toString() const override;
-    void commit() override;
+      bool isReady(OSPSyncEvent = OSP_TASK_FINISHED);
+      void wait(OSPSyncEvent = OSP_TASK_FINISHED);
+      void cancel();
+      float progress();
+    };
 
-    box3f getBounds() const override;
+    // Inlined function definitions ///////////////////////////////////////////
 
-    // Data members //
+    inline Future::Future(const Future &copy)
+        : ManagedObject_T<OSPFuture>(copy.handle())
+    {
+      ospRetain(copy.handle());
+    }
 
-    Ref<const DataT<Instance *>> instances;
-    Ref<const DataT<Light *>> lights;
+    inline Future::Future(OSPFuture existing)
+        : ManagedObject_T<OSPFuture>(existing)
+    {
+    }
 
-    std::vector<void*> instanceIEs;
-    int numGeometries{0};
-    int numVolumes{0};
+    inline Future::~Future()
+    {
+      wait();
+    }
 
-    //! \brief the embree scene handle for this geometry
-    RTCScene embreeSceneHandleGeometries{nullptr};
-    RTCScene embreeSceneHandleVolumes{nullptr};
-  };
+    inline bool Future::isReady(OSPSyncEvent e)
+    {
+      return ospIsReady(handle(), e);
+    }
 
-  OSPTYPEFOR_SPECIALIZATION(World *, OSP_WORLD);
+    inline void Future::wait(OSPSyncEvent e)
+    {
+      ospWait(handle(), e);
+    }
 
+    inline void Future::cancel()
+    {
+      ospCancel(handle());
+    }
+
+    inline float Future::progress()
+    {
+      return ospGetProgress(handle());
+    }
+
+  }  // namespace cpp
 }  // namespace ospray

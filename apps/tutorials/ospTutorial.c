@@ -32,7 +32,7 @@
 #else
 #  include <alloca.h>
 #endif
-#include "ospray/ospray.h"
+#include "ospray/ospray_util.h"
 
 // helper function to write the rendered image as PPM file
 void writePPM(const char *fileName,
@@ -83,11 +83,15 @@ int main(int argc, const char **argv) {
   int32_t index[] = { 0, 1, 2,
                       1, 2, 3 };
 
+  printf("initialize OSPRay...");
 
   // initialize OSPRay; OSPRay parses (and removes) its commandline parameters, e.g. "--osp:debug"
   OSPError init_error = ospInit(&argc, argv);
   if (init_error != OSP_NO_ERROR)
     return init_error;
+
+  printf("done!\n");
+  printf("setting up camera...");
 
   // create and setup camera
   OSPCamera camera = ospNewCamera("perspective");
@@ -97,6 +101,8 @@ int main(int argc, const char **argv) {
   ospSetParam(camera, "up", OSP_VEC3F, cam_up);
   ospCommit(camera); // commit each object to indicate modifications are done
 
+  printf("done!\n");
+  printf("setting up scene...");
 
   // create and setup model and mesh
   OSPGeometry mesh = ospNewGeometry("triangles");
@@ -107,17 +113,17 @@ int main(int argc, const char **argv) {
   // ospCopyData1D(data, managed, 0);
 
   ospCommit(data);
-  ospSetData(mesh, "vertex.position", data);
+  ospSetObject(mesh, "vertex.position", data);
   ospRelease(data); // we are done using this handle
 
   data = ospNewSharedData1D(color, OSP_VEC4F, 4);
   ospCommit(data);
-  ospSetData(mesh, "vertex.color", data);
+  ospSetObject(mesh, "vertex.color", data);
   ospRelease(data);
 
   data = ospNewSharedData1D(index, OSP_VEC3UI, 2);
   ospCommit(data);
-  ospSetData(mesh, "index", data);
+  ospSetObject(mesh, "index", data);
   ospRelease(data);
 
   ospCommit(mesh);
@@ -129,11 +135,9 @@ int main(int argc, const char **argv) {
 
   // put the model into a group (collection of models)
   OSPGroup group = ospNewGroup();
-  OSPData geometricModels = ospNewSharedData1D(&model, OSP_GEOMETRIC_MODEL, 1);
-  ospSetData(group, "geometry", geometricModels);
+  ospSetObjectAsData(group, "geometry", OSP_GEOMETRIC_MODEL, model);
   ospCommit(group);
   ospRelease(model);
-  ospRelease(geometricModels);
 
   // put the group into an instance (give the group a world transform)
   OSPInstance instance = ospNewInstance(group);
@@ -142,54 +146,84 @@ int main(int argc, const char **argv) {
 
   // put the instance in the world
   OSPWorld world = ospNewWorld();
-  OSPData instances = ospNewSharedData1D(&instance, OSP_INSTANCE, 1);
-  ospSetData(world, "instance", instances);
-  ospCommit(world);
+  ospSetObjectAsData(world, "instance", OSP_INSTANCE, instance);
   ospRelease(instance);
-  ospRelease(instances);
-
-  // create renderer
-  OSPRenderer renderer = ospNewRenderer("scivis"); // choose Scientific Visualization renderer
 
   // create and setup light for Ambient Occlusion
   OSPLight light = ospNewLight("ambient");
   ospCommit(light);
-  OSPData lights = ospNewSharedData1D(&light, OSP_LIGHT, 1);
-  ospCommit(lights);
+  ospSetObjectAsData(world, "light", OSP_LIGHT, light);
+  ospRelease(light);
+
+  ospCommit(world);
+
+  printf("done!\n");
+
+  // print out world bounds
+  OSPBounds worldBounds = ospGetBounds(world);
+  printf("\nworld bounds: ({%f, %f, %f}, {%f, %f, %f}\n\n",
+         worldBounds.lower[0], worldBounds.lower[1], worldBounds.lower[2],
+         worldBounds.upper[0], worldBounds.upper[1], worldBounds.upper[2]);
+
+  printf("setting up renderer...");
+
+  // create renderer
+  OSPRenderer renderer =
+      ospNewRenderer("scivis"); // choose Scientific Visualization renderer
 
   // complete setup of renderer
   ospSetInt(renderer, "aoSamples", 1);
   ospSetFloat(renderer, "bgColor", 1.0f); // white, transparent
-  ospSetObject(renderer, "light", lights);
   ospCommit(renderer);
 
   // create and setup framebuffer
   OSPFrameBuffer framebuffer = ospNewFrameBuffer(imgSize_x, imgSize_y, OSP_FB_SRGBA, OSP_FB_COLOR | /*OSP_FB_DEPTH |*/ OSP_FB_ACCUM);
   ospResetAccumulation(framebuffer);
 
+  printf("rendering initial frame to firstFrame.ppm...");
+
   // render one frame
-  ospRenderFrame(framebuffer, renderer, camera, world);
+  ospRenderFrameBlocking(framebuffer, renderer, camera, world);
 
   // access framebuffer and write its content as PPM file
   const uint32_t * fb = (uint32_t*)ospMapFrameBuffer(framebuffer, OSP_FB_COLOR);
   writePPM("firstFrame.ppm", imgSize_x, imgSize_y, fb);
   ospUnmapFrameBuffer(fb, framebuffer);
 
+  printf("done!\n");
+  printf("rendering 10 accumulated frames to accumulatedFrame.ppm...");
+
   // render 10 more frames, which are accumulated to result in a better converged image
   for (int frames = 0; frames < 10; frames++)
-    ospRenderFrame(framebuffer, renderer, camera, world);
+    ospRenderFrameBlocking(framebuffer, renderer, camera, world);
 
   fb = (uint32_t*)ospMapFrameBuffer(framebuffer, OSP_FB_COLOR);
   writePPM("accumulatedFrame.ppm", imgSize_x, imgSize_y, fb);
   ospUnmapFrameBuffer(fb, framebuffer);
 
+  printf("done!\n");
+
+  OSPPickResult p;
+  ospPick(&p, framebuffer, renderer, camera, world, 0.5f, 0.5f);
+
+  printf("\nospPick() center of screen --> [inst: %p, model: %p, prim: %u]\n",
+         p.instance,
+         p.model,
+         p.primID);
+
+  printf("\ncleaning up objects...");
+
+  // cleanup pick handles (because p.hasHit was 'true')
+  ospRelease(p.instance);
+  ospRelease(p.model);
+
   // final cleanups
   ospRelease(renderer);
   ospRelease(camera);
-  ospRelease(lights);
-  ospRelease(light);
   ospRelease(framebuffer);
   ospRelease(world);
+
+  printf("done!\n");
 
   ospShutdown();
 

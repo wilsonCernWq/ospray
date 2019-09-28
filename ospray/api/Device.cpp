@@ -125,6 +125,8 @@ namespace ospray {
       if (debugMode) {
         logLevel   = 2;
         numThreads = 1;
+        installStatusMsgFunc(*this, std::cout);
+        installErrorMsgFunc(*this, std::cerr);
       }
 
       threadAffinity = AUTO_DETECT;
@@ -188,4 +190,7 @@ namespace ospray {
       }
     }
   } // ::ospray::api
+
+  OSPTYPEFOR_DEFINITION(api::Device *);
+
 } // ::ospray

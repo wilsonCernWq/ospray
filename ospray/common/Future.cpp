@@ -14,21 +14,20 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#pragma once
-
-#include "./Managed.h"
+#include "Future.h"
 
 namespace ospray {
-  /*! \brief implements the basic abstraction for anything that is a 'texture'.
 
-   */
-  struct OSPRAY_SDK_INTERFACE Texture : public ManagedObject
+  Future::Future()
   {
-    virtual ~Texture() override = default;
-    //! \brief common function to help printf-debugging
-    /*! Every derived class should override this! */
-    virtual std::string toString() const { return "ospray::Texture"; }
-  };
+    managedObjectType = OSP_FUTURE;
+  }
 
-  OSPTYPEFOR_SPECIALIZATION(Texture *, OSP_TEXTURE);
-}
+  std::string Future::toString() const
+  {
+    return "ospray::Future";
+  }
+
+  OSPTYPEFOR_DEFINITION(Future *);
+
+} // namespace ospray

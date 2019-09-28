@@ -57,7 +57,7 @@ int main(int argc, const char **argv)
 
   OSPGroup group = ospNewGroup();
   OSPData volumes = ospNewData(1, OSP_VOLUMETRIC_MODEL, &volumeModel);
-  ospSetData(group, "volume", volumes);
+  ospSetObject(group, "volume", volumes);
   ospRelease(volumes);
   ospCommit(group);
 
@@ -66,21 +66,17 @@ int main(int argc, const char **argv)
 
   // create a data array of all instances for the world
   OSPData volumeInstances = ospNewData(1, OSP_INSTANCE, &instance);
-  ospSetData(world, "instance", volumeInstances);
+  ospSetObject(world, "instance", volumeInstances);
   ospRelease(volumeInstances);
+
+  OSPData lightsData = ospTestingNewLights("ambient_only");
+  ospSetObject(world, "light", lightsData);
+  ospCommit(world);
 
   // create OSPRay renderer
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
-  OSPData lightsData = ospTestingNewLights("ambient_only");
-  ospSetData(renderer, "light", lightsData);
-
-  ospCommit(renderer);
-
   bounds = reinterpret_cast<box3f &>(testData.bounds);
-
-  // commit the world
-  ospCommit(world);
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
   // frame buffer and camera directly

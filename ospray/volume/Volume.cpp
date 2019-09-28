@@ -22,6 +22,11 @@
 
 namespace ospray {
 
+  Volume::Volume()
+  {
+    managedObjectType = OSP_VOLUME;
+  }
+
   Volume::~Volume()
   {
     if (embreeGeometry)
@@ -53,5 +58,7 @@ namespace ospray {
     embreeGeometry =
         rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_USER);
   }
+
+  OSPTYPEFOR_DEFINITION(Volume *);
 
 }  // namespace ospray

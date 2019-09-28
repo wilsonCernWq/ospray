@@ -24,6 +24,7 @@ namespace ospray {
 
   GeometricModel::GeometricModel(Geometry *_geometry)
   {
+    managedObjectType = OSP_GEOMETRIC_MODEL;
     geom = _geometry;
 
     this->ispcEquivalent = ispc::GeometricModel_create(this);
@@ -100,5 +101,7 @@ namespace ospray {
     ispc::Geometry_set_geomID(geomIE, geomID);
     ispc::GeometricModel_setGeomIE(getIE(), geomIE);
   }
+
+  OSPTYPEFOR_DEFINITION(GeometricModel *);
 
 }  // namespace ospray

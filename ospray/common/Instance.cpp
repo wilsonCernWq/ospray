@@ -50,4 +50,11 @@ namespace ospray {
                        (ispc::AffineSpace3f &)rcpXfm);
   }
 
+  box3f Instance::getBounds() const
+  {
+    return xfmBounds(instanceXfm, group->getBounds());
+  }
+
+  OSPTYPEFOR_DEFINITION(Instance *);
+
 }  // namespace ospray

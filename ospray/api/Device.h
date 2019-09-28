@@ -92,7 +92,8 @@ namespace ospray {
 
       // Top-level Worlds /////////////////////////////////////////////////////
 
-      virtual OSPWorld newWorld() = 0;
+      virtual OSPWorld newWorld()        = 0;
+      virtual box3f getBounds(OSPObject) = 0;
 
       // Object + Parameter Lifetime Management ///////////////////////////////
 
@@ -129,15 +130,10 @@ namespace ospray {
 
       virtual OSPRenderer newRenderer(const char *type) = 0;
 
-      virtual float renderFrame(OSPFrameBuffer,
-                                OSPRenderer,
-                                OSPCamera,
-                                OSPWorld) = 0;
-
-      virtual OSPFuture renderFrameAsync(OSPFrameBuffer,
-                                         OSPRenderer,
-                                         OSPCamera,
-                                         OSPWorld) = 0;
+      virtual OSPFuture renderFrame(OSPFrameBuffer,
+                                    OSPRenderer,
+                                    OSPCamera,
+                                    OSPWorld) = 0;
 
       virtual int isReady(OSPFuture, OSPSyncEvent) = 0;
       virtual void wait(OSPFuture, OSPSyncEvent)   = 0;

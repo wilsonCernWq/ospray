@@ -36,9 +36,10 @@ submodule:
 if_is_devel_then = if [[ "${CI_BUILD_REF_NAME}" == "devel" || (-d ../.git && "`git rev-parse --abbrev-ref HEAD`" == "devel") ]] ; then
 
 tmp/version: ../cmake/ospray_version.cmake $(wildcard ../.git/HEAD)
-	sed -n $< -e "s/^SET(OSPRAY_VERSION_MAJOR \([0-9]\+\))/\1./ip" | tr -d '\n' > $@
-	sed -n $< -e "s/^SET(OSPRAY_VERSION_MINOR \([0-9]\+\))/\1./ip" | tr -d '\n' >> $@
-	sed -n $< -e "s/^SET(OSPRAY_VERSION_PATCH \([0-9]\+\))/\1/ip" | tr -d '\n' >> $@
+	sed -n $< -e "s/^set(OSPRAY_VERSION_MAJOR \([0-9]\+\))/\1./ip" | tr -d '\n' > $@
+	sed -n $< -e "s/^set(OSPRAY_VERSION_MINOR \([0-9]\+\))/\1./ip" | tr -d '\n' >> $@
+	sed -n $< -e "s/^set(OSPRAY_VERSION_PATCH \([0-9]\+\))/\1/ip" | tr -d '\n' >> $@
+	sed -n $< -e 's/^set(OSPRAY_VERSION_NOTE "")//;t;s/^set(OSPRAY_VERSION_NOTE "\([^"]\+\)")/ (\1)/ip' | tr -d '\n' >> $@
 	$(if_is_devel_then) echo " (devel)"; else echo; fi >> $@
 
 replace_version = sed -e "s/<OSPRAY_VERSION>/`cat tmp/version`/g" $< > $@
@@ -113,7 +114,7 @@ www/pvospray.html: pvospray.md
 www/displaywall.html: displaywall.md
 www/fiu_comparison.html: fiu_comparison.md
 www/legal.html: legal.md
-www/documentation.html: documentation.md tmp/api_html.md mpi.md tmp/scenegraph_html.md examples.md
+www/documentation.html: documentation.md tmp/api_html.md mpi.md examples.md
 
 
 ### images
@@ -159,7 +160,7 @@ convert_nbsp_width = sed -e 's@\\ @ @g' -e 's/" style="width:/" width="/g' -e "
 tmp/api.md: api.md tmp/links.md tmp/images_web.md
 	$(PANDOC) $+ --indented-code-classes=cpp -t markdown-fenced_code_attributes -o $@
 
-../README.md: tmp/readme_head.md overview.md gitter.md compilation.md documentation.md tmp/api.md mpi.md scenegraph.md examples.md tmp/links.md tmp/images_web.md
+../README.md: tmp/readme_head.md overview.md gitter.md compilation.md documentation.md tmp/api.md mpi.md examples.md tmp/links.md tmp/images_web.md
 	$(PANDOC) $+ -t markdown-smart+pipe_tables-simple_tables-multiline_tables-grid_tables-link_attributes | $(convert_nbsp_width) > $@
 
 ### pdf
@@ -173,7 +174,7 @@ tmp/%.tex: filter-latex.py %.md tmp/links.md tmp/images_local_pdf.md
 tmp/api.tex: filter-latex.py api.md tmp/links.md tmp/images_local_pdf.md
 	$(markdown2tex) --indented-code-classes=cpp
 
-tmp/scenegraph.tex: filter-latex.py scenegraph.md tmp/links.md tmp/images_local_pdf.md
+tmp/scenegraph.tex: filter-latex.py tmp/links.md tmp/images_local_pdf.md
 	$(markdown2tex) --indented-code-classes=cpp
 
 ../readme.pdf: readme.tex $(tmptexfiles) $(wildcard ospray-doc/intel-spec.cls) preamble.tex tmp/version $(pdfimages)
@@ -182,7 +183,7 @@ tmp/scenegraph.tex: filter-latex.py scenegraph.md tmp/links.md tmp/images_local_
 	newmd5s=`md5sum $$auxf 2> /dev/null`;\
 	until [[ $$md5s == $$newmd5s ]]; do \
 		md5s=$$newmd5s;\
-		xelatex -output-directory=tmp $<;\
+		xelatex -halt-on-error -output-directory=tmp $< || exit 2;\
 		newmd5s=`md5sum $$auxf`;\
 	done
 	cp tmp/$(basename $<).pdf $@

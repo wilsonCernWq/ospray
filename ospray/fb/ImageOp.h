@@ -45,6 +45,7 @@ namespace ospray {
   */
   struct OSPRAY_SDK_INTERFACE ImageOp : public ManagedObject
   {
+    ImageOp();
     virtual ~ImageOp() override = default;
 
     virtual std::string toString() const override;
@@ -106,6 +107,6 @@ namespace ospray {
       of this imageop.
   */
 #define OSP_REGISTER_IMAGE_OP(InternalClass, external_name) \
-  OSP_REGISTER_OBJECT(ImageOp, image_op, InternalClass, external_name)
+  OSP_REGISTER_OBJECT(ImageOp, image_operation, InternalClass, external_name)
 
 }  // namespace ospray

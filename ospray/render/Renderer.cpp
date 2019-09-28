@@ -26,6 +26,11 @@
 
 namespace ospray {
 
+  Renderer::Renderer()
+  {
+    managedObjectType = OSP_RENDERER;
+  }
+
   std::string Renderer::toString() const
   {
     return "ospray::Renderer";
@@ -132,6 +137,9 @@ namespace ospray {
       auto *group    = instance->group.ptr;
       auto *model = (*group->geometricModels)[geomID];
 
+      instance->refInc();
+      model->refInc();
+
       res.instance = (OSPInstance)instance;
       res.model    = (OSPGeometricModel)model;
       res.primID   = static_cast<uint32_t>(primID);
@@ -139,5 +147,7 @@ namespace ospray {
 
     return res;
   }
+
+  OSPTYPEFOR_DEFINITION(Renderer *);
 
 }  // namespace ospray

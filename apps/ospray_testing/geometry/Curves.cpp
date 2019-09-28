@@ -121,8 +121,8 @@ namespace ospray {
       OSPData indicesData =
           ospNewData(indices.size(), OSP_UINT, indices.data());
       OSPData colorsData  = ospNewData(colors.size(), OSP_VEC4F, colors.data());
-      ospSetData(geom, "vertex.position", pointsData);
-      ospSetData(geom, "index", indicesData);
+      ospSetObject(geom, "vertex.position", pointsData);
+      ospSetObject(geom, "index", indicesData);
       ospCommit(geom);
 
       OSPMaterial mat = ospNewMaterial(renderer_type.c_str(), "ThinGlass");
@@ -136,10 +136,8 @@ namespace ospray {
       ospRelease(mat);
 
       OSPGroup group = ospNewGroup();
-      auto models = ospNewData(1, OSP_GEOMETRIC_MODEL, &model);
-      ospSetData(group, "geometry", models);
+      ospSetObjectAsData(group, "geometry", OSP_GEOMETRIC_MODEL, model);
       ospCommit(group);
-      ospRelease(models);
 
       box3f bounds = empty;
 
@@ -153,6 +151,10 @@ namespace ospray {
       retval.instance = instance;
 
       std::memcpy(&retval.bounds, &bounds, sizeof(bounds));
+
+      ospRelease(pointsData);
+      ospRelease(indicesData);
+      ospRelease(colorsData);
 
       return retval;
     }

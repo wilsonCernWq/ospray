@@ -104,12 +104,12 @@ OSPGeometricModel createRandomSpheresGeometry(size_t numSpheres)
   g_spheresGeometry = ospNewGeometry("spheres");
   g_spheresModel    = ospNewGeometricModel(g_spheresGeometry);
 
-  ospSetData(g_spheresGeometry, "sphere.position", g_positionData);
-  ospSetData(g_spheresGeometry, "sphere.radius", radiusData);
+  ospSetObject(g_spheresGeometry, "sphere.position", g_positionData);
+  ospSetObject(g_spheresGeometry, "sphere.radius", radiusData);
 
   OSPData colorData = ospNewData(numSpheres, OSP_VEC4F, g_colors.data());
 
-  ospSetData(g_spheresModel, "prim.color", colorData);
+  ospSetObject(g_spheresModel, "prim.color", colorData);
 
   // create glass material and assign to geometry
   OSPMaterial glassMaterial =
@@ -143,7 +143,7 @@ void createWorld()
   g_spheresModel = createRandomSpheresGeometry(100);
 
   OSPData spheresModels = ospNewData(1, OSP_GEOMETRIC_MODEL, &g_spheresModel);
-  ospSetData(g_spheresGroup, "geometry", spheresModels);
+  ospSetObject(g_spheresGroup, "geometry", spheresModels);
   ospCommit(g_spheresGroup);
 
   OSPInstance spheresInstance = ospNewInstance(g_spheresGroup);
@@ -157,27 +157,16 @@ void createWorld()
 
   OSPData instances =
       ospNewData(instanceHandles.size(), OSP_INSTANCE, instanceHandles.data());
-  ospSetData(g_world, "instance", instances);
+  ospSetObject(g_world, "instance", instances);
   ospRelease(instances);
   ospRelease(spheresInstance);
   ospRelease(plane);
 
-  ospCommit(g_world);
-}
-
-OSPRenderer createRenderer()
-{
-  // create OSPRay renderer
-  OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
-
   OSPData lightsData = ospTestingNewLights("ambient_only");
-  ospSetData(renderer, "light", lightsData);
+  ospSetObject(g_world, "light", lightsData);
   ospRelease(lightsData);
 
-  // commit the renderer
-  ospCommit(renderer);
-
-  return renderer;
+  ospCommit(g_world);
 }
 
 // updates the bouncing spheres coordinates based on simple gravity model
@@ -250,7 +239,7 @@ int main(int argc, const char **argv)
   createWorld();
 
   // create OSPRay renderer
-  OSPRenderer renderer = createRenderer();
+  OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
 
   // create a GLFW OSPRay window: this object will create and manage the OSPRay
   // frame buffer and camera directly

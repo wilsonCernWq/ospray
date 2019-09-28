@@ -68,7 +68,7 @@ namespace ospray {
 
       // populate the cylinders
       static std::vector<Cylinder> cylinders(numCylinders);
-      std::vector<vec4f> colors(numCylinders); // TODO put in Cylinder as well
+      std::vector<vec4f> colors(numCylinders);  // TODO put in Cylinder as well
 
       for (int pz = 0; pz < numPatches.y; pz++) {
         for (int px = 0; px < numPatches.x; px++) {
@@ -120,19 +120,18 @@ namespace ospray {
       // create the cylinder geometry, and assign attributes
       OSPGeometry cylindersGeometry = ospNewGeometry("cylinders");
 
-      ospSetData(cylindersGeometry, "cylinder.position0", startVertexData);
-      ospSetData(cylindersGeometry, "cylinder.position1", endVertexData);
-      ospSetData(cylindersGeometry, "cylinder.radius", radiusData);
+      ospSetObject(cylindersGeometry, "cylinder.position0", startVertexData);
+      ospSetObject(cylindersGeometry, "cylinder.position1", endVertexData);
+      ospSetObject(cylindersGeometry, "cylinder.radius", radiusData);
 
       // commit the cylinders geometry
       ospCommit(cylindersGeometry);
 
       // Add the color data to the cylinders
-      OSPGeometricModel cylindersModel =
-          ospNewGeometricModel(cylindersGeometry);
+      OSPGeometricModel model = ospNewGeometricModel(cylindersGeometry);
       OSPData cylindersColor =
           ospNewData(numCylinders, OSP_VEC4F, colors.data());
-      ospSetData(cylindersModel, "prim.color", cylindersColor);
+      ospSetObject(model, "prim.color", cylindersColor);
 
       // create obj material and assign to cylinders model
       OSPMaterial objMaterial =
@@ -140,22 +139,12 @@ namespace ospray {
       // ospSetVec3f(objMaterial, "Ks", 0.8f, 0.8f, 0.8f);
       ospCommit(objMaterial);
 
-      ospSetObject(cylindersModel, "material", objMaterial);
-
-      // release handles we no longer need
-      ospRelease(startVertexData);
-      ospRelease(endVertexData);
-      ospRelease(radiusData);
-      ospRelease(cylindersColor);
-      ospRelease(objMaterial);
-
-      ospCommit(cylindersModel);
+      ospSetObject(model, "material", objMaterial);
+      ospCommit(model);
 
       OSPGroup group = ospNewGroup();
-      auto models = ospNewData(1, OSP_GEOMETRIC_MODEL, &cylindersModel);
-      ospSetData(group, "geometry", models);
+      ospSetObjectAsData(group, "geometry", OSP_GEOMETRIC_MODEL, model);
       ospCommit(group);
-      ospRelease(models);
 
       // Codify cylinders into an instance
       OSPInstance cylindersInstance = ospNewInstance(group);
@@ -163,11 +152,18 @@ namespace ospray {
 
       OSPTestingGeometry retval;
       retval.geometry = cylindersGeometry;
-      retval.model    = cylindersModel;
+      retval.model    = model;
       retval.group    = group;
       retval.instance = cylindersInstance;
 
       std::memcpy(&retval.bounds, &bounds, sizeof(bounds));
+
+      // release handles we no longer need
+      ospRelease(startVertexData);
+      ospRelease(endVertexData);
+      ospRelease(radiusData);
+      ospRelease(cylindersColor);
+      ospRelease(objMaterial);
 
       return retval;
     }

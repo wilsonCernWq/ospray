@@ -22,6 +22,11 @@ namespace ospray {
 
   // Helper functions /////////////////////////////////////////////////////////
 
+  Material::Material()
+  {
+    managedObjectType = OSP_MATERIAL;
+  }
+
   static Material* tryToCreateMaterial(const std::string &renderer_type,
                                        const std::string &material_type)
   {
@@ -122,5 +127,7 @@ namespace ospray {
     param.factor = getParam<vec3f>(name, param.map ? vec3f(1.f) : valIfNotFound);
     return param;
   }
+
+  OSPTYPEFOR_DEFINITION(Material*);
 
 } // ::ospray

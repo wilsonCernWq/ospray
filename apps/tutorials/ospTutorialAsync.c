@@ -33,7 +33,7 @@
 #else
 #  include <alloca.h>
 #endif
-#include "ospray/ospray.h"
+#include "ospray/ospray_util.h"
 
 typedef struct { int x, y; } vec2i;
 
@@ -94,8 +94,8 @@ int main(int argc, const char **argv) {
   OSPFuture futures[2] = {0};
   // render one frame for each scene
   for (int i = 0; i < 2; ++i) {
-    futures[i] = ospRenderFrameAsync(framebuffers[i], renderers[i],
-                                     cameras[i], worlds[i]);
+    futures[i] = ospRenderFrame(framebuffers[i], renderers[i],
+                                cameras[i], worlds[i]);
   }
 
   for (int i = 0; i < 2; ++i) {
@@ -123,8 +123,8 @@ int main(int argc, const char **argv) {
   // render 10 more frames, which are accumulated to result in a better converged image
   for (int frames = 0; frames < 10; frames++) {
     for (int i = 0; i < 2; ++i) {
-      futures[i] = ospRenderFrameAsync(framebuffers[i], renderers[i],
-                                       cameras[i], worlds[i]);
+      futures[i] = ospRenderFrame(framebuffers[i], renderers[i],
+                                  cameras[i], worlds[i]);
     }
     for (int i = 0; i < 2; ++i) {
       ospWait(futures[i], OSP_FRAME_FINISHED);
@@ -190,17 +190,17 @@ void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   OSPGeometry mesh = ospNewGeometry("triangles");
   OSPData data = ospNewSharedData1D(vertex, OSP_VEC3F, 4);
   ospCommit(data);
-  ospSetData(mesh, "vertex.position", data);
+  ospSetObject(mesh, "vertex.position", data);
   ospRelease(data); // we are done using this handle
 
   data = ospNewSharedData1D(color, OSP_VEC4F, 4);
   ospCommit(data);
-  ospSetData(mesh, "vertex.color", data);
+  ospSetObject(mesh, "vertex.color", data);
   ospRelease(data);
 
   data = ospNewSharedData1D(index, OSP_VEC3UI, 2);
   ospCommit(data);
-  ospSetData(mesh, "index", data);
+  ospSetObject(mesh, "index", data);
   ospRelease(data);
 
   ospCommit(mesh);
@@ -229,12 +229,6 @@ void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   *world = ospNewWorld();
   OSPData instances = ospNewSharedData1D(&instance, OSP_INSTANCE, 1);
   ospSetObject(*world, "instance", instances);
-  ospCommit(*world);
-  ospRelease(instance);
-  ospRelease(instances);
-
-  // create renderer
-  *renderer = ospNewRenderer("scivis"); // choose Scientific Visualization renderer
 
   // create and setup light for Ambient Occlusion
   static OSPLight light;
@@ -242,11 +236,19 @@ void buildScene1(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   ospCommit(light);
   OSPData lights = ospNewSharedData1D(&light, OSP_LIGHT, 1);
   ospCommit(lights);
+  ospSetObject(*world, "light", lights);
+
+  ospCommit(*world);
+  ospRelease(instance);
+  ospRelease(instances);
+
+  // create renderer
+  *renderer =
+      ospNewRenderer("scivis"); // choose Scientific Visualization renderer
 
   // complete setup of renderer
   ospSetInt(*renderer, "aoSamples", 1);
   ospSetFloat(*renderer, "bgColor", 1.0f); // white, transparent
-  ospSetObject(*renderer, "light", lights);
   ospCommit(*renderer);
 
   ospRelease(light);
@@ -291,17 +293,17 @@ void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   OSPGeometry mesh = ospNewGeometry("triangles");
   OSPData data = ospNewSharedData1D(vertex, OSP_VEC3F, 4);
   ospCommit(data);
-  ospSetData(mesh, "vertex.position", data);
+  ospSetObject(mesh, "vertex.position", data);
   ospRelease(data);
 
   data = ospNewSharedData1D(color, OSP_VEC4F, 4);
   ospCommit(data);
-  ospSetData(mesh, "vertex.color", data);
+  ospSetObject(mesh, "vertex.color", data);
   ospRelease(data);
 
   data = ospNewSharedData1D(index, OSP_VEC3UI, 2);
   ospCommit(data);
-  ospSetData(mesh, "index", data);
+  ospSetObject(mesh, "index", data);
   ospRelease(data);
 
   ospCommit(mesh);
@@ -330,12 +332,6 @@ void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   *world = ospNewWorld();
   OSPData instances = ospNewSharedData1D(&instance, OSP_INSTANCE, 1);
   ospSetObject(*world, "instance", instances);
-  ospCommit(*world);
-  ospRelease(instances);
-  ospRelease(instance);
-
-  // create renderer
-  *renderer = ospNewRenderer("scivis"); // choose Scientific Visualization renderer
 
   // create and setup light for Ambient Occlusion
   static OSPLight light;
@@ -343,11 +339,19 @@ void buildScene2(OSPCamera *camera, OSPWorld *world, OSPRenderer *renderer,
   ospCommit(light);
   OSPData lights = ospNewSharedData1D(&light, OSP_LIGHT, 1);
   ospCommit(lights);
+  ospSetObject(*world, "light", lights);
+
+  ospCommit(*world);
+  ospRelease(instances);
+  ospRelease(instance);
+
+  // create renderer
+  *renderer =
+      ospNewRenderer("scivis"); // choose Scientific Visualization renderer
 
   // complete setup of renderer
   ospSetInt(*renderer, "aoSamples", 4);
   ospSetFloat(*renderer, "bgColor", 0.2f); // gray, transparent
-  ospSetObject(*renderer, "light", lights);
   ospCommit(*renderer);
 
   ospRelease(light);

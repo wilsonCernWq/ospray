@@ -319,7 +319,7 @@ extern "C" void ospDeviceSetParam(OSPDevice _object,
     object->setParam<bool>(id, *(int *)mem);
     break;
   case OSP_VOID_PTR:
-    object->setParam<void*>(id, *(void **)mem);
+    object->setParam<void *>(id, *(void **)&mem);
     break;
   default:
     throw std::runtime_error("parameter type not handled for OSPDevice!");
@@ -576,6 +576,15 @@ extern "C" OSPWorld ospNewWorld() OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
+extern "C" OSPBounds ospGetBounds(OSPObject obj) OSPRAY_CATCH_BEGIN
+{
+  THROW_IF_NULL_OBJECT(obj);
+  ASSERT_DEVICE();
+  box3f bounds = currentDevice().getBounds(obj);
+  return (OSPBounds &)bounds;
+}
+OSPRAY_CATCH_END({})
+
 ///////////////////////////////////////////////////////////////////////////////
 // Object + Parameter Lifetime Management /////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -724,10 +733,10 @@ extern "C" OSPRenderer ospNewRenderer(const char *_type) OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" float ospRenderFrame(OSPFrameBuffer fb,
-                                OSPRenderer renderer,
-                                OSPCamera camera,
-                                OSPWorld world) OSPRAY_CATCH_BEGIN
+extern "C" OSPFuture ospRenderFrame(OSPFrameBuffer fb,
+                                    OSPRenderer renderer,
+                                    OSPCamera camera,
+                                    OSPWorld world) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL(fb, "framebuffer");
   THROW_IF_NULL(renderer, "renderer");
@@ -736,21 +745,6 @@ extern "C" float ospRenderFrame(OSPFrameBuffer fb,
 
   ASSERT_DEVICE();
   return currentDevice().renderFrame(fb, renderer, camera, world);
-}
-OSPRAY_CATCH_END(inf)
-
-extern "C" OSPFuture ospRenderFrameAsync(OSPFrameBuffer fb,
-                                         OSPRenderer renderer,
-                                         OSPCamera camera,
-                                         OSPWorld world) OSPRAY_CATCH_BEGIN
-{
-  THROW_IF_NULL(fb, "framebuffer");
-  THROW_IF_NULL(renderer, "renderer");
-  THROW_IF_NULL(camera, "camera");
-  THROW_IF_NULL(world, "world");
-
-  ASSERT_DEVICE();
-  return currentDevice().renderFrameAsync(fb, renderer, camera, world);
 }
 OSPRAY_CATCH_END(nullptr)
 

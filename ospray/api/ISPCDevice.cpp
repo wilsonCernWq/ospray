@@ -302,6 +302,12 @@ namespace ospray {
       return (OSPWorld) new World;
     }
 
+    box3f ISPCDevice::getBounds(OSPObject _obj)
+    {
+      auto *obj = (ManagedObject *)_obj;
+      return obj->getBounds();
+    }
+
     ///////////////////////////////////////////////////////////////////////////
     // Object + Parameter Lifetime Management /////////////////////////////////
     ///////////////////////////////////////////////////////////////////////////
@@ -406,21 +412,10 @@ namespace ospray {
       return (OSPRenderer)Renderer::createInstance(type);
     }
 
-    float ISPCDevice::renderFrame(OSPFrameBuffer _fb,
-                                  OSPRenderer _renderer,
-                                  OSPCamera _camera,
-                                  OSPWorld _world)
-    {
-      auto f = renderFrameAsync(_fb, _renderer, _camera, _world);
-      wait(f, OSP_FRAME_FINISHED);
-      release(f);
-      return getVariance(_fb);
-    }
-
-    OSPFuture ISPCDevice::renderFrameAsync(OSPFrameBuffer _fb,
-                                           OSPRenderer _renderer,
-                                           OSPCamera _camera,
-                                           OSPWorld _world)
+    OSPFuture ISPCDevice::renderFrame(OSPFrameBuffer _fb,
+                                      OSPRenderer _renderer,
+                                      OSPCamera _camera,
+                                      OSPWorld _world)
     {
       FrameBuffer *fb    = (FrameBuffer *)_fb;
       Renderer *renderer = (Renderer *)_renderer;

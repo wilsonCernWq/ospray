@@ -81,7 +81,7 @@ namespace ospray {
 
   Group::Group()
   {
-    managedObjectType    = OSP_WORLD;
+    managedObjectType    = OSP_GROUP;
     this->ispcEquivalent = ispc::Group_create(this);
   }
 
@@ -89,6 +89,8 @@ namespace ospray {
   {
     freeAndNullifyEmbreeScene(sceneGeometries);
     freeAndNullifyEmbreeScene(sceneVolumes);
+    freeIEPtrs(geometryIEs);
+    freeIEPtrs(volumeIEs);
   }
 
   std::string Group::toString() const
@@ -168,5 +170,21 @@ namespace ospray {
                     volumetricModels ? volumetricModelIEs.data() : nullptr,
                     numVolumes);
   }
+
+  box3f Group::getBounds() const
+  {
+    box3f sceneBounds;
+
+    box4f bounds; // NOTE(jda) - Embree expects box4f, NOT box3f...
+    rtcGetSceneBounds(sceneGeometries, (RTCBounds *)&bounds);
+    sceneBounds.extend(box3f(vec3f(bounds.lower[0]), vec3f(bounds.upper[0])));
+
+    rtcGetSceneBounds(sceneVolumes, (RTCBounds *)&bounds);
+    sceneBounds.extend(box3f(vec3f(bounds.lower[0]), vec3f(bounds.upper[0])));
+
+    return sceneBounds;
+  }
+
+  OSPTYPEFOR_DEFINITION(Group *);
 
 }  // namespace ospray

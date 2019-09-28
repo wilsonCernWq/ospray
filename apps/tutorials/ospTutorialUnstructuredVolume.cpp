@@ -54,7 +54,7 @@ namespace {
     std::vector<float> isoValues = {value};
     OSPData isoValuesData =
         ospNewData(isoValues.size(), OSP_FLOAT, isoValues.data());
-    ospSetData(geometry, "isovalue", isoValuesData);
+    ospSetObject(geometry, "isovalue", isoValuesData);
     ospRelease(isoValuesData);
   }
 }  // namespace
@@ -77,9 +77,14 @@ int main(int argc, const char **argv)
   ospCommit(instance);
 
   OSPData instances = ospNewData(1, OSP_INSTANCE, &instance);
-  ospSetData(world, "instance", instances);
+  ospSetObject(world, "instance", instances);
   ospRelease(instances);
   ospRelease(instance);
+
+  // create and set lights
+  OSPData lightsData = ospTestingNewLights("ambient_and_directional");
+  ospSetObject(world, "light", lightsData);
+  ospRelease(lightsData);
 
   // create all volume variances [sharedVertices][valuesPerCell]
   OSPVolumetricModel allVolumes[2][2];
@@ -116,15 +121,6 @@ int main(int argc, const char **argv)
 
   // create OSPRay renderer
   OSPRenderer renderer = ospNewRenderer(renderer_type.c_str());
-
-  // create and set lights
-  OSPData lightsData = ospTestingNewLights("ambient_and_directional");
-  ospSetData(renderer, "light", lightsData);
-  ospRelease(lightsData);
-
-  // apply changes to the renderer
-  ospCommit(renderer);
-
   // Scene updates //
 
   bool sharedVertices = false;
