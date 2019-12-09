@@ -83,15 +83,17 @@ OSPRAY_INTERFACE void ospSetVec4f(OSPObject, const char *n, float x, float y, fl
 OSPRAY_INTERFACE void ospSetVec2i(OSPObject, const char *n, int x, int y);
 OSPRAY_INTERFACE void ospSetVec3i(OSPObject, const char *n, int x, int y, int z);
 OSPRAY_INTERFACE void ospSetVec4i(OSPObject, const char *n, int x, int y, int z, int w);
-// clang-format on
 
-OSPRAY_INTERFACE void ospSetObjectAsData(OSPObject,
+// Take 'obj' and put it in an opaque OSPData array with given element type, then set on 'target'
+OSPRAY_INTERFACE void ospSetObjectAsData(OSPObject target,
                                          const char *n,
                                          OSPDataType type,
                                          OSPObject obj);
+// clang-format on
 
 // Rendering helpers //////////////////////////////////////////////////////////
 
+// Start a frame task and immediately wait on it, return frame buffer varaince
 OSPRAY_INTERFACE float ospRenderFrameBlocking(OSPFrameBuffer,
                                               OSPRenderer,
                                               OSPCamera,
@@ -99,11 +101,4 @@ OSPRAY_INTERFACE float ospRenderFrameBlocking(OSPFrameBuffer,
 
 #ifdef __cplusplus
 }  // extern "C"
-
-// XXX temporary, to maintain backwards compatibility
-OSPRAY_INTERFACE OSPData
-ospNewData(size_t numItems,
-           OSPDataType type,
-           const void *source,
-           uint32_t dataCreationFlags OSP_DEFAULT_VAL(0));
 #endif

@@ -29,7 +29,6 @@ make -j 4 ospray_test_data
 rm -rf failed
 mkdir failed
 
-ospray_test_suite --gtest_output=xml:tests.xml --baseline-dir=regression_test_baseline/ --failed-dir=failed
-FAILED=$(echo $?)
+ospTestSuite --gtest_output=xml:tests.xml --baseline-dir=regression_test_baseline/ --failed-dir=failed
 
-exit $FAILED
+exit $?

@@ -22,6 +22,7 @@ set(OSPRAY_SOURCES
   api/API.cpp
   api/Device.cpp
   api/ospray_util_impl.cpp
+  api/ospray_cpp_defs.cpp
 
   common/ospray.rc
   common/OSPCommon.cpp
@@ -52,6 +53,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
 
   api/ISPCDevice.h
   api/ISPCDevice.cpp
+  api/ISPCDevice.ispc
 
   common/Data.ih
   common/Data.cpp
@@ -101,22 +103,16 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   geometry/GeometricModel.cpp
   geometry/Boxes.ispc
   geometry/Boxes.cpp
-  geometry/TriangleMesh.ispc
-  geometry/TriangleMesh.cpp
   geometry/Subdivision.ispc
   geometry/Subdivision.cpp
-  geometry/QuadMesh.ispc
-  geometry/QuadMesh.cpp
   geometry/Curves.cpp
   geometry/Curves.ispc
-  geometry/StreamLines.cpp
-  geometry/StreamLines.ispc
   geometry/Spheres.cpp
   geometry/Spheres.ispc
-  geometry/Cylinders.cpp
-  geometry/Cylinders.ispc
   geometry/Isosurfaces.ispc
   geometry/Isosurfaces.cpp
+  geometry/Mesh.cpp 
+  geometry/Mesh.ispc
 
   lights/Light.ispc
   lights/Light.cpp
@@ -201,34 +197,17 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   volume/Volume.cpp
   volume/VolumetricModel.ispc
   volume/VolumetricModel.cpp
+  volume/VKLSharedStructuredVolume.h
+  volume/VKLSharedStructuredVolume.cpp
+  volume/VKLUnstructuredVolume.h
+  volume/VKLUnstructuredVolume.cpp
+  volume/VKLAMRVolume.h
+  volume/VKLAMRVolume.cpp
 
   volume/transferFunction/LinearTransferFunction.ispc
   volume/transferFunction/LinearTransferFunction.cpp
   volume/transferFunction/TransferFunction.ispc
   volume/transferFunction/TransferFunction.cpp
-
-
-  volume/structured/GridAccelerator.ispc
-  volume/structured/StructuredVolume.ispc
-  volume/structured/StructuredVolume.cpp
-
-  volume/structured/shared/SharedStructuredVolume.ispc
-  volume/structured/shared/SharedStructuredVolume.cpp
-
-  volume/unstructured/MinMaxBVH2.cpp
-  volume/unstructured/MinMaxBVH2.ispc
-  volume/unstructured/UnstructuredVolume.cpp
-  volume/unstructured/UnstructuredVolume.ispc
-
-  volume/amr/AMRAccel.cpp
-  volume/amr/AMRData.cpp
-  volume/amr/AMRVolume.ispc
-  volume/amr/AMRVolume.cpp
-  volume/amr/CellRef.ispc
-  volume/amr/DualCell.ispc
-  volume/amr/method_current.ispc
-  volume/amr/method_finest.ispc
-  volume/amr/method_octant.ispc
 )
 
 # -------------------------------------------------------
@@ -254,7 +233,7 @@ endforeach()
 ##############################################################
 
 add_library(ospray SHARED ${OSPRAY_SOURCES})
-target_link_libraries(ospray PRIVATE ospcommon::ospcommon)
+target_link_libraries(ospray PUBLIC $<BUILD_INTERFACE:ospcommon::ospcommon>)
 ospray_install_library(ospray COMPONENT lib)
 set_target_properties(ospray
   PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
@@ -334,6 +313,7 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
     ${CMAKE_SOURCE_DIR}
     ${PROJECT_BINARY_DIR}
     ${EMBREE_INCLUDE_DIRS}
+    ${OPENVKL_INCLUDE_DIRS}
   )
 
   add_library(ospray_module_ispc SHARED)
@@ -347,14 +327,27 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
     ospray
     ospcommon::ospcommon
     $<BUILD_INTERFACE:embree>
+    $<BUILD_INTERFACE:openvkl::openvkl_module_ispc_driver>
   )
 
   target_include_directories(ospray_module_ispc
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/ospray>
       $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>
+      $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
+      # NOTE(jda) - the following includes are missing despite PUBLIC linking
+      $<BUILD_INTERFACE:${OPENVKL_INCLUDE_DIRS}>
+      $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>
+      #######################################################################
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+  )
+
+  target_compile_definitions(ospray_module_ispc
+  PUBLIC
+    -DTILE_SIZE=${OSPRAY_TILE_SIZE}
+    -DMAX_TILE_SIZE=${OSPRAY_MAX_STACK_TILE_SIZE}
+    -DRENDERTILE_PIXELS_PER_JOB=${OSPRAY_PIXELS_PER_JOB}
   )
 
   set_target_properties(ospray_module_ispc

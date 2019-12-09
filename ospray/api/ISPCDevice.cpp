@@ -39,6 +39,12 @@
 #include <algorithm>
 #include <functional>
 #include <map>
+// openvkl
+#include "openvkl/openvkl.h"
+// ospcommon
+#include "ospcommon/tasking/tasking_system_init.h"
+
+#include "ISPCDevice_ispc.h"
 
 extern "C" RTCDevice ispc_embreeDevice()
 {
@@ -108,11 +114,11 @@ namespace ospray {
         declare_param_setter(vec2ui),
         declare_param_setter(vec3ui),
         declare_param_setter(vec4ui),
-        declare_param_setter(long),
+        declare_param_setter(int64_t),
         declare_param_setter(vec2l),
         declare_param_setter(vec3l),
         declare_param_setter(vec4l),
-        declare_param_setter(unsigned long),
+        declare_param_setter(uint64_t),
         declare_param_setter(vec2ul),
         declare_param_setter(vec3ul),
         declare_param_setter(vec4ul),
@@ -167,6 +173,8 @@ namespace ospray {
 
       TiledLoadBalancer::instance = make_unique<LocalTiledLoadBalancer>();
 
+      tasking::initTaskingSystem(numThreads, true);
+
       if (!embreeDevice) {
         // -------------------------------------------------------
         // initialize embree. (we need to do this here rather than in
@@ -182,6 +190,29 @@ namespace ospray {
           throw std::runtime_error("failed to initialize Embree");
         }
       }
+
+      vklLoadModule("ispc_driver");
+
+      VKLDriver driver = nullptr;
+
+      int ispc_width = ispc::ISPCDevice_programCount();
+      switch(ispc_width) {
+        case 4:
+          driver = vklNewDriver("ispc_4");
+          break;
+        case 8:
+          driver = vklNewDriver("ispc_8");
+          break;
+        case 16:
+          driver = vklNewDriver("ispc_16");
+          break;
+        default:
+          driver = vklNewDriver("ispc");
+          break;
+      }
+
+      vklCommitDriver(driver);
+      vklSetCurrentDriver(driver);
     }
 
     ///////////////////////////////////////////////////////////////////////////

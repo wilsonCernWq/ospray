@@ -29,32 +29,6 @@
 #include "camera/Camera.ih"
 #include "math/random.ih"
 #include "fb/LocalFB.ih"
-#include "volume/VolumetricModel.ih"
-
-inline void tracePathSimple(const PathContext& pathContext, 
-                            PathState& pathState, 
-                            Ray& ray, 
-                            ScreenSample& sample)
-{
-  traceRay(pathContext.world, ray);
-
-  VolumetricModel* varying sampledVolume = NULL;
-  float extinctionCoefficient;
-  vec3f albedo;
-  float freePath = volumeSampleFreePath(pathState, pathContext.world, ray, 
-    pathContext.ldSampler, pathContext.randomSampler, 
-    &sampledVolume, extinctionCoefficient, albedo);
-  if (freePath < inf)
-  {
-    sample.rgb = make_vec3f(0.f);
-  }
-  else {
-  if (noHit(ray))
-    sample.rgb = make_vec3f(1.f)  * albedo;
-  else
-    sample.rgb = make_vec3f(0.5f) * albedo;
-  }
-}
 
 ScreenSample PathTraceIntegrator_Li(const PathTracer* uniform self,
                                     const World *uniform world,
@@ -67,6 +41,7 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer* uniform self,
                                     varying RandomSampler* uniform randomSampler)
 {
   ScreenSample sample;
+  sample.rgb = make_vec3f(0.f);
   sample.alpha = 1.f;
   sample.normal = make_vec3f(0.0f);
   sample.albedo = make_vec3f(0.0f);
@@ -91,7 +66,6 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer* uniform self,
   pathState.disableNEE = false; 
   pathState.disableFWD = false;
 #endif
-  pathState.homogeneousApprox = false;
   pathState.straightPath = true; // path from camera did not change direction, for alpha and backplate
   pathState.auxFree = true; // normal & albedo buffer were not yet written to
   pathState.depth = 0;

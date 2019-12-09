@@ -31,6 +31,8 @@ namespace ospray {
       Device(const Device &copy);
       Device(OSPDevice existing = nullptr);
 
+      ~Device();
+
       void set(const std::string &name, const std::string &v) const;
       void set(const std::string &name, bool v) const;
       void set(const std::string &name, int v) const;
@@ -53,9 +55,17 @@ namespace ospray {
       ospHandle = ospNewDevice(type.c_str());
     }
 
-    inline Device::Device(const Device &copy) : ospHandle(copy.ospHandle) {}
+    inline Device::Device(const Device &copy) : ospHandle(copy.ospHandle)
+    {
+      ospDeviceRetain(copy.handle());
+    }
 
     inline Device::Device(OSPDevice existing) : ospHandle(existing) {}
+
+    inline Device::~Device()
+    {
+      ospDeviceRelease(ospHandle);
+    }
 
     inline void Device::set(const std::string &name, const std::string &v) const
     {
@@ -94,4 +104,7 @@ namespace ospray {
     }
 
   }  // namespace cpp
+
+  OSPTYPEFOR_SPECIALIZATION(cpp::Device, OSP_DEVICE);
+
 }  // namespace ospray

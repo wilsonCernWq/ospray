@@ -19,6 +19,9 @@
 #include "common/Ray.ih"
 #include "math/AffineSpace.ih"
 #include "math/box.ih"
+// openvkl
+#include "openvkl/value_selector.isph"
+#include "openvkl/volume.isph"
 
 struct TransferFunction;
 
@@ -38,19 +41,7 @@ struct Volume
 
   int32 volumeID;
 
-  //! The value at the given sample location in world coordinates.
-  varying float (*sample)(const void *uniform _self,
-                          const varying vec3f &worldCoordinates);
-
-  //! The gradient at the given sample location in world coordinates.
-  varying vec3f (*computeGradient)(const void *uniform _self,
-                                   const varying vec3f &worldCoordinates);
-
-  //! Find the next hit point in the volume for ray casting based renderers.
-  void (*stepRay)(const void *uniform _self,
-                  TransferFunction *uniform tfn,
-                  varying Ray &ray,
-                  const varying float samplingRate);
+  VKLVolume vklVolume;
 
   //! Find the next isosurface hit point in the volume for ray casting based
   //! renderers.
@@ -78,10 +69,13 @@ void Volume_Constructor(
 
 inline float Volume_getSample(const Volume *uniform volume, const vec3f &P)
 {
-  return volume->sample(volume, P);
+  return vklComputeSampleV(volume->vklVolume, &((const vkl_vec3f &)P));
 }
 
 inline vec3f Volume_getGradient(const Volume *uniform volume, const vec3f &P)
 {
-  return volume->computeGradient(volume, P);
+  vkl_vec3f result =
+      vklComputeGradientV(volume->vklVolume, &((const vkl_vec3f &)P));
+
+  return *((varying vec3f *)&result);
 }

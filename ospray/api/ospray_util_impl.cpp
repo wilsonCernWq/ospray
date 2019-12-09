@@ -14,6 +14,7 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
+#include "ospray/ospray_cpp.h"
 #include "ospray/ospray_util.h"
 
 extern "C" {
@@ -158,8 +159,11 @@ void ospSetObjectAsData(OSPObject o,
                         OSPDataType type,
                         OSPObject p)
 {
-  OSPData data = ospNewData(1, type, &p);
-  ospSetObject(o, n, data);
+  OSPData tmp  = ospNewSharedData(&p, type, 1);
+  OSPData data = ospNewData(type, 1);
+  ospCopyData(tmp, data);
+  ospSetParam(o, n, OSP_DATA, &data);
+  ospRelease(tmp);
   ospRelease(data);
 }
 
@@ -177,20 +181,3 @@ float ospRenderFrameBlocking(OSPFrameBuffer fb,
 }
 
 }  // extern "C"
-
-// XXX temporary, to maintain backwards compatibility
-OSPData ospNewData(size_t numItems,
-                   OSPDataType type,
-                   const void *source,
-                   uint32_t dataCreationFlags)
-{
-  if (dataCreationFlags)
-    return ospNewSharedData(source, type, numItems);
-  else {
-    OSPData src = ospNewSharedData(source, type, numItems);
-    OSPData dst = ospNewData(type, numItems);
-    ospCopyData(src, dst);
-    ospRelease(src);
-    return dst;
-  }
-}

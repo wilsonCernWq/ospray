@@ -18,6 +18,8 @@
 
 #include "common/World.ih"
 
+#include "openvkl/openvkl.isph"
+
 float delta_tracking(
   VolumetricModel *uniform vModel,
   const VolumeInterval& vInterval,
@@ -27,26 +29,41 @@ float delta_tracking(
   float& mu_t,   // sampled extinction coefficint
   vec3f& albedo) // sampled albedo (color)
 {
-  float mu_max = vModel->densityScale * vModel->maximumDensity;
-  float t = vInterval.interval.lower;
-  while (true)
+  uniform VKLIntervalIterator intervalIterator;
+  vklInitIntervalIteratorV(&intervalIterator,
+                           vModel->volume->vklVolume,
+                           (varying vkl_vec3f *)&o,
+                           (varying vkl_vec3f *)&w,
+                           (varying vkl_range1f *)&vInterval.interval,
+                           vModel->vklValueSelector);
+  
+  float t = 0.f;
+  VKLInterval interval;
+  while (vklIterateIntervalV(&intervalIterator, &interval))
   {
-    float xi = RandomSampler_getFloat(randomSampler);
-    const float dt = - log(1.f - xi) / mu_max;
-    t += dt;
-    if (t > vInterval.interval.upper)
-      break;
-    
-    xi = RandomSampler_getFloat(randomSampler);
-    vec3f p = o + t * w;
-    const float sample = vModel->volume->sample(vModel->volume, p);
-    const vec4f color =
-        vModel->transferFunction->get(vModel->transferFunction, sample);
-    mu_t = vModel->densityScale * color.w;
-    if (xi < mu_t / mu_max)
+    box1f subInterval = make_box1f(interval.tRange.lower, interval.tRange.upper);
+    t = interval.tRange.lower;
+    const vec4f color_max = vModel->transferFunction->get(vModel->transferFunction, interval.valueRange.upper);
+    const float mu_max = vModel->densityScale * color_max.w;
+
+    while (true)
     {
-      albedo = make_vec3f(color);
-      return t;
+      float xi = RandomSampler_getFloat(randomSampler);
+      const float dt = - log(1.f - xi) / mu_max;
+      t += dt;
+      if (t > interval.tRange.upper)
+        break;
+      
+      xi = RandomSampler_getFloat(randomSampler);
+      const vec3f p = o + t * w;
+      const float sample = vklComputeSampleV(vModel->volume->vklVolume, (const varying vkl_vec3f *uniform) &p);
+      const vec4f color = vModel->transferFunction->get(vModel->transferFunction, sample);
+      mu_t = vModel->densityScale * color.w;
+      if (xi < mu_t / mu_max)
+      {
+        albedo = make_vec3f(color);
+        return t;
+      }
     }
   }
   return inf;
@@ -82,28 +99,15 @@ float volumeSampleFreePath(const PathState& pathState,
           float dist = inf;
           float extinctionCoefficient;
           vec3f albedo;
-          if (pathState.homogeneousApprox)
-          {
-            float density = inst->densityScale;
-            dist = vInterval.interval.lower;
-            float xi = RandomSampler_getFloat(randomSampler);
-            const float dt = - log(1.f - xi) / density;
-            dist += dt;
-            if (dist > vInterval.interval.upper)
-              dist = inf;
-          }
-          else 
-          {
-            Ray transformedVolumeRay = volumeRay;
-            transformRay(transformedVolumeRay, rcp(volumeIntervals.intervals[i].xfm));
-            dist = delta_tracking(inst,
-                                  vInterval,
-                                  randomSampler,
-                                  transformedVolumeRay.org,
-                                  transformedVolumeRay.dir,
-                                  extinctionCoefficient,
-                                  albedo);
-          }
+          Ray transformedVolumeRay = volumeRay;
+          transformRay(transformedVolumeRay, rcp(volumeIntervals.intervals[i].xfm));
+          dist = delta_tracking(inst,
+                                vInterval,
+                                randomSampler,
+                                transformedVolumeRay.org,
+                                transformedVolumeRay.dir,
+                                extinctionCoefficient,
+                                albedo);
           if (dist < min_dist && dist < inf) {
             min_dist = dist;
             *sampledInstance = inst;
@@ -141,23 +145,18 @@ float volumeTransmittance(const PathState& pathState,
         vInterval.interval.upper = noHit(ray) ? vInterval.interval.upper : min(vInterval.interval.upper, ray.t);
         if (hasInterval(vInterval))
         {
-          if (pathState.homogeneousApprox) {
-            transmittance = transmittance * exp(-(vInterval.interval.upper - vInterval.interval.lower)*inst->densityScale);
-          } else {
-            Ray transformedVolumeRay = volumeRay;
-            transformRay(transformedVolumeRay, rcp(volumeIntervals.intervals[i].xfm));
-            float extinctionCoefficient;
-            vec3f albedo;
-            const float dist = delta_tracking(
-                inst,
-                vInterval,
-                randomSampler,
-                transformedVolumeRay.org,
-                transformedVolumeRay.dir,
-                extinctionCoefficient,
-                albedo);
-            transmittance = transmittance * ((dist < vInterval.interval.upper) ? 0.f : 1.f);
-          }
+          Ray transformedVolumeRay = volumeRay;
+          transformRay(transformedVolumeRay, rcp(volumeIntervals.intervals[i].xfm));
+          float extinctionCoefficient;
+          vec3f albedo;
+          const float dist = delta_tracking(inst,
+                                            vInterval,
+                                            randomSampler,
+                                            transformedVolumeRay.org,
+                                            transformedVolumeRay.dir,
+                                            extinctionCoefficient,
+                                            albedo);
+          transmittance = transmittance * ((dist < vInterval.interval.upper) ? 0.f : 1.f);
         }
       }
     }

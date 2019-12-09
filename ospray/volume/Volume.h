@@ -20,6 +20,9 @@
 #include "common/Managed.h"
 // embree
 #include "embree3/rtcore.h"
+#include "Volume_ispc.h"
+
+#include "openvkl/volume.h"
 
 namespace ospray {
 
@@ -34,9 +37,13 @@ namespace ospray {
 
     virtual void commit() override;
 
+    void handleParams();
+
     box3f bounds{empty};
 
     RTCGeometry embreeGeometry{nullptr};
+
+    VKLVolume vklVolume = nullptr;
 
    private:
     void createEmbreeGeometry();

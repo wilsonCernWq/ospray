@@ -13,8 +13,9 @@ Initialization and Shutdown
 
 To use the API, OSPRay must be initialized with a "device". A
 device is the object which implements the API. Creating and initializing
-a device can be done in either of two ways: command line arguments or
-manually instantiating a device.
+a device can be done in either of two ways: command line arguments using
+`ospInit` or manually instantiating a device and setting parameters on
+it.
 
 ### Command Line Arguments
 
@@ -51,18 +52,6 @@ prefixed by convention with "`--osp:`") are understood:
   `--osp:module:<name>`      load a module during initialization; equivalent to
                              calling `ospLoadModule(name)`
 
-  `--osp:mpi`                enables MPI mode for parallel rendering with the
-                             `mpi_offload` device, to be used in conjunction with
-                             `mpirun`; this will automatically load the "mpi"
-                             module if it is not yet loaded or linked
-
-  `--osp:mpi-offload`        same as `--osp:mpi`
-
-  `--osp:mpi-distributed`    same as `--osp:mpi`, but will create an
-                             `mpi_distributed` device instead; Note that this
-                             will likely require application changes to work
-                             properly
-
   `--osp:logoutput <dst>`    convenience for setting where status messages go;
                              valid values for `dst` are `cerr` and `cout`
 
@@ -84,19 +73,18 @@ prefixed by convention with "`--osp:`") are understood:
 ### Manual Device Instantiation
 
 The second method of initialization is to explicitly create the device
-yourself, and possibly set parameters. This method looks almost
-identical to how other [objects] are created and used by OSPRay
-(described in later sections). The first step is to create the device
-with
+and possibly set parameters. This method looks almost identical to how
+other [objects] are created and used by OSPRay (described in later
+sections). The first step is to create the device with
 
     OSPDevice ospNewDevice(const char *type);
 
 where the `type` string maps to a specific device implementation. OSPRay
-always provides the "`default`" device, which maps to a local CPU
-rendering device. If it is enabled in the build, you can also use
-"`mpi`" to access the MPI multi-node rendering device (see [Parallel
-Rendering with MPI] section for more information). Once a device is
-created, you can call
+always provides the "`default`" device, which maps to a fast, local CPU
+implementation. Other devices can also be added through additional
+modules, such as distributed MPI device implementations.
+
+Once a device is created, you can call
 
     void ospDeviceSet1i(OSPDevice, const char *id, int val);
     void ospDeviceSetString(OSPDevice, const char *id, const char *val);
@@ -148,7 +136,10 @@ to OSPRay API calls, where users can set/change parameters and recommit
 the device. If changes are made to the device that is already set as the
 current device, it does not need to be set as current again.
 
-To get device-specific properties, the following function can be called:
+OSPRay allows applications to query runtime properties of a device in
+order to do enhanced validation of what device was loaded at runtime.
+The following function can be used to get these device-specific
+properties (attiributes about the device, not paramter values)
 
     int64_t ospDeviceGetProperty(OSPDevice, OSPDeviceProperty);
 
@@ -163,7 +154,7 @@ properties can be provided as parameter:
 
 ### Environment Variables
 
-Finally, OSPRay's generic device parameters can be overridden via
+OSPRay's generic device parameters can be overridden via
 environment variables for easy changes to OSPRay's behavior without
 needing to change the application (variables are prefixed by convention
 with "`OSPRAY_`"):
@@ -189,6 +180,9 @@ with "`OSPRAY_`"):
   OSPRAY_DEFAULT_DEVICE equivalent to `--osp:device:`
   --------------------- --------------------------------------------------------
   : Environment variables interpreted by OSPRay.
+
+Note that these environment variables take precedence over values
+specified through `ospInit` or manually set parameters.
 
 ### Error Handling and Status Messages
 
@@ -245,9 +239,9 @@ actual function pointer.
 
 ### Loading OSPRay Extensions at Runtime
 
-OSPRay's functionality can be extended via plugins, which are
-implemented in shared libraries. To load plugin `name` from
-`libospray_module_<name>.so` (on Linux and Mac OS\ X) or
+OSPRay's functionality can be extended via plugins (which we call
+"modules"), which are implemented in shared libraries. To load module
+`name` from `libospray_module_<name>.so` (on Linux and Mac OS\ X) or
 `ospray_module_<name>.dll` (on Windows) use
 
     OSPError ospLoadModule(const char *name);
@@ -265,15 +259,14 @@ exit), the OSPRay API should be finalized with
 This API call ensures that the current device is cleaned up
 appropriately. Due to static object allocation having non-deterministic
 ordering, it is recommended that applications call `ospShutdown()`
-before the calling application process
-terminates.
+before the calling application process terminates.
 
 Objects
 -------
 
 All entities of OSPRay (the renderer, volumes, geometries, lights,
-cameras, ...) are a specialization of `OSPObject` and share common
-mechanism to deal with parameters and lifetime.
+cameras, ...) are a logical specialization of `OSPObject` and share
+common mechanism to deal with parameters and lifetime.
 
 An important aspect of object parameters is that parameters do not get
 passed to objects immediately. Instead, parameters are not visible at
@@ -289,11 +282,9 @@ camera) it is perfectly valid to do so, as long as the changed
 parameters are recommitted.
 
 The commit semantic allow for batching up multiple small changes, and
-specifies exactly when changes to objects will occur. This is important
-to ensure performance and consistency for devices crossing a PCI bus, or
-across a network. In our MPI implementation, for example, we can easily
-guarantee consistency among different nodes by MPI barrier’ing on every
-commit.
+specifies exactly when changes to objects will occur. This can impact
+performance and consistency for devices crossing a PCI bus or across a
+network.
 
 Note that OSPRay uses reference counting to manage the lifetime of all
 objects, so one cannot explicitly "delete" any object. Instead, to
@@ -305,50 +296,64 @@ given object anymore, call
 This decreases its reference count and if the count reaches `0` the
 object will automatically get deleted. Passing `NULL` is not an error.
 
+Sometimes applications may want to have more than one reference to an
+object, where it is desirable for the application to increment the
+reference count of an object. This is done with
+
+    void ospRetain(OSPObject);
+
+It is important to note that this is only necessary if the application
+wants to call `ospRelease` on an object more than once: objects which
+contain other objects as parameters internally increment/decrement ref
+counts and should not be explicitly done by the application.
+
 ### Parameters
 
 Parameters allow to configure the behavior of and to pass data to
-objects. However, objects do _not_ have an explicit interface for
+objects.  However, objects do _not_ have an explicit interface for
 reasons of high flexibility and a more stable compile-time API. Instead,
 parameters are passed separately to objects in an arbitrary order, and
-unknown parameters will simply be ignored. The following functions allow
-adding various types of parameters with name `id` to a given object:
+unknown parameters will simply be ignored (though a warning message will
+be posted). The following function allows adding various types of
+parameters with name `id` to a given object:
 
-    // add a C-string (zero-terminated char *) parameter
-    void ospSetString(OSPObject, const char *id, const char *s);
+    void ospSetParam(OSPObject, const char *id, OSPDataType type, const void *mem);
 
-    // add an object handle parameter to another object
-    void ospSetObject(OSPObject, const char *id, OSPObject object);
+The valid parameter names for all `OSPObject`s and what types are valid
+are discussed in future sections.
 
-    // add scalar and vector integer and float parameters
-    void ospSetBool (OSPObject, const char *id, int x);
-    void ospSetFloat (OSPObject, const char *id, float x);
-    void ospSetInt (OSPObject, const char *id, int x);
-    void ospSetVec2f (OSPObject, const char *id, float x, float y);
-    void ospSetVec2fv(OSPObject, const char *id, const float *xy);
-    void ospSetVec2i (OSPObject, const char *id, int x, int y);
-    void ospSetVec2iv(OSPObject, const char *id, const int *xy);
-    void ospSetVec3f (OSPObject, const char *id, float x, float y, float z);
-    void ospSetVec3fv(OSPObject, const char *id, const float *xyz);
-    void ospSetVec3i (OSPObject, const char *id, int x, int y, int z);
-    void ospSetVec3iv(OSPObject, const char *id, const int *xyz);
-    void ospSetVec4f (OSPObject, const char *id, float x, float y, float z, float w);
-    void ospSetVec4fv(OSPObject, const char *id, const float *xyzw);
+Note that `mem` must always be a pointer _to_ the object,
+otherwise accidental type casting can occur. This is especially true for
+pointer types (`OSP_VOID_PTR` and `OSPObject` handles), as they will
+implicitly cast to `void *`, but be incorrectly interpreted. To help
+with some of these issues, there also exist variants of `ospSetParam`
+for specific types, such as `ospSetInt` and `ospSetVec3f` in the
+[OSPRay utility library](util.md) (found in `ospray_util.h`).
 
-Users can also remove parameters that have been explicitly set via an
-ospSet call. Any parameters which have been removed will go back to
+Users can also remove parameters that have been explicitly set from
+`ospSetParam`. Any parameters which have been removed will go back to
 their default value during the next commit unless a new parameter
-was set after the parameter was removed. The following API function
-removes the named parameter from the given object:
+was set after the parameter was removed. To remove a parameter, use
 
     void ospRemoveParam(OSPObject, const char *id);
 
 ### Data
 
-There is also the possibility to aggregate many values of the same type
-into an array, which then itself can be used as a parameter to objects.
-The preferable way to create such a new data array supports sharing the
-memory with the application
+OSPRay consumes data arrays from the application using a specific
+object type, `OSPData`. There are several components to describing a
+data array: element type, 1/2/3 dimensional striding, and whether the
+array is shared with the application or copied into opaque,
+OSPRay-owned memory.
+
+Shared data arrays require that the application's array memory outlives
+the lifetime of the created `OSPData`, as OSPRay is referring to
+application memory. Where this is not preferable, applications use
+opaque arrays to allow the `OSPData` to own the lifetime of the array
+memory. However, opaque arrays dictate the cost of copying data into it,
+which should be kept in mind.
+
+Thus the most efficient way to specify a data array from the application
+is to created a shared data array, which is done with
 
     OSPData ospNewSharedData(const void *sharedData,
                        OSPDataType,
@@ -362,7 +367,7 @@ memory with the application
 The call returns an `OSPData` handle to the created array. The calling
 program guarantees that the `sharedData` pointer will remain valid for
 the duration that this data array is being used. The number of elements
-`numItems` must be positive, thus there cannot be an empty data object.
+`numItems` must be positive (there cannot be an empty data object).
 The data is arranged in three dimensions, with specializations to two or
 one dimension (if some `numItems` are 1). The distance between
 consecutive elements (per dimension) is given in bytes with `byteStride`
@@ -373,8 +378,9 @@ equivalent to a transpose. However, if the stride should be calculated,
 then an ordering like `byteStride1 < byteStride2` is assumed to
 disambiguate.
 
-The enum type `OSPDataType` describes the different data types that can
-be represented in OSPRay; valid constants are listed in the table below.
+The enum type `OSPDataType` describes the different element types that
+can be represented in OSPRay; valid constants are listed in the table
+below.
 
   Type/Name              Description
   ---------------------- -----------------------------------------------
@@ -412,6 +418,7 @@ be represented in OSPRay; valid constants are listed in the table below.
   OSP_BOX[1234]F         32\ bit single precision floating-point box (lower + upper bounds)
   OSP_LINEAR[234]F       32\ bit single precision floating-point linear transform
   OSP_AFFINE[234]F       32\ bit single precision floating-point affine transform
+  OSP_VOID_PTR           raw memory address (only found in module extensions)
   ---------------------- -----------------------------------------------
   : Valid named constants for `OSPDataType`.
 
@@ -437,18 +444,18 @@ by the size of the source array] content of the `source` array into
 must be valid inside the destination, i.e., in all dimensions,
 `destinationIndex + sourceSize <= destinationSize`. The affected region
 `[destinationIndex, destinationIndex + sourceSize)` is marked as dirty,
-which may be used by OSPRay to only processe or update that sub-region
+which may be used by OSPRay to only process or update that sub-region
 (e.g., updating an acceleration structure). If the destination array is
 shared with OSPData by the application (created with
 `ospNewSharedData`), then
 
-  - the source array must be shared as well (thus `ospCopyData` cannot be
-    used to read opaque data)
+  - the source array must be shared as well (thus `ospCopyData` cannot
+    be used to read opaque data)
   - if source and destination memory overlaps (aliasing), then behaviour
     is undefined
-  - exept if source and destination regions are identical (including
-    matching strides), which can be used by application to mark that region
-    as dirty (instead of the whole `OSPData`)
+  - except if source and destination regions are identical (including
+    matching strides), which can be used by application to mark that
+    region as dirty (instead of the whole `OSPData`)
 
 To add a data array as parameter named `id` to another object call also
 use
@@ -466,53 +473,27 @@ given type `type` use
     OSPVolume ospNewVolume(const char *type);
 
 The call returns `NULL` if that type of volume is not known by OSPRay,
-or else an `OSPVolume` handle.
+or else a valid `OSPVolume` handle.
 
 ### Structured Volume
 
 Structured volumes only need to store the values of the samples, because
 their addresses in memory can be easily computed from a 3D position. A
-common type of structured volumes are regular grids. OSPRay supports two
-variants that differ in how the volumetric data for the regular grids is
-specified.
+common type of structured volumes are regular grids.
 
-The first variant shares the voxel data with the application. Such a
-volume type is created by passing the type string
-"`shared_structured_volume`" to `ospNewVolume`. The voxel data is laid
-out in memory in xyz-order^[For consecutive memory addresses the x-index
-of the corresponding voxel changes the quickest.] and provided to the
-volume via a [data] buffer parameter named "`voxelData`".
+Structured volumes are created by passing the `structured_volume`
+type string to `ospNewVolume`. Structured volumes are represented
+through an `OSPData` array (which may or may not be shared with the
+application), where the voxel data is laid out in memory in
+xyz-order^[For consecutive memory addresses the x-index of the
+corresponding voxel changes the quickest.]
 
-The second regular grid variant is optimized for rendering performance:
-data locality in memory is increased by arranging the voxel data in
-smaller blocks. This volume type is created by passing the type string
-"`block_bricked_volume`" to `ospNewVolume`. Because of this
-rearrangement of voxel data it cannot be shared the with the application
-anymore, but has to be transferred to OSPRay via
-
-    OSPError ospSetRegion(OSPVolume, void *source,
-                          const int *regionCoords, // single vec3i
-                          const int *regionSize // single vec3i
-                          );
-
-The voxel data pointed to by `source` is copied into the given volume
-starting at position `regionCoords`, must be of size `regionSize` and be
-placed in memory in xyz-order. Note that OSPRay distinguishes between
-volume data and volume parameters. This function must be called only
-after all volume parameters (in particular `dimensions` and `voxelType`,
-see below) have been set and _before_ `ospCommit(volume)` is called.
-If necessary then memory for the volume is allocated on the first call
-to this function.
-
-The common parameters understood by both structured volume variants are
-summarized in the table below.
+The parameters understood by structured volumes are summarized in the
+table below.
 
   ------ ----------- -----------  -----------------------------------
   Type   Name            Default  Description
   ------ ----------- -----------  -----------------------------------
-  vec2f  voxelRange    $(∞, -∞)$  minimum and maximum of the scalar
-                                  values
-
   vec3i  dimensions               number of voxels in each
                                   dimension $(x, y, z)$
 
@@ -538,22 +519,25 @@ summarized in the table below.
 
 ### Adaptive Mesh Refinement (AMR) Volume
 
-AMR volumes are specified as a list of blocks, which are levels of
-refinement in potentially overlapping regions. There can be any number
-of refinement levels and any number of blocks at any level of
-refinement. An AMR volume type is created by passing the type string
-"`amr_volume`" to `ospNewVolume`.
+AMR volumes are specified as a list of blocks, which exist at levels of
+refinement in potentially overlapping regions.  Blocks exist in a tree
+structure, with coarser refinement level blocks containing finer blocks.  The
+cell width is equal for all blocks at the same refinement level, though blocks
+at a coarser level have a larger cell width than finer levels.
 
-Blocks are defined by four parameters: their bounds, the refinement level
-in which they reside, their cell width, and the scalar data contained
-within them.
+There can be any number of refinement levels and any number of blocks at any
+level of refinement. An AMR volume type is created by passing the type string
+`"amr_volume"` to `ospNewVolume`.
+
+Blocks are defined by four parameters: their bounds, the refinement level in
+which they reside, the cell widths for each refinement level, and the scalar
+data contained within each block.
+
+Note that cell widths are defined _per refinement level_, not per block.
 
   -------------- --------------- -----------------  -----------------------------------
   Type           Name                      Default  Description
   -------------- --------------- -----------------  -----------------------------------
-  range2f        voxelRange              $(∞, -∞)$  minimum and maximum of the scalar
-                                                    values
-
   `OSPAMRMethod` method          `OSP_AMR_CURRENT`  `OSPAMRMethod` sampling method.
                                                     Supported methods are:
 
@@ -578,34 +562,49 @@ within them.
 
   vec3f          gridSpacing           $(1, 1, 1)$  size of the grid cells in
                                                     world-space
-
-  string         voxelType               undefined  data type of each voxel,
-                                                    currently supported are:
-
-                                                    `OSP_UCHAR`
-
-                                                    `OSP_SHORT`
-
-                                                    `OSP_USHORT`
-
-                                                    `OSP_FLOAT`
-
-                                                    `OSP_DOUBLE`
   -------------- --------------- -----------------  -----------------------------------
   : Additional configuration parameters for AMR volumes.
 
-Lastly, note that the `gridOrigin` and `gridSpacing` parameters act just
-like the structured volume equivalent, but they only modify the root
-(coarsest level) of refinement.
+Lastly, note that the `gridOrigin` and `gridSpacing` parameters act just like
+the structured volume equivalent, but they only modify the root (coarsest level)
+of refinement.
+
+In particular, OSPRay's AMR implementation was designed to cover
+Berger-Colella [1] and Chombo [2] AMR data.  The `method` parameter above
+determines the interpolation method used when sampling the volume.
+
+* `OSP_AMR_CURRENT` finds the finest refinement level at that cell and
+  interpolates through this "current" level
+* `OSP_AMR_FINEST` will interpolate at the closest existing cell in the
+  volume-wide finest refinement level regardless of the sample cell's level
+* `OSP_AMR_OCTANT` interpolates through all available refinement levels at that
+  cell. This method avoids discontinuities at refinement level boundaries at
+  the cost of performance
+
+Details and more information can be found in the publication for the
+implementation [3].
+
+1. M. J. Berger, and P. Colella. "Local adaptive mesh refinement for
+   shock hydrodynamics." Journal of Computational Physics 82.1 (1989): 64-84.
+   DOI: 10.1016/0021-9991(89)90035-1
+2. M. Adams, P. Colella, D. T. Graves, J.N. Johnson, N.D. Keen, T. J. Ligocki.
+   D. F. Martin. P.W. McCorquodale, D. Modiano. P.O. Schwartz, T.D. Sternberg
+   and B. Van Straalen, Chombo Software Package for AMR Applications - Design
+   Document,  Lawrence Berkeley National Laboratory Technical Report
+   LBNL-6616E.
+3. I. Wald, C. Brownlee, W. Usher, and A. Knoll. CPU volume rendering of
+   adaptive mesh refinement data. SIGGRAPH Asia 2017 Symposium on Visualization
+   on - SA ’17, 18(8), 1–8. DOI: 10.1145/3139295.3139305
 
 ### Unstructured Volumes
 
 Unstructured volumes can have its topology and geometry freely defined.
-Geometry can be composed of tetrahedral, hexahedral, wedge or pyramid cell
-types. Used data format is compatible with VTK and consists from multiple
-arrays: vertex positions and values, vertex indices, cell start indices,
-cell types, and cell values. An unstructured volume type is created by
-passing the type string "`unstructured_volume`" to `ospNewVolume`.
+Geometry can be composed of tetrahedral, hexahedral, wedge or pyramid
+cell types. Used data format is compatible with VTK and consists from
+multiple arrays: vertex positions and values, vertex indices, cell start
+indices, cell types, and cell values. An unstructured volume type is
+created by passing the type string "`unstructured_volume`" to
+`ospNewVolume`.
 
 Sampled cell values can be specified either per-vertex (`vertex.value`)
 or per-cell (`cell.value`). If both arrays are set, `cell.value` takes
@@ -626,9 +625,10 @@ For wedge cells, each wedge is formed by a group of six indices into the
 vertices and data values. Vertex ordering is the same as `VTK_WEDGE`:
 three bottom vertices counterclockwise, then top three counterclockwise.
 
-For pyramid cells, each cell is formed by a group of five indices into the
-vertices and data values. Vertex ordering is the same as `VTK_PYRAMID`:
-four bottom vertices counterclockwise, then the top vertex.
+For pyramid cells, each cell is formed by a group of five indices into
+the vertices and data values. Vertex ordering is the same as
+`VTK_PYRAMID`: four bottom vertices counterclockwise, then the top
+vertex.
 
 To maintain VTK data compatibility an index array may be specified via
 `indexPrefixed` array that allow vertex indices to be interleaved with
@@ -651,7 +651,7 @@ id_m$.
                                                      each cell are prefixed with the number
                                                      of vertices
 
-  uint32[] / uint64[]  cell                          [data] array of locations (into the
+  uint32[] / uint64[]  cell.index                    [data] array of locations (into the
                                                      index array), specifying the first index
                                                      of each cell
 
@@ -692,8 +692,9 @@ volume. To create a new transfer function of given type `type` use
 
 The call returns `NULL` if that type of transfer functions is not known
 by OSPRay, or else an `OSPTransferFunction` handle to the created
-transfer function. That handle can be assigned to a volume as parameter
-"`transferFunction`" using `ospSetObject`.
+transfer function. That handle can be assigned to a volumetric model
+(described below) as parameter "`transferFunction`" using
+`ospSetObject`.
 
 One type of transfer function that is supported by OSPRay is the linear
 transfer function, which interpolates between given equidistant colors
@@ -711,8 +712,11 @@ to `ospNewTransferFunction` and it is controlled by these parameters:
 
 ### VolumetricModels
 
-Volumes in OSPRay are given volume rendering apperance information through
-VolumetricModels. To create a volume instance, call
+Volumes in OSPRay are given volume rendering appearance information
+through VolumetricModels. This decouples the physical representation of
+the volume (and possible acceleration structures it contains) to
+rendering-specific parameters (where more than one set may exist
+concurrently). To create a volume instance, call
 
     OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume);
 
@@ -724,6 +728,13 @@ VolumetricModels. To create a volume instance, call
   float                samplingRate                 0.125 sampling rate of the volume (this
                                                           is the minimum step size for
                                                           adaptive sampling)
+
+  float                densityScale                   1.0 used to make volumes uniformly thinner
+                                                          or thicker ([path tracer] only)
+
+  float                anisotropy                     0.0 anisotropy of the (Henyey-Greenstein)
+                                                          phase function in [-1, 1]. Default:
+                                                          Isotropic scattering. ([path tracer] only)
   -------------------- ------------------------ --------- ---------------------------------------
   : Parameters understood by VolumetricModel.
 
@@ -731,53 +742,39 @@ VolumetricModels. To create a volume instance, call
 Geometries
 ----------
 
-Geometries in OSPRay are objects that describe intersectable surfaces. To
-create a new geometry object of given type `type` use
+Geometries in OSPRay are objects that describe intersectable surfaces.
+To create a new geometry object of given type `type` use
 
     OSPGeometry ospNewGeometry(const char *type);
 
 The call returns `NULL` if that type of geometry is not known by OSPRay,
 or else an `OSPGeometry` handle.
 
-### Triangle Mesh
+### Mesh
 
-A traditional triangle mesh (indexed face set) geometry is created by
-calling `ospNewGeometry` with type string "`triangles`". Once created, a
-triangle mesh recognizes the following parameters:
+A mesh consiting of either triangles or quads is created by calling
+`ospNewGeometry` with type string "`mesh`". Once created, a mesh
+recognizes the following parameters:
 
-  Type               Name             Description
-  ------------------ ---------------- -------------------------------------------------
-  vec3f[]            vertex.position  [data] array of vertex positions
-  vec3f[]            vertex.normal    [data] array of vertex normals
-  vec4f[] / vec3f[]  vertex.color     [data] array of vertex colors (RGBA/RGB)
-  vec2f[]            vertex.texcoord  [data] array of vertex texture coordinates
-  vec3ui[]           index            [data] array of triangle indices (into the vertex array(s))
-  ------------------ ---------------- -------------------------------------------------
-  : Parameters defining a triangle mesh geometry.
+  Type                 Name             Description
+  -------------------- ---------------- -------------------------------------------------
+  vec3f[]              vertex.position  [data] array of vertex positions
+  vec3f[]              vertex.normal    [data] array of vertex normals
+  vec4f[] / vec3f[]    vertex.color     [data] array of vertex colors (RGBA/RGB)
+  vec2f[]              vertex.texcoord  [data] array of vertex texture coordinates
+  vec3ui[] / vec4ui[]  index            [data] array of (either triangle or quad) indices (into the vertex array(s))
+  -------------------- ---------------- -------------------------------------------------
+  : Parameters defining a mesh geometry.
 
-The `vertex.position` and `index` arrays are mandatory to create a valid triangle
-mesh.
+The data type of index arrays differentiates between the underlying
+geometry, triangles are used for a index with `vec3ui` type and quads
+for `vec4ui` type. Quads are internally handled as a pair of two
+triangles, thus mixing triangles and quads is supported by encoding some
+triangle as a quad with the last two vertex indices being identical
+(`w=z`).
 
-### Quad Mesh
-
-A mesh consisting of quads is created by calling `ospNewGeometry` with
-type string "`quads`". Once created, a quad mesh recognizes the
-following parameters:
-
-  Type               Name             Description
-  ------------------ ---------------- -------------------------------------------------
-  vec3f[]            vertex.position  [data] array of vertex positions
-  vec3f[]            vertex.normal    [data] array of vertex normals
-  vec4f[] / vec3f[]  vertex.color     [data] array of vertex colors (RGBA/RGB)
-  vec2f[]            vertex.texcoord  [data] array of vertex texture coordinates
-  vec4ui[]           index            [data] array of quad indices (into the vertex array(s))
-  ------------------ ---------------- -------------------------------------------------
-  : Parameters defining a quad mesh geometry.
-
-The `vertex.position` and `index` arrays are mandatory to create a valid quad
-mesh. A quad is internally handled as a pair of two triangles, thus
-mixing triangles and quad is supported by encoding a triangle as a quad
-with the last two vertex indices being identical (`w=z`).
+The `vertex.position` and `index` arrays are mandatory to create a valid
+mesh. 
 
 ### Subdivision
 
@@ -845,137 +842,76 @@ array:
   -------- ---------------- --------  ---------------------------------------
   : Parameters defining a spheres geometry.
 
-### Cylinders
-
-A geometry consisting of individual cylinders, each of which can have an
-own radius, is created by calling `ospNewGeometry` with type string
-"`cylinders`". The cylinders will not be tessellated but rendered
-procedurally and are thus perfectly round. To allow a variety of cylinder
-representations in the application this geometry allows a flexible way
-of specifying the data of offsets for start position, end position and
-radius within a [data] array. All parameters are listed in the table
-below.
-
-  -------- ------------------- --------  -------------------------------------
-  Type     Name                 Default  Description
-  -------- ------------------- --------  -------------------------------------
-  vec3f[]  cylinder.position0            [data] array of center positions
-
-  vec3f[]  cylinder.position1            [data] array of center positions
-
-  float[]  cylinder.radius         NULL  optional [data] array of the
-                                         per-cylinder radius
-
-  vec2f[]  cylinder.texcoord0      NULL  optional [data] array of texture
-                                         coordinates at position0
-
-  vec2f[]  cylinder.texcoord1      NULL  optional [data] array of texture
-                                         coordinates at position0
-
-  float    radius                  0.01  default radius for all cylinders
-                                         (if `cylinder.radius` is not used)
-  -------- ------------------- --------  -------------------------------------
-  : Parameters defining a cylinders geometry.
-
-For texturing each cylinder is seen as a 1D primitive, i.e., a line
-segment: the 2D texture coordinates at its vertices v0 and v1 are
-linearly interpolated.
-
-### Streamlines
-
-A geometry consisting of multiple streamlines is created by calling
-`ospNewGeometry` with type string "`streamlines`". The streamlines are
-internally assembled either from connected (and rounded) cylinder
-segments, or represented as Bézier curves; they are thus always
-perfectly round. The parameters defining this geometry are listed in the
-table below.
-
-  ------------------ --------------- --------------------------------------------
-  Type               Name            Description
-  ------------------ --------------- --------------------------------------------
-  float              radius          global radius of all streamlines (if
-                                     per-vertex radius is not used), default 0.01
-
-  bool               smooth          enable curve interpolation, default off
-                                     (always on if per-vertex radius is used)
-
-  uint32[]           index           [data] array of indices to the first vertex
-                                     of a link
-
-  vec3f[]            vertex.position [data] array of all vertex position for
-                                     *all* streamlines
-
-  vec4f[]            vertex.color    [data] array of corresponding vertex
-                                     colors (RGBA)
-
-  float[]            vertex.radius   [data] array of corresponding vertex radius
-  ------------------ --------------- --------------------------------------------
-  : Parameters defining a streamlines geometry.
-
-Each streamline is specified by a set of (aligned) control points in
-`vertex.position`. If `smooth` is disabled and a constant `radius` is
-used for all streamlines then all vertices belonging to the same logical
-streamline are connected via [cylinders], with additional [spheres] at
-each vertex to create a continuous, closed surface. Otherwise,
-streamlines are represented as Bézier curves, smoothly interpolating the
-vertices. This mode supports per-vertex varying radii (given in
-`vertex.radius`), but is slower and consumes more memory. Additionally,
-the radius needs to be smaller than the curvature radius of the Bézier
-curve at each location on the curve.
-
-A streamlines geometry can contain multiple disjoint streamlines, each
-streamline is specified as a list of segments (or links) referenced via
-`index`: each entry `e` of the `index` array points the first vertex of a link
-(`vertex.position[index[e]]`) and the second vertex of the link is implicitly
-the directly following one (`vertex.position[index[e]+1]`).  For example, two
-streamlines of vertices `(A-B-C-D)` and `(E-F-G)`, respectively, would
-internally correspond to five links (`A-B`, `B-C`, `C-D`, `E-F`, and `F-G`),
-and would be specified via an array of vertices `[A,B,C,D,E,F,G]`, plus an
-array of link indices `[0,1,2,4,5]`.
-
 ### Curves
 
 A geometry consisting of multiple curves is created by calling
 `ospNewGeometry` with type string "`curves`".  The parameters defining
 this geometry are listed in the table below.
 
-  ------------------ --------------- -------------------------------------------
-  Type               Name            Description
-  ------------------ --------------- -------------------------------------------
-  vec4f[]            vertex.position [data] array of vertex position and radius
+  ------------------ ---------------------- -------------------------------------------
+  Type               Name                   Description
+  ------------------ ---------------------- -------------------------------------------
+  vec4f[]            vertex.position_radius [data] array of vertex position and
+                                            per-vertex radius
 
-  vec3f[]            vertex.normal   [data] array of curve normals (only for
-                                     "ribbon" curves)
+  vec3f[]            vertex.position        [data] array of vertex position
 
-  vec3f[]            vertex.tangent  [data] array of curve tangents (only for
-                                     "hermite" curves)
+  float              radius                 global radius of all curves (if
+                                            per-vertex radius is not used), default 0.01
+  
+  vec2f[]            vertex.texcoord        [data] array of per-vertex texture coordinates
 
-  uint32[]           index           [data] array of indices to the first vertex
-                                     or tangent of a curve segment
+  vec4f[]            vertex.color           [data] array of corresponding vertex
+                                            colors (RGBA)
 
-  int                type            `OSPCurveType` for rendering the curve.
-                                     Supported types are:
+  vec3f[]            vertex.normal          [data] array of curve normals (only for
+                                            "ribbon" curves)
 
-                                     `OSP_FLAT`
+  vec3f[]            vertex.tangent         [data] array of curve tangents (only for
+                                            "hermite" curves)
 
-                                     `OSP_ROUND`
+  uint32[]           index                  [data] array of indices to the first vertex
+                                            or tangent of a curve segment
 
-                                     `OSP_RIBBON`
+  int                type                   `OSPCurveType` for rendering the curve.
+                                            Supported types are:
 
-  int                basis           `OSPCurveBasis` for defining the curve.
-                                     Supported bases are:
+                                            `OSP_FLAT`
 
-                                     `OSP_LINEAR`
+                                            `OSP_ROUND`
 
-                                     `OSP_BEZIER`
+                                            `OSP_RIBBON`
 
-                                     `OSP_BSPLINE`
+  int                basis                  `OSPCurveBasis` for defining the curve.
+                                             Supported bases are:
 
-                                     `OSP_HERMITE`
-  ------------------ --------------- -------------------------------------------
+                                            `OSP_LINEAR`
+
+                                            `OSP_BEZIER`
+
+                                            `OSP_BSPLINE`
+
+                                            `OSP_HERMITE`
+
+                                            `OSP_CATMULL_ROM`
+  ------------------ ---------------------- -------------------------------------------
   : Parameters defining a curves geometry.
 
-See Embree documentation for discussion of curve types and data formatting.
+Depending upon the specified data type of vertex positions, the curves
+will be implemented Embree curves or assembled from rounded and
+linearly-connected segments.
+
+Positions in `vertex.position_radius` format supports per-vertex varying
+radii with data type `vec4f[]` and instantiate Embree curves internally
+for the relevant type/basis mapping (See Embree documentation for
+discussion of curve types and data formatting). 
+
+If a constant `radius` is used and positions are specified in a
+`vec3f[]` type of `vertex.position` format, then type/basis defaults to
+`OSP_ROUND` and `OSP_LINEAR` (this is the fastest and most memory
+efficient mode). Implementation is with round linear segements where
+each segment corresponds to a link between two vertices.
+
 
 ### Boxes
 
@@ -985,8 +921,7 @@ geometry by calling `ospNewGeometry` with type string "`boxes`".
 
   Type       Name       Description
   ---------- ---------- ------------------------------------------------------
-  box3f[]    box        [data] array of boxes. Note this can be specified
-                        as OSP_BOX3F, (2 * OSP_VEC3F), or (6 * OSP_FLOAT)
+  box3f[]    box        [data] array of boxes
   ---------- ---------- ------------------------------------------------------
   : Parameters defining a boxes geometry.
 
@@ -1009,29 +944,31 @@ function].
 
 Geometries are matched with surface appearance information through
 GeometricModels. These take a geometry, which defines the surface
-representation, and applies either full-object or per-primitive color and
-material information. To create a geometry instance, call
+representation, and applies either full-object or per-primitive color
+and material information. To create a geometric model, call
 
     OSPGeometricModel ospNewGeometricModel(OSPGeometry geometry);
 
-  ------------------ ----------------- --------- --------------------------------------
-  Type               Name                Default Description
-  ------------------ ----------------- --------- --------------------------------------
-  vec4f[]            prim.color             NULL [data] array of per-primitive colors
+Color and material are fetched with the primitive ID of the hit (clamped to the
+valid range, thus a single color or material is fine), or mapped first via the
+`index` array (if present). All paramters are optional, however, some renderers
+(notably the [path tracer]) require a material to be set.
 
-  uint32[]           prim.materialID        NULL [data] array of per-primitive material IDs
+  -------------- ---------- ----------------------------------------------------
+  Type           Name       Description
+  -------------- ---------- ----------------------------------------------------
+  OSPMaterial[]  material   [data] array of (per-primitive) materials
 
-  OSPMaterial[]      materialList           NULL [data] array of materials, indexed by
-                                                 `prim.materialID`
+  vec4f[]        color      optional [data] array of (per-primitive) colors
 
-  OSPMaterial        material               NULL default material used if `prim.materialID`
-                                                 is not present
-  ------------------ ----------------- --------- ---------------------------------------
+  uint8[]        index      optional [data] array of per-primitive indices into
+                            `color` and `material`
+  -------------- ---------- ----------------------------------------------------
   : Parameters understood by GeometricModel.
 
 
 Lights
------
+------
 
 To create a new light source of given type `type` use
 
@@ -1080,7 +1017,7 @@ The sphere light (or the special case point light) is a light emitting
 uniformly in all directions from the surface towards the outside.
 It does not emit any light towards the inside of the sphere.
 It is created by passing the type string "`sphere`" to `ospNewLight`.
-In addition to the [generalparameters](#lights) understood by all lights
+In addition to the [general parameters](#lights) understood by all lights
 the sphere light supports the following special parameters:
 
   Type      Name      Description
@@ -1192,16 +1129,20 @@ a light emitting material assigned (for example the [Luminous]
 material).
 
 
-
 Scene Hierarchy
 ---------------
+
 ### Groups
 
 Groups in OSPRay represent collections of GeometricModels and
-VolumetricModels which share a common local-space coordinate system. To create
-a group call
+VolumetricModels which share a common local-space coordinate system. To
+create a group call
 
     OSPGroup ospNewGroup();
+
+Groups take arrays of geometric models and volumetric models, but they
+are optional. In other words, there is no need to create empty arrays if
+there are no geometries or volumes in the group.
 
   ------------------ --------------- ----------  --------------------------------------
   Type               Name               Default  Description
@@ -1226,11 +1167,15 @@ a group call
   ------------------ --------------- ---------- ---------------------------------------
   : Parameters understood by groups.
 
+Note that groups only need to re re-committed if a geometry or volume
+changes (surface/scalar field representation). Appearance information
+on `OSPGeometricModel` and `OSPVolumetricModel` can be changed freely,
+as internal acceleration structures do not need to be reconstructed.
 
 ### Instances
 
-Instances in OSPRay represent a single group's placement into the world via
-a transform. To create and instance call
+Instances in OSPRay represent a single group's placement into the world
+via a transform. To create and instance call
 
     OSPInstance ospNewInstance(OSPGroup);
 
@@ -1250,19 +1195,21 @@ create an (empty) world call
 
     OSPWorld ospNewWorld();
 
-The call returns an `OSPWorld` handle to the created world. Objects are
-placed in the world by existing in either the `geometries` or `volumes`
-data array parameters. Either array of objects is optional: in other
-words, there is no need to create empty arrays if there are no
-geometries or volumes to be rendered.
+Objects are placed in the world through an array of instances. Similar to
+[group], the array of instances is optional: there is no need to create
+empty arrays if there are no instances (though there will be nothing to
+render).
 
-Applications can query the world (axis-aligned) bounding box after the world
-has been commited. To get this information, call
+Applications can query the world (axis-aligned) bounding box after the
+world has been committed. To get this information, call
 
-    OSPBounds ospGetWorldBounds(OSPWorld);
+    OSPBounds ospGetBounds(OSPObject);
+
+This call can also take `OSPGroup` and `OSPInstance` as well: all other
+object types will return an empty bounding box.
 
 Finally, Worlds can be configured with parameters for making various
-feature/performance trade-offs.
+feature/performance trade-offs (similar to groups).
 
   ------------- ---------------- --------  -------------------------------------
   Type          Name              Default  Description
@@ -1272,7 +1219,6 @@ feature/performance trade-offs.
 
   OSPLight[]    light                NULL  [data] array with handles of the
                                            [lights]
-
 
   bool          dynamicScene        false  use RTC_SCENE_DYNAMIC flag (faster
                                            BVH build, slower ray traversal),
@@ -1291,8 +1237,8 @@ feature/performance trade-offs.
   : Parameters understood by worlds.
 
 
-Renderer
---------
+Renderers
+---------
 
 A renderer is the central object for rendering in OSPRay. Different
 renderers implement different features and support different materials.
@@ -1350,10 +1296,9 @@ objects rendered by OSPRay.
 
 The SciVis renderer is a fast ray tracer for scientific visualization
 which supports volume rendering and ambient occlusion (AO). It is
-created by passing the  type string "`scivis`" or "`raytracer`" to
-`ospNewRenderer`. In addition to the [general parameters](#renderer)
-understood by all renderers the SciVis renderer supports the following
-special parameters:
+created by passing the  type string "`scivis`" to `ospNewRenderer`. In
+addition to the [general parameters](#renderer) understood by all
+renderers, the SciVis renderer supports the following parameters:
 
   ------------- ---------------------- ------------  ----------------------------
   Type          Name                        Default  Description
@@ -1367,11 +1312,6 @@ special parameters:
   float         aoIntensity                       1  ambient occlusion strength
   ------------- ---------------------- ------------  ----------------------------
   : Special parameters understood by the SciVis renderer.
-
-Note that the intensity (and color) of AO is deduced from an [ambient
-light] in the `lights` array.^[If there are multiple ambient lights then
-their contribution is added] If `aoSamples` is zero (the default) then
-ambient lights cause ambient illumination (without occlusion).
 
 
 ### Path Tracer
@@ -1406,6 +1346,10 @@ supports the following special parameters:
 
 The path tracer requires that [materials] are assigned to [geometries],
 otherwise surfaces are treated as completely black.
+
+The path tracer supports [volumes](#volumes) with multiple scattering.
+The scattering albedo can be specified using the [transfer function].
+Extinction is assumed to be spectrally constant.
 
 ### Materials
 
@@ -1467,7 +1411,7 @@ Note that currently only the path tracer implements colored transparency
 with `Tf`.
 
 Normal mapping can simulate small geometric features via the texture
-`map_Bump`. The normals $n$ in the normal map are wrt. the local
+`map_Bump`. The normals $n$ in the normal map are with respect to the local
 tangential shading coordinate system and are encoded as $½(n+1)$, thus a
 texel $(0.5, 0.5, 1)$^[respectively $(127, 127, 255)$ for 8\ bit
 textures] represents the unperturbed shading normal $(0, 0, 1)$. Because
@@ -1574,8 +1518,9 @@ listed in the table below.
   -------------------------------------------------------------------------------------------
   : Parameters of the Principled material.
 
-All parameters can be textured by passing a [texture] handle, suffixed with "`Map`"
-(e.g., "`baseColorMap`"); [texture transformations] are supported as well.
+All parameters can be textured by passing a [texture] handle, prefixed
+with "`map_`" (e.g., "`map_baseColor`"). [texture transformations] are
+supported as well.
 
 ![Rendering of a Principled coated brushed metal material with textured
 anisotropic rotation and a dust layer (sheen) on top.][imgMaterialPrincipled]
@@ -1629,8 +1574,9 @@ in the table below.
   -------------------------------------------------------------------------------------------
   : Parameters of the CarPaint material.
 
-All parameters can be textured by passing a [texture] handle, suffixed with "`Map`"
-(e.g., "`baseColorMap`"); [texture transformations] are supported as well.
+All parameters can be textured by passing a [texture] handle, prefixed
+with "`map_`" (e.g., "`map_baseColor`"). [texture transformations] are
+supported as well.
 
 ![Rendering of a pearlescent CarPaint material.][imgMaterialCarPaint]
 
@@ -1659,7 +1605,7 @@ type string "`Metal`" to `ospNewMaterial`. Its parameters are
 The main appearance (mostly the color) of the Metal material is
 controlled by the physical parameters `eta` and `k`, the
 wavelength-dependent, complex index of refraction. These coefficients
-are quite counterintuitive but can be found in [published
+are quite counter-intuitive but can be found in [published
 measurements](https://refractiveindex.info/). For accuracy the index of
 refraction can be given as an array of spectral samples in `ior`, each
 sample a triplet of wavelength (in nm), eta, and k, ordered
@@ -1730,7 +1676,7 @@ the type string "`Glass`" to `ospNewMaterial`. Its parameters are
   ------ -------------------- --------  -----------------------------------
   : Parameters of the Glass material.
 
-For convenience, the rather counterintuitive physical attenuation
+For convenience, the rather counter-intuitive physical attenuation
 coefficients will be calculated from the user inputs in such a way, that
 the `attenuationColor` will be the result when white light traveled
 trough a glass of thickness `attenuationDistance`.
@@ -1826,9 +1772,9 @@ parameters of lights: [`color` and `intensity`](#lights).
 
 ### Texture
 
-OSPRay currently implements two texture types (`texture2d` and `volume`) and is
-open for extension to other types by applications. More types may be
-added in future releases.
+OSPRay currently implements two texture types (`texture2d` and `volume`)
+and is open for extension to other types by applications. More types may
+be added in future releases.
 
 To create a new texture use
 
@@ -1840,8 +1786,8 @@ texture.
 
 #### Texture2D
 
-The `texture2d` texture type implements an image-based texture, where its
-parameters are as follows
+The `texture2d` texture type implements an image-based texture, where
+its parameters are as follows
 
   Type    Name         Description
   ------- ------------ ----------------------------------
@@ -1879,12 +1825,13 @@ no filtering) then pass the `OSP_TEXTURE_FILTER_NEAREST` flag.
 #### TextureVolume
 
 The `volume` texture type implements texture lookups based on 3D world
-coordinates of the surface hit point on the associated geometry. If the given
-hit point is within the attached volume, the volume is sampled and classified
-with the transfer function attached to the volume. This implements the ability
-to visualize volume values (as colored by its transfer function) on arbitrary
-surfaces inside the volume (as opposed to an isosurface showing a particular
-value in the volume). Its parameters are as follows
+coordinates of the surface hit point on the associated geometry. If the
+given hit point is within the attached volume, the volume is sampled and
+classified with the transfer function attached to the volume. This
+implements the ability to visualize volume values (as colored by its
+transfer function) on arbitrary surfaces inside the volume (as opposed
+to an isosurface showing a particular value in the volume). Its
+parameters are as follows
 
   Type      Name         Description
   --------- ------------ -------------------------------------------
@@ -1951,7 +1898,7 @@ shifted sensor.
 
 #### Perspective Camera
 
-The perspective camera implements a simple thinlens camera for
+The perspective camera implements a simple thin lens camera for
 perspective rendering, supporting optionally depth of field and stereo
 rendering, but no motion blur. It is created by passing the type string
 "`perspective`" to `ospNewCamera`. In addition to the [general
@@ -2238,44 +2185,43 @@ parameters to the values listed in the table below.
 Rendering
 ---------
 
-### Synchronous Rendering
-
-To render a frame into the given framebuffer with the given renderer use
-
-    float ospRenderFrame(OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld);
-
-What to render and how to render it depends on the renderer's parameters. If
-the framebuffer supports accumulation (i.e., it was created with
-`OSP_FB_ACCUM`) then successive calls to `ospRenderFrame` will progressively
-refine the rendered image. If additionally the framebuffer has an
-`OSP_FB_VARIANCE` channel then `ospRenderFrame` returns an estimate of the
-current variance of the rendered image, otherwise `inf` is returned. The
-estimated variance can be used by the application as a quality indicator and
-thus to decide whether to stop or to continue progressive rendering.
-
 ### Asynchronous Rendering
 
-Rendering can also be done asynchronously, with a similar interface to the
-above synchronous version. To start an asynchronous render, use
+Rendering is by default asynchronous (non-blocking), and is done by
+combining a frame buffer, renderer, camera, and world.
 
-    OSPFuture ospRenderFrameAsync(OSPFrameBuffer,
-                                  OSPRenderer,
-                                  OSPCamera,
-                                  OSPWorld);
+What to render and how to render it depends on the renderer's
+parameters. If the framebuffer supports accumulation (i.e., it was
+created with `OSP_FB_ACCUM`) then successive calls to `ospRenderFrame`
+will progressively refine the rendered image. If additionally the
+framebuffer has an `OSP_FB_VARIANCE` channel then `ospRenderFrame`
+returns an estimate of the current variance of the rendered image,
+otherwise `inf` is returned. The estimated variance can be used by the
+application as a quality indicator and thus to decide whether to stop or
+to continue progressive rendering.
 
-This version returns an `OSPFuture` handle, which can be used to
-synchronize with, cancel, or query for progress of the running task.
-When `ospRenderFrameAsync` is called, there is no guarantee when the
-associated task will begin execution.
+To start an render task, use
 
-Progress of a running frame can be queried with the following API function
+    OSPFuture ospRenderFrame(OSPFrameBuffer,
+                             OSPRenderer,
+                             OSPCamera,
+                             OSPWorld);
+
+This returns an `OSPFuture` handle, which can be used to
+synchronize with the application, cancel, or query for progress of the
+running task. When `ospRenderFrame` is called, there is no guarantee
+when the associated task will begin execution.
+
+Progress of a running frame can be queried with the following API
+function
 
     float ospGetProgress(OSPFuture);
 
 This returns the progress of the task in [0-1].
 
-Applications can wait on the result of an asynchronous operation, or choose to
-only synchronize with a specific event. To synchronize with an `OSPFuture` use
+Applications can wait on the result of an asynchronous operation, or
+choose to only synchronize with a specific event. To synchronize with an
+`OSPFuture` use
 
     void ospWait(OSPFuture, OSPSyncEvent = OSP_TASK_FINISHED);
 
@@ -2312,9 +2258,27 @@ As the given running task runs (as tracked by the `OSPFuture`),
 applications can query a boolean [0,1] result if the passed event has
 been completed.
 
-### Asynchronous Rendering and ospCommit()
+### Asynchronously Rendering and ospCommit()
 
-The use of either `ospRenderFrame` or `ospRenderFrameAsync` requires
-that all objects in the scene being rendererd have been committed before
+The use of either `ospRenderFrame` or `ospRenderFrame` requires
+that all objects in the scene being rendered have been committed before
 rendering occurs. If a call to `ospCommit()` happens while a frame is
 rendered, the result is undefined behavior and should be avoided.
+
+### Synchronous Rendering
+
+For convenience in certain use cases, `ospray_util.h` provides a
+synchronous version of `ospRenderFrame`:
+
+    float ospRenderFrameBlocking(OSPFrameBuffer,
+                                 OSPRenderer,
+                                 OSPCamera,
+                                 OSPWorld);
+
+This version is the equivalent of:
+
+    - `ospRenderFrame`
+    - `ospWait(f, OSP_TASK_FINISHED)`
+    - return `ospGetVariance(fb)`
+
+This version is closest to `ospRenderFrame` from OSPRay v1.x.

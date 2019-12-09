@@ -47,7 +47,7 @@ namespace ospray {
 
     // Device definitions /////////////////////////////////////////////////////
 
-    std::shared_ptr<Device> Device::current;
+    memory::IntrusivePtr<Device> Device::current;
     uint32_t Device::logLevel = 0;
 
     Device *Device::createDevice(const char *type)
@@ -149,7 +149,7 @@ namespace ospray {
 
     bool deviceIsSet()
     {
-      return Device::current.get() != nullptr;
+      return Device::current.ptr != nullptr;
     }
 
     Device &currentDevice()
@@ -162,9 +162,7 @@ namespace ospray {
       std::stringstream embreeConfig;
 
       if (device.debugMode)
-        embreeConfig << " threads=1,verbose=2";
-      else if(device.numThreads > 0)
-        embreeConfig << " threads=" << device.numThreads;
+        embreeConfig << " verbose=2";
 
       if (device.threadAffinity == api::Device::AFFINITIZE)
         embreeConfig << ",set_affinity=1";

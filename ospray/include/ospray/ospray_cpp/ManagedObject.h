@@ -16,427 +16,165 @@
 
 #pragma once
 
+// stl
 #include <string>
 #include <type_traits>
-
+// ospray
 #include "ospray/ospray_util.h"
-
+// ospcommon
 #include "ospcommon/math/AffineSpace.h"
 #include "ospcommon/math/vec.h"
+// ospray::cpp
+#include "Traits.h"
 
 namespace ospray {
   namespace cpp {
 
     using namespace ospcommon::math;
 
+    template <typename HANDLE_T = OSPObject, OSPDataType TYPE = OSP_OBJECT>
     class ManagedObject
     {
      public:
-      // string
-      virtual void setParam(const std::string &name,
-                            const std::string &v) const = 0;
+      static constexpr OSPDataType type = TYPE;
 
-      virtual void setParam(const std::string &name, bool v) const   = 0;
-      virtual void setParam(const std::string &name, int v) const    = 0;
-      virtual void setParam(const std::string &name, float v) const  = 0;
-      virtual void setParam(const std::string &name, double v) const = 0;
+      ManagedObject(HANDLE_T object = nullptr);
+      ~ManagedObject();
 
-      // vec2
-      virtual void setParam(const std::string &name, const vec2i &v) const = 0;
-      virtual void setParam(const std::string &name, const vec2f &v) const = 0;
+      ManagedObject(const ManagedObject<HANDLE_T, TYPE> &copy);
+      ManagedObject(ManagedObject<HANDLE_T, TYPE> &&move);
 
-      // vec3
-      virtual void setParam(const std::string &name, const vec3i &v) const = 0;
-      virtual void setParam(const std::string &name, const vec3f &v) const = 0;
+      ManagedObject &operator=(const ManagedObject<HANDLE_T, TYPE> &copy);
+      ManagedObject &operator=(ManagedObject<HANDLE_T, TYPE> &&move);
 
-      // vec4
-      virtual void setParam(const std::string &name, const vec4i &v) const = 0;
-      virtual void setParam(const std::string &name, const vec4f &v) const = 0;
+      template <typename T>
+      void setParam(const std::string &name, const T &v) const;
 
-      // box
-      virtual void setParam(const std::string &name, const box1i &v) const = 0;
-      virtual void setParam(const std::string &name, const box1f &v) const = 0;
+      void setParam(const std::string &name, OSPDataType, const void *) const;
 
-      virtual void setParam(const std::string &name, const box2i &v) const = 0;
-      virtual void setParam(const std::string &name, const box2f &v) const = 0;
+      void removeParam(const std::string &name) const;
 
-      virtual void setParam(const std::string &name, const box3i &v) const = 0;
-      virtual void setParam(const std::string &name, const box3f &v) const = 0;
+      box3f getBounds() const;
 
-      virtual void setParam(const std::string &name, const box4i &v) const = 0;
-      virtual void setParam(const std::string &name, const box4f &v) const = 0;
-
-      // linear/affine spaces
-      virtual void setParam(const std::string &name,
-                            const linear3f &v) const = 0;
-      virtual void setParam(const std::string &name,
-                            const affine3f &v) const = 0;
-
-      // C-string
-      virtual void setParam(const std::string &name, const char *v) const = 0;
-
-      // void*
-      virtual void setParam(const std::string &name, void *v) const = 0;
-
-      // OSPObject*
-      virtual void setParam(const std::string &name, OSPObject v) const = 0;
-
-      // ManagedObject&
-      virtual void setParam(const std::string &name,
-                            const ManagedObject &v) const = 0;
-
-      // Remove parameter on the object
-      virtual void removeParam(const std::string &name) const = 0;
-
-      // Query bounding box
-      virtual box3f getBounds() const = 0;
-
-      //! Commit to ospray
-      virtual void commit() const = 0;
-
-      //! Get the underlying generic OSPObject handle
-      virtual OSPObject object() const = 0;
-
-      virtual ~ManagedObject() = default;
-    };
-
-    //! \todo auto-commit mode
-
-    template <typename OSP_TYPE = OSPObject>
-    class ManagedObject_T : public ManagedObject
-    {
-     public:
-      ManagedObject_T(OSP_TYPE object = nullptr);
-      virtual ~ManagedObject_T() override;
-
-      ManagedObject_T(const ManagedObject_T<OSP_TYPE> &copy);
-      ManagedObject_T(ManagedObject_T<OSP_TYPE> &&move);
-
-      ManagedObject_T &operator=(const ManagedObject_T<OSP_TYPE> &copy);
-      ManagedObject_T &operator=(ManagedObject_T<OSP_TYPE> &&move);
-
-      void setParam(const std::string &name,
-                    const std::string &v) const override;
-
-      void setParam(const std::string &name, bool v) const override;
-      void setParam(const std::string &name, int v) const override;
-      void setParam(const std::string &name, float v) const override;
-      void setParam(const std::string &name, double v) const override;
-
-      void setParam(const std::string &name, const vec2i &v) const override;
-      void setParam(const std::string &name, const vec2f &v) const override;
-
-      void setParam(const std::string &name, const vec3i &v) const override;
-      void setParam(const std::string &name, const vec3f &v) const override;
-
-      void setParam(const std::string &name, const vec4i &v) const override;
-      void setParam(const std::string &name, const vec4f &v) const override;
-
-      void setParam(const std::string &name, const box1i &v) const override;
-      void setParam(const std::string &name, const box1f &v) const override;
-
-      void setParam(const std::string &name, const box2i &v) const override;
-      void setParam(const std::string &name, const box2f &v) const override;
-
-      void setParam(const std::string &name, const box3i &v) const override;
-      void setParam(const std::string &name, const box3f &v) const override;
-
-      void setParam(const std::string &name, const box4i &v) const override;
-      void setParam(const std::string &name, const box4f &v) const override;
-
-      void setParam(const std::string &name, const linear3f &v) const override;
-      void setParam(const std::string &name, const affine3f &v) const override;
-
-      void setParam(const std::string &name, const char *v) const override;
-
-      void setParam(const std::string &name, void *v) const override;
-
-      void setParam(const std::string &name, OSPObject v) const override;
-
-      void setParam(const std::string &name,
-                    const ManagedObject &v) const override;
-
-      void removeParam(const std::string &name) const override;
-
-      box3f getBounds() const override;
-
-      void commit() const override;
-
-      OSPObject object() const override;
+      void commit() const;
 
       //! Get the underlying specific OSP* handle
-      OSP_TYPE handle() const;
+      HANDLE_T handle() const;
 
       //! return whether the given object is valid, or NULL
-      inline operator bool() const
-      {
-        return handle() != nullptr;
-      }
+      operator bool() const;
 
      protected:
-      OSP_TYPE ospObject;
+      HANDLE_T ospObject;
     };
 
     // Inlined function definitions ///////////////////////////////////////////
 
-    template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(OSP_TYPE object)
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE>::ManagedObject(HANDLE_T object)
         : ospObject(object)
     {
       using OSPObject_T = typename std::remove_pointer<OSPObject>::type;
-      using OtherOSP_T  = typename std::remove_pointer<OSP_TYPE>::type;
+      using OtherOSP_T  = typename std::remove_pointer<HANDLE_T>::type;
       static_assert(std::is_same<osp::ManagedObject, OSPObject_T>::value ||
                         std::is_base_of<osp::ManagedObject, OtherOSP_T>::value,
-                    "ManagedObject_T<OSP_TYPE> can only be instantiated with "
+                    "ManagedObject<HANDLE_T> can only be instantiated with "
                     "OSPObject (a.k.a. osp::ManagedObject*) or one of its"
                     "descendants (a.k.a. the OSP* family of types).");
     }
 
-    template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE>::~ManagedObject_T()
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE>::~ManagedObject()
     {
-      ospRelease(ospObject);
+      if (ospObject)
+        ospRelease(ospObject);
     }
 
-    template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(
-        const ManagedObject_T<OSP_TYPE> &copy)
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE>::ManagedObject(
+        const ManagedObject<HANDLE_T, TYPE> &copy)
     {
       ospObject = copy.handle();
       ospRetain(copy.handle());
     }
 
-    template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE>::ManagedObject_T(
-        ManagedObject_T<OSP_TYPE> &&move)
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE>::ManagedObject(
+        ManagedObject<HANDLE_T, TYPE> &&move)
     {
       ospObject      = move.handle();
       move.ospObject = nullptr;
     }
 
-    template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE> &ManagedObject_T<OSP_TYPE>::operator=(
-        const ManagedObject_T<OSP_TYPE> &copy)
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE> &ManagedObject<HANDLE_T, TYPE>::
+    operator=(const ManagedObject<HANDLE_T, TYPE> &copy)
     {
       ospObject = copy.handle();
       ospRetain(copy.handle());
       return *this;
     }
 
-    template <typename OSP_TYPE>
-    inline ManagedObject_T<OSP_TYPE> &ManagedObject_T<OSP_TYPE>::operator=(
-        ManagedObject_T<OSP_TYPE> &&move)
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE> &ManagedObject<HANDLE_T, TYPE>::
+    operator=(ManagedObject<HANDLE_T, TYPE> &&move)
     {
       ospObject      = move.handle();
       move.ospObject = nullptr;
       return *this;
     }
 
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const std::string &v) const
+    template <typename HANDLE_T, OSPDataType TYPE>
+    template <typename T>
+    inline void ManagedObject<HANDLE_T, TYPE>::setParam(const std::string &name,
+                                                        const T &v) const
     {
-      ospSetParam(ospObject, name.c_str(), OSP_STRING, v.c_str());
+      static_assert(OSPTypeFor<T>::value != OSP_UNKNOWN,
+                    "Only types corresponding to OSPDataType values can be set "
+                    "as parameters on OSPRay objects. NOTE: Math types (vec, "
+                    "box, linear, affine) are "
+                    "expected to come from ospcommon::math.");
+      ospSetParam(ospObject, name.c_str(), OSPTypeFor<T>::value, &v);
     }
 
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    bool v) const
+    template <typename HANDLE_T, OSPDataType TYPE>
+    void ManagedObject<HANDLE_T, TYPE>::setParam(const std::string &name,
+                                                 OSPDataType type,
+                                                 const void *mem) const
     {
-      ospSetBool(ospObject, name.c_str(), v);
+      ospSetParam(ospObject, name.c_str(), type, mem);
     }
 
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    int v) const
-    {
-      ospSetInt(ospObject, name.c_str(), v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    float v) const
-    {
-      ospSetFloat(ospObject, name.c_str(), v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    double v) const
-    {
-      ospSetFloat(ospObject, name.c_str(), v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const vec2i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VEC2I, &v.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const vec2f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VEC2F, &v.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const vec3i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VEC3I, &v.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const vec3f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VEC3F, &v.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const vec4i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VEC4I, &v.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const vec4f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VEC4F, &v.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box1i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX1I, &v.lower);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box1f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX1F, &v.lower);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box2i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX2I, &v.lower.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box2f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX2F, &v.lower.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box3i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX3I, &v.lower.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box3f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX3F, &v.lower.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box4i &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX4I, &v.lower.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const box4f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_BOX4F, &v.lower.x);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const linear3f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_LINEAR3F, (const float *)&v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const affine3f &v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_AFFINE3F, (const float *)&v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    const char *v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_STRING, v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    void *v) const
-    {
-      ospSetParam(ospObject, name.c_str(), OSP_VOID_PTR, v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(const std::string &name,
-                                                    OSPObject v) const
-    {
-      ospSetObject(ospObject, name.c_str(), v);
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::setParam(
-        const std::string &name, const ManagedObject &v) const
-    {
-      ospSetObject(ospObject, name.c_str(), v.object());
-    }
-
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::removeParam(
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline void ManagedObject<HANDLE_T, TYPE>::removeParam(
         const std::string &name) const
     {
       ospRemoveParam(ospObject, name.c_str());
     }
 
-    template <typename OSP_TYPE>
-    box3f ManagedObject_T<OSP_TYPE>::getBounds() const
+    template <typename HANDLE_T, OSPDataType TYPE>
+    box3f ManagedObject<HANDLE_T, TYPE>::getBounds() const
     {
       auto b = ospGetBounds(ospObject);
-      return box3f(b.lower);
+      return box3f(vec3f(b.lower), vec3f(b.upper));
     }
 
-    template <typename OSP_TYPE>
-    inline void ManagedObject_T<OSP_TYPE>::commit() const
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline void ManagedObject<HANDLE_T, TYPE>::commit() const
     {
       ospCommit(ospObject);
     }
 
-    template <typename OSP_TYPE>
-    OSPObject ManagedObject_T<OSP_TYPE>::object() const
-    {
-      return (OSPObject)ospObject;
-    }
-
-    template <typename OSP_TYPE>
-    inline OSP_TYPE ManagedObject_T<OSP_TYPE>::handle() const
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline HANDLE_T ManagedObject<HANDLE_T, TYPE>::handle() const
     {
       return ospObject;
+    }
+
+    template <typename HANDLE_T, OSPDataType TYPE>
+    inline ManagedObject<HANDLE_T, TYPE>::operator bool() const
+    {
+      return handle() != nullptr;
     }
 
   }  // namespace cpp

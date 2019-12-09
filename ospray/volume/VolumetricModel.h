@@ -20,6 +20,8 @@
 #include "common/Data.h"
 #include "common/Material.h"
 
+#include "openvkl/value_selector.h"
+
 namespace ospray {
 
   struct OSPRAY_SDK_INTERFACE VolumetricModel : public ManagedObject
@@ -34,11 +36,14 @@ namespace ospray {
 
     box3f bounds() const;
 
+    Ref<Volume> getVolume() const;
+
     void setGeomID(int geomID);
 
    private:
     box3f volumeBounds;
     Ref<Volume> volume;
+    VKLValueSelector vklValueSelector { nullptr };
   };
 
   OSPTYPEFOR_SPECIALIZATION(VolumetricModel *, OSP_VOLUMETRIC_MODEL);

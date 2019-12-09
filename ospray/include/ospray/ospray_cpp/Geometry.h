@@ -19,15 +19,18 @@
 #include "ManagedObject.h"
 
 namespace ospray {
-  namespace cpp    {
+  namespace cpp {
 
-    class Geometry : public ManagedObject_T<OSPGeometry>
+    class Geometry : public ManagedObject<OSPGeometry, OSP_GEOMETRY>
     {
-    public:
+     public:
       Geometry(const std::string &type);
       Geometry(const Geometry &copy);
       Geometry(OSPGeometry existing = nullptr);
     };
+
+    static_assert(sizeof(Geometry) == sizeof(OSPGeometry),
+                  "cpp::Geometry can't have data members!");
 
     // Inlined function definitions ///////////////////////////////////////////
 
@@ -36,16 +39,19 @@ namespace ospray {
       ospObject = ospNewGeometry(type.c_str());
     }
 
-    inline Geometry::Geometry(const Geometry &copy) :
-      ManagedObject_T<OSPGeometry>(copy.handle())
+    inline Geometry::Geometry(const Geometry &copy)
+        : ManagedObject<OSPGeometry, OSP_GEOMETRY>(copy.handle())
     {
       ospRetain(copy.handle());
     }
 
-    inline Geometry::Geometry(OSPGeometry existing) :
-      ManagedObject_T<OSPGeometry>(existing)
+    inline Geometry::Geometry(OSPGeometry existing)
+        : ManagedObject<OSPGeometry, OSP_GEOMETRY>(existing)
     {
     }
 
-  }// namespace cpp
-}// namespace ospray
+  }  // namespace cpp
+
+  OSPTYPEFOR_SPECIALIZATION(cpp::Geometry, OSP_GEOMETRY);
+
+}  // namespace ospray

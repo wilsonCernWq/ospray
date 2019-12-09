@@ -87,6 +87,7 @@ inline void traceVolumeRay(const World *uniform world,
     Instance * instance = *(world->instances + intervals.intervals[0].instID);
     interval.volumetricModel = instance->group->volumetricModels[intervals.intervals[0].geomID];
     interval.xfm             = instance->xfm;
+    interval.rcp_xfm         = instance->rcp_xfm;
     interval.interval.lower  = intervals.intervals[0].interval.lower;
     interval.interval.upper  = intervals.intervals[0].interval.upper;
   }
@@ -112,6 +113,7 @@ inline void traceVolumeRay(const World *uniform world,
       Instance * instance = *(world->instances + intervals.intervals[i].instID);
       intervals.intervals[i].volumetricModel = instance->group->volumetricModels[intervals.intervals[i].geomID];
       intervals.intervals[i].xfm             = instance->xfm;
+      intervals.intervals[i].rcp_xfm         = instance->rcp_xfm;
     }
   }
 }
@@ -131,7 +133,6 @@ inline void postIntersect(const World *uniform world,
   dg.primID = ray.primID;
   dg.st     = make_vec2f(ray.u, ray.v);
 
-  dg.materialID = -1;  // make sure this is properly initialized
   dg.material   = NULL;
 
   if (flags & DG_COLOR)

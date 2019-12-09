@@ -54,7 +54,9 @@ namespace ospray {
 
         rtcAttachGeometry(geometryScene, eInst);
 
+#if 0 // NOTE(jda) - there seems to still be an Embree ref-count issue here
         rtcReleaseGeometry(eInst);
+#endif
 
         numGeomInstances++;
       }
@@ -68,7 +70,9 @@ namespace ospray {
 
         rtcAttachGeometry(volumeScene, eInst);
 
+#if 0 // NOTE(jda) - there seems to still be an Embree ref-count issue here
         rtcReleaseGeometry(eInst);
+#endif
 
         numVolumeInstances++;
       }
@@ -117,15 +121,6 @@ namespace ospray {
 
     instances = getParamDataT<Instance *>("instance");
     lights = getParamDataT<Light *>("light");
-
-    // get rid of stride for now
-    if (instances && !instances->compact()) {
-      auto data =
-          new Data(OSP_GEOMETRIC_MODEL, vec3ui(instances->size(), 1, 1));
-      data->copy(*instances, vec3ui(0));
-      instances = &(data->as<Instance *>());
-      data->refDec();
-    }
 
     auto numInstances = instances ? instances->size() : 0;
 

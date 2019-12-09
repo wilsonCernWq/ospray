@@ -188,15 +188,6 @@ typedef enum
   OSP_FB_ALBEDO=(1<<5)
 } OSPFrameBufferChannel;
 
-// XXX remove
-typedef enum
-# if __cplusplus >= 201103L
-: uint32_t
-#endif
-{
-  OSP_DATA_SHARED_BUFFER = (1<<0),
-} OSPDataCreationFlags;
-
 // OSPRay events which can be waited on via ospWait()
 typedef enum
 # if __cplusplus >= 201103L
@@ -258,6 +249,7 @@ typedef enum
   OSP_BEZIER,
   OSP_BSPLINE,
   OSP_HERMITE,
+  OSP_CATMULL_ROM,
   OSP_UNKNOWN_CURVE_BASIS = 255
 } OSPCurveBasis;
 
