@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 // ospcommon
 #include "ospcommon/os/library.h"
@@ -26,7 +13,7 @@
 #include "include/ospray/ospray.h"
 
 #ifdef _WIN32
-#include <process.h>  // for getpid
+#include <process.h> // for getpid
 #endif
 
 using ospray::api::currentDevice;
@@ -43,45 +30,45 @@ inline std::string getPidString()
   return s;
 }
 
-#define THROW_IF_NULL(obj, name)                         \
-  if (obj == nullptr)                                    \
-  throw std::runtime_error(std::string("null ") + name + \
-                           std::string(" provided to ") + __FUNCTION__)
+#define THROW_IF_NULL(obj, name)                                               \
+  if (obj == nullptr)                                                          \
+  throw std::runtime_error(std::string("null ") + name                         \
+      + std::string(" provided to ") + __FUNCTION__)
 
 // convenience macros for repeated use of the above
 #define THROW_IF_NULL_OBJECT(obj) THROW_IF_NULL(obj, "handle")
 #define THROW_IF_NULL_STRING(str) THROW_IF_NULL(str, "string")
 
-#define ASSERT_DEVICE()                       \
-  if (!deviceIsSet())                         \
-  throw std::runtime_error(                   \
-      "OSPRay not yet initialized "           \
-      "(most likely this means you tried to " \
-      "call an ospray API function before "   \
-      "first calling ospInit())" +            \
-      getPidString())
+#define ASSERT_DEVICE()                                                        \
+  if (!deviceIsSet())                                                          \
+  throw std::runtime_error(                                                    \
+      "OSPRay not yet initialized "                                            \
+      "(most likely this means you tried to "                                  \
+      "call an ospray API function before "                                    \
+      "first calling ospInit())"                                               \
+      + getPidString())
 
-#define OSPRAY_CATCH_BEGIN                 \
-  try {                                    \
-    auto *fcn_name_ = __PRETTY_FUNCTION__; \
+#define OSPRAY_CATCH_BEGIN                                                     \
+  try {                                                                        \
+    auto *fcn_name_ = __PRETTY_FUNCTION__;                                     \
     ospcommon::utility::OnScopeExit guard([&]() { postTraceMsg(fcn_name_); });
 
-#define OSPRAY_CATCH_END(a)                                                 \
-  }                                                                         \
-  catch (const std::bad_alloc &)                                            \
-  {                                                                         \
-    handleError(OSP_OUT_OF_MEMORY, "OSPRay was unable to allocate memory"); \
-    return a;                                                               \
-  }                                                                         \
-  catch (const std::exception &e)                                           \
-  {                                                                         \
-    handleError(OSP_UNKNOWN_ERROR, e.what());                               \
-    return a;                                                               \
-  }                                                                         \
-  catch (...)                                                               \
-  {                                                                         \
-    handleError(OSP_UNKNOWN_ERROR, "an unrecognized exception was caught"); \
-    return a;                                                               \
+#define OSPRAY_CATCH_END(a)                                                    \
+  }                                                                            \
+  catch (const std::bad_alloc &)                                               \
+  {                                                                            \
+    handleError(OSP_OUT_OF_MEMORY, "OSPRay was unable to allocate memory");    \
+    return a;                                                                  \
+  }                                                                            \
+  catch (const std::exception &e)                                              \
+  {                                                                            \
+    handleError(OSP_UNKNOWN_ERROR, e.what());                                  \
+    return a;                                                                  \
+  }                                                                            \
+  catch (...)                                                                  \
+  {                                                                            \
+    handleError(OSP_UNKNOWN_ERROR, "an unrecognized exception was caught");    \
+    return a;                                                                  \
   }
 
 using namespace ospray;
@@ -116,22 +103,25 @@ extern "C" OSPError ospInit(int *_ac, const char **_av) OSPRAY_CATCH_BEGIN
     for (int i = 1; i < *_ac; i++) {
       std::string av(_av[i]);
 
-      auto moduleSwitch = av.substr(0, 13);
-      if (moduleSwitch == "--osp:module:") {
+      if (ospcommon::utility::beginsWith(av, "--osp:load-modules")) {
+        std::string modules = getArgString(av);
+        if (modules == "") {
+          throw std::runtime_error(
+              "Invalid module name(s) provided to --osp:load-modules. Must be "
+              "formatted as <module1>[,<module2>,...]");
+        }
+        std::vector<std::string> moduleList =
+            ospcommon::utility::split(modules, ',');
+        for (std::string &moduleName : moduleList) {
+          loadLocalModule(moduleName);
+        }
         removeArgs(*_ac, _av, i, 1);
-
-        auto moduleName = av.substr(13);
-        loadLocalModule(moduleName);
-
-        --i;
-        continue;
       }
 
-      auto deviceSwitch = av.substr(0, 13);
-      if (deviceSwitch == "--osp:device:") {
-        removeArgs(*_ac, _av, i, 1);
-        auto deviceName = av.substr(13);
-
+      // ALOK: explicitly checking with the equals sign so this does not get
+      // clobbered by --osp:device-param
+      if (ospcommon::utility::beginsWith(av, "--osp:device=")) {
+        std::string deviceName = getArgString(av);
         try {
           currentDevice = Device::createDevice(deviceName.c_str());
         } catch (const std::runtime_error &) {
@@ -141,23 +131,21 @@ extern "C" OSPError ospInit(int *_ac, const char **_av) OSPRAY_CATCH_BEGIN
                                    "device name wrong or didn't link the "
                                    "library which defines the device?");
         }
-        --i;
-        continue;
+        removeArgs(*_ac, _av, i, 1);
       }
     }
   }
 
   // no device created on cmd line, yet, so default to ISPCDevice
   if (!deviceIsSet()) {
-    auto OSPRAY_DEFAULT_DEVICE =
-        utility::getEnvVar<std::string>("OSPRAY_DEFAULT_DEVICE");
+    auto OSPRAY_DEVICE = utility::getEnvVar<std::string>("OSPRAY_DEVICE");
 
-    if (OSPRAY_DEFAULT_DEVICE) {
-      auto device_name = OSPRAY_DEFAULT_DEVICE.value();
+    if (OSPRAY_DEVICE) {
+      auto device_name = OSPRAY_DEVICE.value();
       currentDevice = Device::createDevice(device_name.c_str());
     } else {
       ospLoadModule("ispc");
-      currentDevice = Device::createDevice("default");
+      currentDevice = Device::createDevice("cpu");
     }
   }
 
@@ -206,14 +194,16 @@ OSPRAY_CATCH_END()
 
 extern "C" OSPDevice ospGetCurrentDevice() OSPRAY_CATCH_BEGIN
 {
-  return (OSPDevice)Device::current.ptr;
+  auto *ptr = Device::current.ptr;
+  ptr->refInc();
+  return (OSPDevice)ptr;
 }
 OSPRAY_CATCH_END(nullptr)
 
 extern "C" void ospDeviceSetParam(OSPDevice _object,
-                                  const char *id,
-                                  OSPDataType type,
-                                  const void *mem) OSPRAY_CATCH_BEGIN
+    const char *id,
+    OSPDataType type,
+    const void *mem) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
   THROW_IF_NULL_STRING(id);
@@ -238,8 +228,8 @@ extern "C" void ospDeviceSetParam(OSPDevice _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospDeviceRemoveParam(OSPDevice _object,
-                                     const char *id) OSPRAY_CATCH_BEGIN
+extern "C" void ospDeviceRemoveParam(
+    OSPDevice _object, const char *id) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
   THROW_IF_NULL_STRING(id);
@@ -261,8 +251,8 @@ extern "C" void ospDeviceSetStatusFunc(
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospDeviceSetErrorFunc(OSPDevice _object,
-                                      OSPErrorFunc callback) OSPRAY_CATCH_BEGIN
+extern "C" void ospDeviceSetErrorFunc(
+    OSPDevice _object, OSPErrorFunc callback) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
 
@@ -274,8 +264,8 @@ extern "C" void ospDeviceSetErrorFunc(OSPDevice _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" OSPError ospDeviceGetLastErrorCode(OSPDevice _object)
-    OSPRAY_CATCH_BEGIN
+extern "C" OSPError ospDeviceGetLastErrorCode(
+    OSPDevice _object) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
 
@@ -284,8 +274,8 @@ extern "C" OSPError ospDeviceGetLastErrorCode(OSPDevice _object)
 }
 OSPRAY_CATCH_END(OSP_NO_ERROR)
 
-extern "C" const char *ospDeviceGetLastErrorMsg(OSPDevice _object)
-    OSPRAY_CATCH_BEGIN
+extern "C" const char *ospDeviceGetLastErrorMsg(
+    OSPDevice _object) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
 
@@ -336,45 +326,44 @@ OSPRAY_CATCH_END(OSP_UNKNOWN_ERROR)
 ///////////////////////////////////////////////////////////////////////////////
 
 extern "C" OSPData ospNewSharedData(const void *sharedData,
-                                    OSPDataType type,
-                                    uint32_t numItems1,
-                                    int64_t byteStride1,
-                                    uint32_t numItems2,
-                                    int64_t byteStride2,
-                                    uint32_t numItems3,
-                                    int64_t byteStride3) OSPRAY_CATCH_BEGIN
+    OSPDataType type,
+    uint64_t numItems1,
+    int64_t byteStride1,
+    uint64_t numItems2,
+    int64_t byteStride2,
+    uint64_t numItems3,
+    int64_t byteStride3) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
-  OSPData data = currentDevice().newSharedData(
-      sharedData,
+  OSPData data = currentDevice().newSharedData(sharedData,
       type,
-      ospray::vec3ui(numItems1, numItems2, numItems3),
+      ospray::vec3ul(numItems1, numItems2, numItems3),
       ospray::vec3l(byteStride1, byteStride2, byteStride3));
   return data;
 }
 OSPRAY_CATCH_END(nullptr)
 
 extern "C" OSPData ospNewData(OSPDataType type,
-                              uint32_t numItems1,
-                              uint32_t numItems2,
-                              uint32_t numItems3) OSPRAY_CATCH_BEGIN
+    uint64_t numItems1,
+    uint64_t numItems2,
+    uint64_t numItems3) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   OSPData data = currentDevice().newData(
-      type, ospray::vec3ui(numItems1, numItems2, numItems3));
+      type, ospray::vec3ul(numItems1, numItems2, numItems3));
   return data;
 }
 OSPRAY_CATCH_END(nullptr)
 
 extern "C" void ospCopyData(const OSPData source,
-                            OSPData destination,
-                            uint32_t dstIdx1,
-                            uint32_t dstIdx2,
-                            uint32_t dstIdx3) OSPRAY_CATCH_BEGIN
+    OSPData destination,
+    uint64_t dstIdx1,
+    uint64_t dstIdx2,
+    uint64_t dstIdx3) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
   currentDevice().copyData(
-      source, destination, ospray::vec3ui(dstIdx1, dstIdx2, dstIdx3));
+      source, destination, ospray::vec3ul(dstIdx1, dstIdx2, dstIdx3));
 }
 OSPRAY_CATCH_END()
 
@@ -418,8 +407,8 @@ extern "C" OSPVolume ospNewVolume(const char *_type) OSPRAY_CATCH_BEGIN
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" OSPGeometricModel ospNewGeometricModel(OSPGeometry geom)
-    OSPRAY_CATCH_BEGIN
+extern "C" OSPGeometricModel ospNewGeometricModel(
+    OSPGeometry geom) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(geom);
   ASSERT_DEVICE();
@@ -428,8 +417,8 @@ extern "C" OSPGeometricModel ospNewGeometricModel(OSPGeometry geom)
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume)
-    OSPRAY_CATCH_BEGIN
+extern "C" OSPVolumetricModel ospNewVolumetricModel(
+    OSPVolume volume) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(volume);
   ASSERT_DEVICE();
@@ -454,8 +443,8 @@ extern "C" OSPMaterial ospNewMaterial(
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" OSPTransferFunction ospNewTransferFunction(const char *_type)
-    OSPRAY_CATCH_BEGIN
+extern "C" OSPTransferFunction ospNewTransferFunction(
+    const char *_type) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_STRING(_type);
 
@@ -519,9 +508,9 @@ OSPRAY_CATCH_END({})
 ///////////////////////////////////////////////////////////////////////////////
 
 extern "C" void ospSetParam(OSPObject _object,
-                            const char *id,
-                            OSPDataType type,
-                            const void *mem) OSPRAY_CATCH_BEGIN
+    const char *id,
+    OSPDataType type,
+    const void *mem) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
   THROW_IF_NULL_STRING(id);
@@ -530,8 +519,8 @@ extern "C" void ospSetParam(OSPObject _object,
 }
 OSPRAY_CATCH_END()
 
-extern "C" void ospRemoveParam(OSPObject _object,
-                               const char *id) OSPRAY_CATCH_BEGIN
+extern "C" void ospRemoveParam(
+    OSPObject _object, const char *id) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(_object);
   THROW_IF_NULL_STRING(id);
@@ -573,10 +562,9 @@ OSPRAY_CATCH_END()
 ///////////////////////////////////////////////////////////////////////////////
 
 extern "C" OSPFrameBuffer ospNewFrameBuffer(int size_x,
-                                            int size_y,
-                                            OSPFrameBufferFormat mode,
-                                            uint32_t channels)
-    OSPRAY_CATCH_BEGIN
+    int size_y,
+    OSPFrameBufferFormat mode,
+    uint32_t channels) OSPRAY_CATCH_BEGIN
 {
   ASSERT_DEVICE();
 
@@ -589,13 +577,13 @@ extern "C" OSPFrameBuffer ospNewFrameBuffer(int size_x,
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" OSPImageOperation ospNewImageOperation(const char *_type)
-    OSPRAY_CATCH_BEGIN
+extern "C" OSPImageOperation ospNewImageOperation(
+    const char *_type) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_STRING(_type);
 
   ASSERT_DEVICE();
-  int L      = strlen(_type);
+  int L = strlen(_type);
   char *type = STACK_BUFFER(char, L + 1);
   for (int i = 0; i <= L; i++) {
     char c = _type[i];
@@ -617,8 +605,8 @@ extern "C" const void *ospMapFrameBuffer(
 }
 OSPRAY_CATCH_END(nullptr)
 
-extern "C" void ospUnmapFrameBuffer(const void *mapped,
-                                    OSPFrameBuffer fb) OSPRAY_CATCH_BEGIN
+extern "C" void ospUnmapFrameBuffer(
+    const void *mapped, OSPFrameBuffer fb) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL_OBJECT(fb);
   THROW_IF_NULL(mapped, "pointer");
@@ -663,9 +651,9 @@ extern "C" OSPRenderer ospNewRenderer(const char *_type) OSPRAY_CATCH_BEGIN
 OSPRAY_CATCH_END(nullptr)
 
 extern "C" OSPFuture ospRenderFrame(OSPFrameBuffer fb,
-                                    OSPRenderer renderer,
-                                    OSPCamera camera,
-                                    OSPWorld world) OSPRAY_CATCH_BEGIN
+    OSPRenderer renderer,
+    OSPCamera camera,
+    OSPWorld world) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL(fb, "framebuffer");
   THROW_IF_NULL(renderer, "renderer");
@@ -712,12 +700,12 @@ extern "C" float ospGetProgress(OSPFuture f) OSPRAY_CATCH_BEGIN
 OSPRAY_CATCH_END(1.f)
 
 extern "C" void ospPick(OSPPickResult *result,
-                        OSPFrameBuffer fb,
-                        OSPRenderer renderer,
-                        OSPCamera camera,
-                        OSPWorld world,
-                        float screenPos_x,
-                        float screenPos_y) OSPRAY_CATCH_BEGIN
+    OSPFrameBuffer fb,
+    OSPRenderer renderer,
+    OSPCamera camera,
+    OSPWorld world,
+    float screenPos_x,
+    float screenPos_y) OSPRAY_CATCH_BEGIN
 {
   THROW_IF_NULL(fb, "framebuffer");
   THROW_IF_NULL(renderer, "renderer");

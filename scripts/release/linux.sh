@@ -1,23 +1,9 @@
 #!/bin/bash
-## ======================================================================== ##
-## Copyright 2014-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2014-2020 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 #### Helper functions ####
 
-# check version of symbols
 function check_symbols
 {
   for sym in `nm $1 | grep $2_`
@@ -46,10 +32,22 @@ function check_symbols
   done
 }
 
+function check_imf
+{
+for lib in "$@"
+do
+  if [ -n "`ldd $lib | fgrep libimf.so`" ]; then
+    echo "Error: dependency to 'libimf.so' found"
+    exit 3
+  fi
+done
+}
+
 #### Set variables for script ####
 
 ROOT_DIR=$PWD
 DEP_DIR=$ROOT_DIR/deps
+THREADS=`nproc`
 
 #### Build dependencies ####
 
@@ -62,12 +60,15 @@ export LD_LIBRARY_PATH=$DEP_DIR/lib:${LD_LIBRARY_PATH}
 cmake --version
 
 cmake \
-  -DBUILD_DEPENDENCIES_ONLY=ON \
-  -DCMAKE_INSTALL_PREFIX=$DEP_DIR \
-  -DCMAKE_INSTALL_LIBDIR=lib \
-  -DINSTALL_IN_SEPARATE_DIRECTORIES=OFF \
-  -DDOWNLOAD_ISPC=OFF \
-  "$@" ../scripts/superbuild
+  "$@" \
+  -D BUILD_DEPENDENCIES_ONLY=ON \
+  -D CMAKE_INSTALL_PREFIX=$DEP_DIR \
+  -D CMAKE_INSTALL_LIBDIR=lib \
+  -D BUILD_EMBREE_FROM_SOURCE=OFF \
+  -D BUILD_OIDN=ON \
+  -D BUILD_OIDN_FROM_SOURCE=OFF \
+  -D INSTALL_IN_SEPARATE_DIRECTORIES=OFF \
+  ../scripts/superbuild
 
 cmake --build .
 
@@ -82,41 +83,49 @@ cd build_release
 rm -rf *
 
 # Setup environment variables for dependencies
-
 export OSPCOMMON_TBB_ROOT=$DEP_DIR
 export ospcommon_DIR=$DEP_DIR
 export embree_DIR=$DEP_DIR
 export glfw3_DIR=$DEP_DIR
 export openvkl_DIR=$DEP_DIR
+export OpenImageDenoise_DIR=$DEP_DIR
 
 # set release and RPM settings
 cmake -L \
--D OSPRAY_BUILD_ISA=ALL \
--D OSPRAY_ZIP_MODE=OFF \
--D OSPRAY_INSTALL_DEPENDENCIES=OFF \
--D CPACK_PACKAGING_INSTALL_PREFIX=/usr \
-..
+  -D OSPRAY_BUILD_ISA=ALL \
+  -D ISPC_EXECUTABLE=$DEP_DIR/bin/ispc \
+  -D OSPRAY_ZIP_MODE=OFF \
+  -D OSPRAY_MODULE_DENOISER=ON \
+  -D OSPRAY_INSTALL_DEPENDENCIES=OFF \
+  -D CPACK_PACKAGING_INSTALL_PREFIX=/usr \
+  ..
 
 # create RPM files
-make -j `nproc` preinstall
+make -j $THREADS preinstall
 
-check_symbols libospray.so GLIBC   2 4 0
-check_symbols libospray.so GLIBCXX 3 4 11
-check_symbols libospray.so CXXABI  1 3 0
+check_symbols libospray.so GLIBC   2 14 0
+check_symbols libospray.so GLIBCXX 3 4 14
+check_symbols libospray.so CXXABI  1 3 5
 
-make -j `nproc` package || exit 2
+check_symbols libospray_module_ispc.so GLIBC   2 14 0
+check_symbols libospray_module_ispc.so GLIBCXX 3 4 14
+check_symbols libospray_module_ispc.so CXXABI  1 3 5
+
+check_imf libospray.so libospray_module_ispc.so
+
+
+make -j $THREADS package || exit 2
 
 # change settings for zip mode
 cmake -L \
--D OSPRAY_ZIP_MODE=ON \
--D OSPRAY_INSTALL_DEPENDENCIES=ON \
--D CPACK_PACKAGING_INSTALL_PREFIX=/ \
--D CMAKE_INSTALL_INCLUDEDIR=include \
--D CMAKE_INSTALL_LIBDIR=lib \
--D CMAKE_INSTALL_DOCDIR=doc \
--D CMAKE_INSTALL_BINDIR=bin \
-..
+  -D OSPRAY_ZIP_MODE=ON \
+  -D OSPRAY_INSTALL_DEPENDENCIES=ON \
+  -D CPACK_PACKAGING_INSTALL_PREFIX=/ \
+  -D CMAKE_INSTALL_INCLUDEDIR=include \
+  -D CMAKE_INSTALL_LIBDIR=lib \
+  -D CMAKE_INSTALL_DOCDIR=doc \
+  -D CMAKE_INSTALL_BINDIR=bin \
+  ..
 
 # create tar.gz files
-make -j `nproc` package || exit 2
-
+make -j $THREADS package || exit 2

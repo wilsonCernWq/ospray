@@ -1,18 +1,5 @@
-## ======================================================================== ##
-## Copyright 2009-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2019 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 ## Global settings ##
 
@@ -52,18 +39,19 @@ option(ALWAYS_REBUILD "Force every project to always be rebuilt?" OFF)
 
 option(DOWNLOAD_ISPC "Download ispc or use the one found in ${PATH}?" ON)
 
-set(BUILD_OSPCOMMON_VERSION "devel" CACHE STRING "Which version of ospcommon to build?")
+set(BUILD_OSPCOMMON_VERSION "v1.2.0" CACHE STRING "Which version of ospcommon to build?")
 
-option(BUILD_TBB_FROM_SOURCE "Build TBB from source or instead use one in the existing environment?" ON)
+option(DOWNLOAD_TBB "Download TBB or use the only found in the system environment?" ON)
+set(TBB_VERSION "2020.0" CACHE STRING "Which version of TBB to download?")
 
-set(BUILD_EMBREE_VERSION "v3.6.1" CACHE STRING "Which version of Embree to build?")
+set(BUILD_EMBREE_VERSION "v3.7.0" CACHE STRING "Which version of Embree to build?")
 option(BUILD_EMBREE_FROM_SOURCE "Build Embree or use pre-built version?" ON)
 
-set(BUILD_OPENVKL_VERSION "v0.7.0" CACHE STRING "Which version of OpenVKL to build?")
+set(BUILD_OPENVKL_VERSION "v0.8.0" CACHE STRING "Which version of OpenVKL to build?")
 
 option(BUILD_OIDN "Build OpenImageDenoise as a part of the superbuild." OFF)
-set(BUILD_OIDN_VERSION "v1.0.0" CACHE STRING "Which version of OpenImageDenoise to build?")
-option(BUILD_OIDN_FROM_SOURCE "Build OpenImageDenoise or use pre-built version?" ON)
+set(BUILD_OIDN_VERSION "v1.1.0" CACHE STRING "Which version of OpenImageDenoise to build?")
+option(BUILD_OIDN_FROM_SOURCE "Build OpenImageDenoise or use pre-built version?" OFF)
 
 option(BUILD_GLFW "Build glfw for OSPRay examples or use one in existing environment?" ON)
 
@@ -95,13 +83,13 @@ if (DOWNLOAD_ISPC)
   include(dep_ispc)
 endif()
 
-if (BUILD_TBB_FROM_SOURCE)
+if (DOWNLOAD_TBB)
   include(dep_tbb)
 endif()
 
 include(dep_ospcommon)
-include(dep_openvkl)
 include(dep_embree)
+include(dep_openvkl)
 
 if (BUILD_GLFW)
   include(dep_glfw)
@@ -119,8 +107,6 @@ set(COMPONENT_PATH ${INSTALL_DIR_ABSOLUTE})
 if (INSTALL_IN_SEPARATE_DIRECTORIES)
   set(COMPONENT_PATH ${INSTALL_DIR_ABSOLUTE}/${COMPONENT_NAME})
 endif()
-
-string(REPLACE ";" "|" CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH}")
 
 if (NOT BUILD_DEPENDENCIES_ONLY)
   ExternalProject_Add(${COMPONENT_NAME}
@@ -147,7 +133,7 @@ if (NOT BUILD_DEPENDENCIES_ONLY)
       -DOSPRAY_STRICT_BUILD=${BUILD_OSPRAY_CI_EXTRAS}
       -DOSPRAY_WARN_AS_ERRORS=${BUILD_OSPRAY_CI_EXTRAS}
       $<$<BOOL:${DOWNLOAD_ISPC}>:-DISPC_EXECUTABLE=${ISPC_PATH}>
-      $<$<BOOL:${BUILD_TBB_FROM_SOURCE}>:-DOSPCOMMON_TBB_ROOT=${TBB_PATH}>
+      $<$<BOOL:${DOWNLOAD_TBB}>:-DOSPCOMMON_TBB_ROOT=${TBB_PATH}>
     BUILD_COMMAND ${DEFAULT_BUILD_COMMAND}
     BUILD_ALWAYS OFF
   )

@@ -1,57 +1,47 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
 #include "api/ISPCDevice.h"
 #include "common/Managed.h"
 // embree
-#include "embree3/rtcore.h"
 #include "Volume_ispc.h"
+#include "embree3/rtcore.h"
 
 #include "openvkl/volume.h"
 
 namespace ospray {
 
-  struct OSPRAY_SDK_INTERFACE Volume : public ManagedObject
-  {
-    Volume();
-    virtual ~Volume() override;
+struct OSPRAY_SDK_INTERFACE Volume : public ManagedObject
+{
+  Volume(const std::string &vklType);
+  ~Volume() override;
 
-    virtual std::string toString() const override;
+  std::string toString() const override;
 
-    static Volume *createInstance(const std::string &type);
+  void commit() override;
 
-    virtual void commit() override;
+ private:
+  void handleParams();
 
-    void handleParams();
+  void createEmbreeGeometry();
 
-    box3f bounds{empty};
+  // Friends //
 
-    RTCGeometry embreeGeometry{nullptr};
+  friend struct Isosurfaces;
+  friend struct VolumetricModel;
 
-    VKLVolume vklVolume = nullptr;
+  // Data //
 
-   private:
-    void createEmbreeGeometry();
-  };
+  RTCGeometry embreeGeometry{nullptr};
+  VKLVolume vklVolume{nullptr};
 
-  OSPTYPEFOR_SPECIALIZATION(Volume *, OSP_VOLUME);
+  box3f bounds{empty};
 
-#define OSP_REGISTER_VOLUME(InternalClass, external_name) \
-  OSP_REGISTER_OBJECT(::ospray::Volume, volume, InternalClass, external_name)
+  std::string vklType;
+};
 
-}  // namespace ospray
+OSPTYPEFOR_SPECIALIZATION(Volume *, OSP_VOLUME);
+
+} // namespace ospray

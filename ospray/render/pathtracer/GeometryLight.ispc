@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 #include "render/pathtracer/GeometryLight.ih"
 #include "render/pathtracer/PathStructs.ih"
@@ -25,19 +12,22 @@
 #include "math/AffineSpace.ih"
 #include "math/Distribution1D.ih"
 
-vec3f evaluateGeometryLights(const PathState& pathState, 
-                             const PathVertex& lastVertex, 
-                             const PathVertex& pathVertex, 
-                             Ray& ray)
+vec3f evaluateGeometryLights(const PathState &pathState,
+    const PathVertex &lastVertex,
+    const PathVertex &pathVertex,
+    Ray &ray)
 {
   vec3f L = make_vec3f(0.f);
-  uniform PathTraceMaterial* material = (uniform PathTraceMaterial*)pathVertex.dg.material;
-  foreach_unique(m in material) {
+  uniform PathTraceMaterial *material =
+      (uniform PathTraceMaterial *)pathVertex.dg.material;
+  foreach_unique (m in material) {
     if (m != NULL && reduce_max(m->emission) > 0.f) {
       // convert pdf wrt. area to pdf wrt. solid angle
       const float cosd = dot(pathVertex.dg.Ng, ray.dir);
       const float lePdf = pathVertex.dg.areaPDF * sqr(ray.t) / abs(cosd);
-      L = L + pathState.throughput * m->emission * misHeuristic(pathState, lastVertex.pdf_w, lePdf);
+      L = L
+          + pathState.throughput * m->emission
+              * misHeuristic(pathState, lastVertex.pdf_w, lePdf);
     }
   }
   return L;
@@ -50,26 +40,25 @@ vec3f evaluateGeometryLights(const PathState& pathState,
 
 struct GeometryLight
 {
-  Light super;  // inherited light fields
+  Light super; // inherited light fields
 
-  GeometricModel *model;  // underlying geometry
+  GeometricModel *model; // underlying geometry
   AffineSpace3f xfm;
   AffineSpace3f rcp_xfm;
-  int32 numPrimitives;  // number of emissive primitives
-  int32 *primIDs;       // IDs of emissive primitives to sample
-  float *distribution;  // pdf over prims proportional to (world-space) area
-  float pdf;  // probability density to sample point on surface := 1/area
+  int32 numPrimitives; // number of emissive primitives
+  int32 *primIDs; // IDs of emissive primitives to sample
+  float *distribution; // pdf over prims proportional to (world-space) area
+  float pdf; // probability density to sample point on surface := 1/area
 };
 
 // Implementation /////////////////////////////////////////////////////////////
 
-Light_SampleRes GeometryLight_sample(const uniform Light *uniform super,
-                                     const DifferentialGeometry &dg,
-                                     const vec2f &s)
+Light_SampleRes GeometryLight_sample(
+    const Light *uniform super, const DifferentialGeometry &dg, const vec2f &s)
 {
-  const GeometryLight *uniform self   = (GeometryLight * uniform) super;
+  const GeometryLight *uniform self = (GeometryLight * uniform) super;
   const GeometricModel *uniform model = self->model;
-  const Geometry *uniform geo         = model->geom;
+  const Geometry *uniform geo = model->geom;
   Light_SampleRes res;
 
   // choose primitive
@@ -86,21 +75,21 @@ Light_SampleRes GeometryLight_sample(const uniform Light *uniform super,
   // note that sample.pdf/primitives * sampleArea(worldspace).pdf == self->pdf
 
   // extant light vector from the hit point
-  const vec3f dir  = as.pos - dg.P;
+  const vec3f dir = as.pos - dg.P;
   const float dist = length(dir);
 
   // normalized light vector
-  res.dir  = dir / dist;
+  res.dir = dir / dist;
   res.dist = dist - calcEpsilon(as.pos, dist);
 
   // convert to pdf wrt. solid angle
   const float cosd = dot(as.normal, res.dir);
-  res.pdf          = self->pdf * sqr(dist) / abs(cosd);
+  res.pdf = self->pdf * sqr(dist) / abs(cosd);
 
   // get radiance
-  PathTraceMaterial *mat =
-      (PathTraceMaterial *)GeometricModel_getMaterial(model, primID);
-  const vec3f radiance = mat->emission;
+  PathTraceMaterial *mat = (PathTraceMaterial *)GeometricModel_getMaterial(
+      model, dg.renderer, primID);
+  const vec3f radiance = mat ? mat->emission : make_vec3f(0.f);
 
   res.weight = radiance * rcp(res.pdf);
 
@@ -112,15 +101,16 @@ Light_SampleRes GeometryLight_sample(const uniform Light *uniform super,
 export bool uniform GeometryLight_isSupported(const void *uniform _model)
 {
   GeometricModel *uniform model = (GeometricModel * uniform) _model;
-  const Geometry *uniform geo   = model->geom;
+  const Geometry *uniform geo = model->geom;
   return geo->sampleArea && geo->getAreas;
 }
 
-export void *uniform GeometryLight_create(void *uniform _model,
-                                          void *uniform _xfm)
+export void *uniform GeometryLight_create(
+    void *uniform _model, void *uniform _renderer, void *uniform _xfm)
 {
   GeometricModel *uniform model = (GeometricModel * uniform) _model;
-  const Geometry *uniform geo   = model->geom;
+  Renderer *uniform renderer = (Renderer * uniform) _renderer;
+  const Geometry *uniform geo = model->geom;
 
   AffineSpace3f *uniform xfm = (AffineSpace3f * uniform) _xfm;
 
@@ -135,19 +125,19 @@ export void *uniform GeometryLight_create(void *uniform _model,
 
   Light_Constructor(&self->super);
   self->super.sample = GeometryLight_sample;
-  self->super.eval   = NULL;  // geometry lights are hit and explicitly handled
-  self->model        = model;
+  self->super.eval = NULL; // geometry lights are hit and explicitly handled
+  self->model = model;
 
-  self->xfm     = *xfm;
+  self->xfm = *xfm;
   self->rcp_xfm = rcp(*xfm);
 
   // create the list of emissive primitive IDs
   self->primIDs = uniform new uniform int32[geo->numPrimitives];
   uniform int32 numEmissivePrims = 0;
   foreach (primID = 0 ... geo->numPrimitives) {
-    PathTraceMaterial *mat =
-        (PathTraceMaterial *)GeometricModel_getMaterial(model, primID);
-    const vec3f emission   = mat->emission;
+    PathTraceMaterial *mat = (PathTraceMaterial *)GeometricModel_getMaterial(
+        model, renderer, primID);
+    const vec3f emission = mat->emission;
     if (reduce_max(emission) > 0.f) {
       int offset = exclusive_scan_add(1);
 

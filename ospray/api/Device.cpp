@@ -1,194 +1,206 @@
-﻿// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+﻿// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 // ospray
 #include "Device.h"
 #include "common/OSPCommon.h"
 #include "objectFactory.h"
-#include "ospray/version.h"
 // ospcommon
 #include "ospcommon/os/library.h"
-#include "ospcommon/utility/getEnvVar.h"
 #include "ospcommon/tasking/tasking_system_init.h"
+#include "ospcommon/utility/getEnvVar.h"
 
 #include <map>
 
 namespace ospray {
-  namespace api {
+namespace api {
 
-    // Helper functions ///////////////////////////////////////////////////////
+// Helper functions ///////////////////////////////////////////////////////
 
-    template <typename OSTREAM_T>
-    static inline void installStatusMsgFunc(Device& device, OSTREAM_T &stream)
-    {
-      device.msg_fcn = [&](const char *msg){ stream << msg; };
-    }
+template <typename OSTREAM_T>
+static inline void installStatusMsgFunc(Device &device, OSTREAM_T &stream)
+{
+  device.msg_fcn = [&](const char *msg) { stream << msg; };
+}
 
-    template <typename OSTREAM_T>
-    static inline void installErrorMsgFunc(Device& device, OSTREAM_T &stream)
-    {
-      device.error_fcn = [&](OSPError e, const char *msg) {
-        stream << "OSPRAY ERROR [" << e << "]: " << msg << std::endl;
-      };
-    }
+template <typename OSTREAM_T>
+static inline void installErrorMsgFunc(Device &device, OSTREAM_T &stream)
+{
+  device.error_fcn = [&](OSPError e, const char *msg) {
+    stream << "OSPRAY ERROR [" << e << "]: " << msg << std::endl;
+  };
+}
 
-    // Device definitions /////////////////////////////////////////////////////
+// Device definitions /////////////////////////////////////////////////////
 
-    memory::IntrusivePtr<Device> Device::current;
-    uint32_t Device::logLevel = 0;
+memory::IntrusivePtr<Device> Device::current;
+uint32_t Device::logLevel = OSP_LOG_NONE;
 
-    Device *Device::createDevice(const char *type)
-    {
-      // NOTE(jda) - If a user is manually creating the device (i.e. not using
-      //             ospInit() to do it), then we need to check if there's a
-      //             valid library for core ospray in our main symbol lookup
-      //             table.
-      auto &repo = *LibraryRepository::getInstance();
-      if (!repo.libraryExists("ospray")) {
-        repo.addDefaultLibrary();
-        // also load the local device, otherwise ospNewDevice("default") fails
-        repo.add("ospray_module_ispc");
-      }
+Device *Device::createDevice(const char *type)
+{
+  // NOTE(jda) - If a user is manually creating the device (i.e. not using
+  //             ospInit() to do it), then we need to check if there's a
+  //             valid library for core ospray in our main symbol lookup
+  //             table.
+  auto &repo = *LibraryRepository::getInstance();
+  if (!repo.libraryExists("ospray")) {
+    repo.addDefaultLibrary();
+    // also load the local device, otherwise ospNewDevice("default") fails
+    repo.add("ospray_module_ispc");
+  }
 
-      return objectFactory<Device, OSP_DEVICE>(type);
-    }
+  return objectFactory<Device, OSP_DEVICE>(type);
+}
 
-    void Device::commit()
-    {
-      auto OSPRAY_DEBUG = utility::getEnvVar<int>("OSPRAY_DEBUG");
-      debugMode = OSPRAY_DEBUG.value_or(getParam<bool>("debug", 0));
+void Device::commit()
+{
+  auto OSPRAY_DEBUG = utility::getEnvVar<int>("OSPRAY_DEBUG");
+  debugMode = OSPRAY_DEBUG.value_or(getParam<bool>("debug", 0));
 
-      auto OSPRAY_TRACE_API = utility::getEnvVar<int>("OSPRAY_TRACE_API");
-      bool traceAPI = OSPRAY_TRACE_API.value_or(getParam<bool>("traceApi", 0));
+  auto OSPRAY_WARN = utility::getEnvVar<int>("OSPRAY_WARN_AS_ERROR");
+  warningsAreErrors =
+      OSPRAY_WARN.value_or(getParam<bool>("warnAsError", false));
 
-      if (traceAPI && !apiTraceEnabled) {
-        auto streamPtr =
-          std::make_shared<std::ofstream>("ospray_api_trace.txt");
+  auto OSPRAY_TRACE_API = utility::getEnvVar<int>("OSPRAY_TRACE_API");
+  bool traceAPI = OSPRAY_TRACE_API.value_or(getParam<bool>("traceApi", false));
 
-        trace_fcn = [=](const char *message) {
-          auto &stream = *streamPtr;
-          stream << message << std::endl;
-        };
-      } else if (!traceAPI) {
-        trace_fcn = [](const char *) {};
-      }
+  if (traceAPI && !apiTraceEnabled) {
+    auto streamPtr = std::make_shared<std::ofstream>("ospray_api_trace.txt");
 
-      apiTraceEnabled = traceAPI;
+    trace_fcn = [=](const char *message) {
+      auto &stream = *streamPtr;
+      stream << message << std::endl;
+    };
+  } else if (!traceAPI) {
+    trace_fcn = [](const char *) {};
+  }
 
-      auto OSPRAY_LOG_LEVEL = utility::getEnvVar<int>("OSPRAY_LOG_LEVEL");
-      logLevel = OSPRAY_LOG_LEVEL.value_or(getParam<int>("logLevel", 0));
+  apiTraceEnabled = traceAPI;
 
-      auto OSPRAY_THREADS = utility::getEnvVar<int>("OSPRAY_THREADS");
-      numThreads = OSPRAY_THREADS.value_or(getParam<int>("numThreads", -1));
+  logLevel = getParam<int>("logLevel", OSP_LOG_NONE);
 
-      auto OSPRAY_LOG_OUTPUT =
-          utility::getEnvVar<std::string>("OSPRAY_LOG_OUTPUT");
+  auto logLevelStr =
+      utility::getEnvVar<std::string>("OSPRAY_LOG_LEVEL").value_or("");
 
-      auto dst = OSPRAY_LOG_OUTPUT.value_or(
-        getParam<std::string>("logOutput", "")
-      );
+  logLevel = logLevelFromString(logLevelStr).value_or(logLevel);
 
-      if (dst == "cout")
-        installStatusMsgFunc(*this, std::cout);
-      else if (dst == "cerr")
-        installStatusMsgFunc(*this, std::cerr);
-      else if (dst == "none")
-        msg_fcn = [](const char*){};
+  auto OSPRAY_NUM_THREADS = utility::getEnvVar<int>("OSPRAY_NUM_THREADS");
+  numThreads = OSPRAY_NUM_THREADS.value_or(getParam<int>("numThreads", -1));
 
-      auto OSPRAY_ERROR_OUTPUT =
-          utility::getEnvVar<std::string>("OSPRAY_ERROR_OUTPUT");
+  auto OSPRAY_LOG_OUTPUT = utility::getEnvVar<std::string>("OSPRAY_LOG_OUTPUT");
 
-      dst = OSPRAY_ERROR_OUTPUT.value_or(
-        getParam<std::string>("errorOutput", "")
-      );
+  auto dst = OSPRAY_LOG_OUTPUT.value_or(getParam<std::string>("logOutput", ""));
 
-      if (dst == "cout")
-        installErrorMsgFunc(*this, std::cout);
-      else if (dst == "cerr")
-        installErrorMsgFunc(*this, std::cerr);
-      else if (dst == "none")
-        error_fcn = [](OSPError, const char*){};
+  if (dst == "cout")
+    installStatusMsgFunc(*this, std::cout);
+  else if (dst == "cerr")
+    installStatusMsgFunc(*this, std::cerr);
+  else if (dst == "none")
+    msg_fcn = [](const char *) {};
 
-      if (debugMode) {
-        logLevel   = 2;
-        numThreads = 1;
-        installStatusMsgFunc(*this, std::cout);
-        installErrorMsgFunc(*this, std::cerr);
-      }
+  auto OSPRAY_ERROR_OUTPUT =
+      utility::getEnvVar<std::string>("OSPRAY_ERROR_OUTPUT");
 
-      threadAffinity = AUTO_DETECT;
+  dst = OSPRAY_ERROR_OUTPUT.value_or(getParam<std::string>("errorOutput", ""));
 
-      auto OSPRAY_SET_AFFINITY = utility::getEnvVar<int>("OSPRAY_SET_AFFINITY");
-      if (OSPRAY_SET_AFFINITY)
-        threadAffinity = OSPRAY_SET_AFFINITY.value();
+  if (dst == "cout")
+    installErrorMsgFunc(*this, std::cout);
+  else if (dst == "cerr")
+    installErrorMsgFunc(*this, std::cerr);
+  else if (dst == "none")
+    error_fcn = [](OSPError, const char *) {};
 
-      threadAffinity = getParam<int>("setAffinity", threadAffinity);
+  if (debugMode) {
+    logLevel = OSP_LOG_DEBUG;
+    numThreads = 1;
+    installStatusMsgFunc(*this, std::cout);
+    installErrorMsgFunc(*this, std::cerr);
+  }
 
-      tasking::initTaskingSystem(numThreads);
+  threadAffinity = AUTO_DETECT;
 
-      committed = true;
-    }
+  auto OSPRAY_SET_AFFINITY = utility::getEnvVar<int>("OSPRAY_SET_AFFINITY");
+  if (OSPRAY_SET_AFFINITY)
+    threadAffinity = OSPRAY_SET_AFFINITY.value();
 
-    bool Device::isCommitted()
-    {
-      return committed;
-    }
+  threadAffinity = getParam<bool>("setAffinity", threadAffinity);
 
-    bool deviceIsSet()
-    {
-      return Device::current.ptr != nullptr;
-    }
+  tasking::initTaskingSystem(numThreads);
 
-    Device &currentDevice()
-    {
-      return *Device::current;
-    }
+  committed = true;
+}
 
-    std::string generateEmbreeDeviceCfg(const Device &device)
-    {
-      std::stringstream embreeConfig;
+bool Device::isCommitted()
+{
+  return committed;
+}
 
-      if (device.debugMode)
-        embreeConfig << " verbose=2";
+bool deviceIsSet()
+{
+  return Device::current.ptr != nullptr;
+}
 
-      if (device.threadAffinity == api::Device::AFFINITIZE)
-        embreeConfig << ",set_affinity=1";
-      else if (device.threadAffinity == api::Device::DEAFFINITIZE)
-        embreeConfig << ",set_affinity=0";
+Device &currentDevice()
+{
+  return *Device::current;
+}
 
-      return embreeConfig.str();
-    }
+std::string generateEmbreeDeviceCfg(const Device &device)
+{
+  std::stringstream embreeConfig;
 
-    int64_t Device::getProperty(const OSPDeviceProperty prop)
-    {
-      /* documented properties */
-      switch (prop)
-      {
-      case OSP_DEVICE_VERSION           :
-          return 10000*OSPRAY_VERSION_MAJOR + 100*OSPRAY_VERSION_MINOR + OSPRAY_VERSION_PATCH;
-      case OSP_DEVICE_VERSION_MAJOR     : return OSPRAY_VERSION_MAJOR;
-      case OSP_DEVICE_VERSION_MINOR     : return OSPRAY_VERSION_MINOR;
-      case OSP_DEVICE_VERSION_PATCH     : return OSPRAY_VERSION_PATCH;
-      case OSP_DEVICE_SO_VERSION        : return OSPRAY_SOVERSION;
-      default: handleError(OSP_INVALID_ARGUMENT, "unknown readable property");
-      return 0;
-      }
-    }
-  } // ::ospray::api
+  if (device.debugMode)
+    embreeConfig << " verbose=2";
 
-  OSPTYPEFOR_DEFINITION(api::Device *);
+  if (device.threadAffinity == api::Device::AFFINITIZE)
+    embreeConfig << ",set_affinity=1";
+  else if (device.threadAffinity == api::Device::DEAFFINITIZE)
+    embreeConfig << ",set_affinity=0";
 
-} // ::ospray
+  return embreeConfig.str();
+}
+
+int64_t Device::getProperty(const OSPDeviceProperty prop)
+{
+  /* documented properties */
+  switch (prop) {
+  case OSP_DEVICE_VERSION:
+    return 10000 * OSPRAY_VERSION_MAJOR + 100 * OSPRAY_VERSION_MINOR
+        + OSPRAY_VERSION_PATCH;
+  case OSP_DEVICE_VERSION_MAJOR:
+    return OSPRAY_VERSION_MAJOR;
+  case OSP_DEVICE_VERSION_MINOR:
+    return OSPRAY_VERSION_MINOR;
+  case OSP_DEVICE_VERSION_PATCH:
+    return OSPRAY_VERSION_PATCH;
+  case OSP_DEVICE_SO_VERSION:
+    return OSPRAY_SOVERSION;
+  default:
+    handleError(OSP_INVALID_ARGUMENT, "unknown readable property");
+    return 0;
+  }
+}
+
+utility::Optional<int> Device::logLevelFromString(const std::string &str)
+{
+  utility::Optional<int> retval;
+
+  if (str == "none")
+    retval = OSP_LOG_NONE;
+  else if (str == "debug")
+    retval = OSP_LOG_DEBUG;
+  else if (str == "info")
+    retval = OSP_LOG_INFO;
+  else if (str == "warning")
+    retval = OSP_LOG_WARNING;
+  else if (str == "error")
+    retval = OSP_LOG_ERROR;
+
+  return retval;
+}
+
+} // namespace api
+
+OSPTYPEFOR_DEFINITION(api::Device *);
+
+} // namespace ospray

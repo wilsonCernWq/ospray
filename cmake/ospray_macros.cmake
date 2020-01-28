@@ -1,18 +1,5 @@
-## ======================================================================== ##
-## Copyright 2009-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2019 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 include(CMakeFindDependencyMacro)
 
@@ -46,6 +33,9 @@ endmacro()
 ## Setup CMAKE_BUILD_TYPE to have a default + cycle between options in UI
 macro(ospray_configure_build_type)
   set(CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo")
+  if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the build type." FORCE)
+  endif()
   if (WIN32)
     if (NOT OSPRAY_DEFAULT_CMAKE_CONFIGURATION_TYPES_SET)
       set(CMAKE_CONFIGURATION_TYPES "${CONFIGURATION_TYPES}"
@@ -54,9 +44,6 @@ macro(ospray_configure_build_type)
           CACHE INTERNAL "Default CMake configuration types set.")
     endif()
   else()
-    if(NOT CMAKE_BUILD_TYPE)
-      set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the build type." FORCE)
-    endif()
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CONFIGURATION_TYPES})
   endif()
 
@@ -133,31 +120,45 @@ macro(ospray_configure_ispc_isa)
   unset(OSPRAY_ISPC_TARGET_LIST)
   if (OSPRAY_BUILD_ISA STREQUAL "ALL")
 
-    if(EMBREE_ISA_SUPPORTS_SSE4)
+    if(EMBREE_ISA_SUPPORTS_SSE4 AND OPENVKL_ISA_SSE4)
       set(OSPRAY_ISPC_TARGET_LIST ${OSPRAY_ISPC_TARGET_LIST} sse4)
       message(STATUS "OSPRay SSE4 ISA target enabled.")
     endif()
-    if(EMBREE_ISA_SUPPORTS_AVX)
+    if(EMBREE_ISA_SUPPORTS_AVX AND OPENVKL_ISA_AVX)
       set(OSPRAY_ISPC_TARGET_LIST ${OSPRAY_ISPC_TARGET_LIST} avx)
       message(STATUS "OSPRay AVX ISA target enabled.")
     endif()
-    if(EMBREE_ISA_SUPPORTS_AVX2)
+    if(EMBREE_ISA_SUPPORTS_AVX2 AND OPENVKL_ISA_AVX2)
       set(OSPRAY_ISPC_TARGET_LIST ${OSPRAY_ISPC_TARGET_LIST} avx2)
       message(STATUS "OSPRay AVX2 ISA target enabled.")
     endif()
-    if(EMBREE_ISA_SUPPORTS_AVX512KNL)
+    if(EMBREE_ISA_SUPPORTS_AVX512KNL AND OPENVKL_ISA_AVX512KNL)
       set(OSPRAY_ISPC_TARGET_LIST ${OSPRAY_ISPC_TARGET_LIST} avx512knl-i32x16)
       message(STATUS "OSPRay AVX512KNL ISA target enabled.")
     endif()
-    if(EMBREE_ISA_SUPPORTS_AVX512SKX)
+    if(EMBREE_ISA_SUPPORTS_AVX512SKX AND OPENVKL_ISA_AVX512SKX)
       set(OSPRAY_ISPC_TARGET_LIST ${OSPRAY_ISPC_TARGET_LIST} avx512skx-i32x16)
       message(STATUS "OSPRay AVX512SKX ISA target enabled.")
+    endif()
+
+    # NOTE(jda) - These checks are due to temporary Open VKL limitations with
+    #             iterators, they ought to be removed when these limitations are
+    #             lifted in a future version.
+    if(NOT EMBREE_ISA_SUPPORTS_AVX512SKX AND OPENVKL_ISA_AVX512SKX)
+      message(FATAL_ERROR "Currently Open VKL cannot have AVX512SKX compiled in without Embree AVX512SKX support")
+    endif()
+
+    if(NOT EMBREE_ISA_SUPPORTS_AVX512KNL AND OPENVKL_ISA_AVX512KNL)
+      message(FATAL_ERROR "Currently Open VKL cannot have AVX512KNL compiled in without Embree AVX512KNL support")
     endif()
 
   elseif (OSPRAY_BUILD_ISA STREQUAL "AVX512SKX")
 
     if(NOT EMBREE_ISA_SUPPORTS_AVX512SKX)
       message(FATAL_ERROR "Your Embree build does not support AVX512SKX!")
+    endif()
+    if(NOT OPENVKL_ISA_AVX512SKX)
+      message(FATAL_ERROR "Your Open VKL build does not support AVX512SKX!")
     endif()
     set(OSPRAY_ISPC_TARGET_LIST avx512skx-i32x16)
 
@@ -166,12 +167,18 @@ macro(ospray_configure_ispc_isa)
     if(NOT EMBREE_ISA_SUPPORTS_AVX512KNL)
       message(FATAL_ERROR "Your Embree build does not support AVX512KNL!")
     endif()
+    if(NOT OPENVKL_ISA_AVX512KNL)
+      message(FATAL_ERROR "Your Open VKL build does not support AVX512KNL!")
+    endif()
     set(OSPRAY_ISPC_TARGET_LIST avx512knl-i32x16)
 
   elseif (OSPRAY_BUILD_ISA STREQUAL "AVX2")
 
     if(NOT EMBREE_ISA_SUPPORTS_AVX2)
       message(FATAL_ERROR "Your Embree build does not support AVX2!")
+    endif()
+    if(NOT OPENVKL_ISA_AVX2)
+      message(FATAL_ERROR "Your Open VKL build does not support AVX2!")
     endif()
     set(OSPRAY_ISPC_TARGET_LIST avx2)
 
@@ -180,12 +187,18 @@ macro(ospray_configure_ispc_isa)
     if(NOT EMBREE_ISA_SUPPORTS_AVX)
       message(FATAL_ERROR "Your Embree build does not support AVX!")
     endif()
+    if(NOT OPENVKL_ISA_AVX)
+      message(FATAL_ERROR "Your Open VKL build does not support AVX!")
+    endif()
     set(OSPRAY_ISPC_TARGET_LIST avx)
 
   elseif (OSPRAY_BUILD_ISA STREQUAL "SSE4")
 
     if(NOT EMBREE_ISA_SUPPORTS_SSE4)
       message(FATAL_ERROR "Your Embree build does not support SSE4!")
+    endif()
+    if(NOT OPENVKL_ISA_SSE4)
+      message(FATAL_ERROR "Your Open VKL build does not support SSE4!")
     endif()
     set(OSPRAY_ISPC_TARGET_LIST sse4)
 
@@ -200,6 +213,12 @@ endmacro()
 ## Target creation macros ##
 
 macro(ospray_install_library name component)
+  set_target_properties(${name}
+    PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
+  ospray_install_target(${name} ${component})
+endmacro()
+
+macro(ospray_install_target name component)
   install(TARGETS ${name}
     EXPORT ospray_Exports
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -352,10 +371,6 @@ macro(ospray_find_embree EMBREE_VERSION_REQUIRED)
   else()
     message(STATUS "Found Embree v${EMBREE_VERSION}: ${EMBREE_LIBRARY}")
   endif()
-
-  if ("${EMBREE_VERSION}" STREQUAL "3.6.0")
-    message(FATAL_ERROR "Embree v3.6.0 is incompatible with OSPRay.")
-  endif()
 endmacro()
 
 macro(ospray_determine_embree_isa_support)
@@ -412,5 +427,22 @@ macro(ospray_determine_embree_isa_support)
            OR EMBREE_ISA_SUPPORTS_AVX512SKX))
       message(FATAL_ERROR
               "Your Embree build needs to support at least one ISA >= SSE4.1!")
+  endif()
+endmacro()
+
+macro(ospray_find_openvkl OPENVKL_VERSION_REQUIRED)
+  find_dependency(openvkl ${OPENVKL_VERSION_REQUIRED})
+  if(NOT openvkl_FOUND)
+    message(FATAL_ERROR
+            "We did not find Open VKL installed on your system. OSPRay requires"
+            " an Open VKL installation >= v${OPENVKL_VERSION_REQUIRED}, please"
+            " download and extract Open VKL (or compile from source), then"
+            " set the 'openvkl_DIR' variable to the installation directory.")
+  else()
+    get_target_property(OPENVKL_INCLUDE_DIRS openvkl::openvkl
+        INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(OPENVKL_LIBRARY openvkl::openvkl
+        IMPORTED_LOCATION_RELEASE)
+    message(STATUS "Found Open VKL: ${OPENVKL_LIBRARY}")
   endif()
 endmacro()

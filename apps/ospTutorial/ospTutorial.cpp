@@ -1,26 +1,14 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 /* This is a small example tutorial how to use OSPRay in an application.
  *
  * On Linux build it in the build_directory with
- *   g++ ../apps/tutorials/ospTutorial.cpp -I ../ospray/include -I ../components
- * \ -L . -lospray -Wl,-rpath,. -o ospTutorial On Windows build it in the
- * build_directory\$Configuration with cl ..\..\apps\tutorials\ospTutorial.cpp
- * /EHsc -I ..\..\ospray\include -I ..\.. -I ..\..\components ospray.lib
+ *   g++ ../apps/ospTutorial/ospTutorial.cpp -I ../ospray/include \
+ *       -I ../../ospcommon -L . -lospray -Wl,-rpath,. -o ospTutorial
+ * On Windows build it in the build_directory\$Configuration with
+ *   cl ..\..\apps\ospTutorial\ospTutorial.cpp /EHsc -I ..\..\ospray\include ^
+ *      -I ..\.. -I ..\..\..\ospcommon ospray.lib
  */
 
 #include <errno.h>
@@ -67,8 +55,8 @@ int main(int argc, const char **argv)
 {
   // image size
   vec2i imgSize;
-  imgSize.x = 1024;  // width
-  imgSize.y = 768;   // height
+  imgSize.x = 1024; // width
+  imgSize.y = 768; // height
 
   // camera
   vec3f cam_pos{0.f, 0.f, 0.f};
@@ -77,14 +65,14 @@ int main(int argc, const char **argv)
 
   // triangle mesh data
   std::vector<vec3f> vertex = {vec3f(-1.0f, -1.0f, 3.0f),
-                               vec3f(-1.0f, 1.0f, 3.0f),
-                               vec3f(1.0f, -1.0f, 3.0f),
-                               vec3f(0.1f, 0.1f, 0.3f)};
+      vec3f(-1.0f, 1.0f, 3.0f),
+      vec3f(1.0f, -1.0f, 3.0f),
+      vec3f(0.1f, 0.1f, 0.3f)};
 
   std::vector<vec4f> color = {vec4f(0.9f, 0.5f, 0.5f, 1.0f),
-                              vec4f(0.8f, 0.8f, 0.8f, 1.0f),
-                              vec4f(0.8f, 0.8f, 0.8f, 1.0f),
-                              vec4f(0.5f, 0.9f, 0.5f, 1.0f)};
+      vec4f(0.8f, 0.8f, 0.8f, 1.0f),
+      vec4f(0.8f, 0.8f, 0.8f, 1.0f),
+      vec4f(0.5f, 0.9f, 0.5f, 1.0f)};
 
   std::vector<vec3ui> index = {vec3ui(0, 1, 2), vec3ui(1, 2, 3)};
 
@@ -102,10 +90,10 @@ int main(int argc, const char **argv)
     camera.setParam("position", cam_pos);
     camera.setParam("direction", cam_view);
     camera.setParam("up", cam_up);
-    camera.commit();  // commit each object to indicate modifications are done
+    camera.commit(); // commit each object to indicate modifications are done
 
     // create and setup model and mesh
-    ospray::cpp::Geometry mesh("triangles");
+    ospray::cpp::Geometry mesh("mesh");
     mesh.setParam("vertex.position", ospray::cpp::Data(vertex));
     mesh.setParam("vertex.color", ospray::cpp::Data(color));
     mesh.setParam("index", ospray::cpp::Data(index));
@@ -140,7 +128,7 @@ int main(int argc, const char **argv)
 
     // complete setup of renderer
     renderer.setParam("aoSamples", 1);
-    renderer.setParam("bgColor", 1.0f);  // white, transparent
+    renderer.setParam("backgroundColor", 1.0f); // white, transparent
     renderer.commit();
 
     // create and setup framebuffer

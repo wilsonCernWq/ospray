@@ -1,18 +1,5 @@
-## ======================================================================== ##
-## Copyright 2009-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2019 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 ##############################################################
 # Global configuration options
@@ -24,8 +11,8 @@ set(OSPRAY_CMAKECONFIG_DIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/ospray-${OSPRAY_VERSION}")
 
 set(OSPCOMMON_VERSION_REQUIRED 1.1.0)
-set(EMBREE_VERSION_REQUIRED 3.2.0)
-set(OPENVKL_VERSION_REQUIRED 0.7.0)
+set(EMBREE_VERSION_REQUIRED 3.7.0)
+set(OPENVKL_VERSION_REQUIRED 0.8.0)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
@@ -48,9 +35,12 @@ ospray_determine_embree_isa_support()
 ospray_create_embree_target()
 
 # Open VKL
-find_package(openvkl ${OPENVKL_VERSION_REQUIRED} REQUIRED)
-get_target_property(OPENVKL_INCLUDE_DIRS openvkl::openvkl
-    INTERFACE_INCLUDE_DIRECTORIES)
+ospray_find_openvkl(${OPENVKL_VERSION_REQUIRED})
+
+# OpenImageDenoise
+if (OSPRAY_MODULE_DENOISER)
+  find_package(OpenImageDenoise 1.0 REQUIRED)
+endif()
 
 ###########################################################
 # OSPRay specific build options and configuration selection

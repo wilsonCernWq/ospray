@@ -1,18 +1,5 @@
-## ======================================================================== ##
-## Copyright 2017-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2017-2019 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 if (NOT OSPRAY_APPS_TESTING)
   return()
@@ -26,6 +13,7 @@ add_executable(ospTestSuite
   test_geometry.cpp
   test_tools.cpp
   test_volumetric.cpp
+  test_enums.cpp
   ospTestSuite.cpp
 )
 
@@ -33,11 +21,12 @@ target_link_libraries(ospTestSuite
 PRIVATE
   arcball_camera
   ospray_testing
+  ospray_module_ispc
   gtest_main
-	stb_image
+  stb_image
 )
 
 install(TARGETS ospTestSuite
   DESTINATION ${CMAKE_INSTALL_BINDIR}
-  COMPONENT apps
+  COMPONENT test
 )

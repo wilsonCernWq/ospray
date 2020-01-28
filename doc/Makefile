@@ -1,23 +1,26 @@
 SHELL := /bin/bash
 
-webpages := $(addprefix www/, $(addsuffix .html, index news demos documentation gallery downloads related_projects pvospray displaywall fiu_comparison legal))
-process_version := $(addprefix tmp/, $(addsuffix .md, demos getting_ospray readme_head))
+webpages := $(addprefix www/, $(addsuffix .html, index examples documentation gallery downloads related_projects pvospray displaywall fiu_comparison legal))
+process_version := $(addprefix tmp/, $(addsuffix .md, examples getting_ospray readme_head))
 tmptexfiles := $(addprefix tmp/, $(addsuffix .tex, overview changelog compilation api scenegraph examples))
 images_jpg := $(addprefix images/, $(addsuffix .jpg, exampleViewer $(addprefix camera_, perspective architectural stereo orthographic panoramic) $(addprefix material_, OBJ Principled CarPaint Metal Alloy Glass ThinGlass MetallicPaint Luminous) ColoredWindow))
 images_png := $(addprefix images/, $(addsuffix .png, diffuse_rooms normalmap_frustum tutorial_accumulatedframe tutorial_firstframe))
 images_fig := spot_light quad_light hdri_light
-images_svg := gitter_badge
+images_svg := gitter_badge structured_spherical_coords
 images_webonly := $(addprefix images/, VESTEC-Logo-web.png $(addsuffix .jpg, stingray $(addprefix teaser_, clouds cosmos hdospray materials moana rm tapestry)))
 scripts := $(addprefix scripts/, $(addsuffix .min.js, bootstrap jquery popper))
 
 images_fig2pdf := $(addprefix tmp/, $(addsuffix .pdf, $(images_fig)))
+images_svg2pdf := $(addprefix tmp/, $(addsuffix .pdf, $(images_svg)))
 images_fig2png := $(addprefix images/, $(addsuffix .png, $(images_fig)))
 webimages := $(addprefix www/, $(images_webonly) $(images_jpg) $(images_png) $(images_fig2png) $(addprefix images/, $(addsuffix .svg, $(images_svg))))
 webscripts := $(addprefix www/, $(scripts))
-pdfimages := $(images_jpg) $(images_png) $(images_fig2pdf)
+pdfimages := $(images_jpg) $(images_png) $(images_fig2pdf) $(images_fig2svg)
 
 PANDOC := pandoc
 PDMINVERSION := 2000000
+PDVERSION := $(shell $(PANDOC) --version|head -n 1)
+$(info Using $(PDVERSION))
 PDOK := $(shell expr `$(PANDOC) --version|head -n 1|cut -d' ' -f 2| sed -e 's/\.\([0-9][0-9]\)/\1/g' -e 's/\.\([0-9]\)/0\1/g' -e 's/^[0-9]\{3,4\}$$/&00/' -e 's/^[0-9]\{5,6\}$$/&00/'` \>= $(PDMINVERSION))
 ifneq "$(PDOK)" "1"
   $(error You need at least pandoc v2.0)
@@ -60,7 +63,7 @@ tmp/images_local_png.md: images.md
 	sed -e "s@: @: images/@" -e "s/\.fig/.png/" $< > $@
 
 tmp/images_local_pdf.md: images.md
-	sed -e "s@: @: images/@" -e "s@images/\(.*\)\.fig@tmp/\1.pdf@" $< > $@
+	sed -e "s@: @: images/@" -e "s@images/\(.*\)\.fig@tmp/\1.pdf@" -e "s@\.svg@.pdf@" $< > $@
 
 changelog.md:
 	ln -s ../CHANGELOG.md $@
@@ -105,8 +108,7 @@ tmp/scenegraph_html.md: scenegraph.md tmp/links.md tmp/images_local_png.md
 	$(PANDOC) $+ --indented-code-classes=cpp -t markdown-fenced_code_attributes -o $@
 
 www/index.html: teaser.html overview.md changelog.md
-www/news.html: news.md
-www/demos.html: tmp/demos.md
+www/examples.html: examples.md
 www/gallery.html: gallery.md
 www/downloads.html: tmp/getting_ospray.md compilation.md
 www/related_projects.html: related_projects.md
@@ -114,7 +116,7 @@ www/pvospray.html: pvospray.md
 www/displaywall.html: displaywall.md
 www/fiu_comparison.html: fiu_comparison.md
 www/legal.html: legal.md
-www/documentation.html: documentation.md tmp/api_html.md examples.md
+www/documentation.html: documentation.md tmp/api_html.md
 
 
 ### images

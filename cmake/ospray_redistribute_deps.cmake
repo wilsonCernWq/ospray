@@ -1,18 +1,5 @@
-## ======================================================================== ##
-## Copyright 2009-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2019 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 macro(ospray_install_namelink NAME TARGET_NAME)
   set(BASE_LIB_NAME lib${NAME})
@@ -42,14 +29,14 @@ macro(ospray_install_namelink NAME TARGET_NAME)
   endif()
 endmacro()
 
-if (OSPRAY_TASKING_TBB)
+if (OSPCOMMON_TASKING_TBB)
   if (WIN32)
     set(TBB_DLL_HINTS
       HINTS
-      ${TBB_ROOT}/../redist/${TBB_ARCH}_win/tbb/vc14
-      ${TBB_ROOT}/../redist/${TBB_ARCH}/tbb/vc14
-      ${TBB_ROOT}/bin/${TBB_ARCH}/vc14
-      ${TBB_ROOT}/bin
+      ${OSPCOMMON_TBB_ROOT}/../redist/${TBB_ARCH}_win/tbb/vc14
+      ${OSPCOMMON_TBB_ROOT}/../redist/${TBB_ARCH}/tbb/vc14
+      ${OSPCOMMON_TBB_ROOT}/bin/${TBB_ARCH}/vc14
+      ${OSPCOMMON_TBB_ROOT}/bin
     )
     find_file(TBB_DLL tbb.dll ${TBB_DLL_HINTS})
     find_file(TBB_DLL_DEBUG tbb_debug.dll ${TBB_DLL_HINTS})
@@ -87,6 +74,9 @@ endmacro()
 ospray_add_dependent_lib(ospcommon::ospcommon)
 ospray_add_dependent_lib(openvkl::openvkl)
 ospray_add_dependent_lib(openvkl::openvkl_module_ispc_driver)
+if (OSPRAY_MODULE_DENOISER)
+  ospray_add_dependent_lib(OpenImageDenoise)
+endif()
 
 if (WIN32)
   get_filename_component(EMBREE_LIB_DIR ${EMBREE_LIBRARY} PATH)

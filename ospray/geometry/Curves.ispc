@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 // ospray
 #include "common/Data.ih"
@@ -26,7 +13,7 @@
 
 struct Curves
 {
-  Geometry super;  //!< inherited geometry fields
+  Geometry super; //!< inherited geometry fields
   Data1D index;
   Data1D vertex;
   Data1D color;
@@ -37,43 +24,43 @@ struct Curves
 };
 
 static void Curves_postIntersect(const Geometry *uniform _self,
-                                 varying DifferentialGeometry &dg,
-                                 const varying Ray &ray,
-                                 uniform int64 flags)
-{ 
+    varying DifferentialGeometry &dg,
+    const varying Ray &ray,
+    uniform int64 flags)
+{
   Curves *uniform self = (Curves * uniform) _self;
   dg.Ng = dg.Ns = ray.Ng;
   flags &= self->flagMask;
-  cif (flags & DG_COLOR) {
+  if (flags & DG_COLOR) {
     rtcInterpolateV1(self->geom,
-                     ray.primID,
-                     ray.u,
-                     ray.v,
-                     RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
-                     0,
-                     &dg.color.x,
-                     NULL,
-                     NULL,
-                     4);
+        ray.primID,
+        ray.u,
+        ray.v,
+        RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
+        0,
+        &dg.color.x,
+        NULL,
+        NULL,
+        4);
   }
-  cif (flags & DG_TEXCOORD) {
+  if (flags & DG_TEXCOORD) {
     rtcInterpolateV1(self->geom,
-                     ray.primID,
-                     ray.u,
-                     ray.v,
-                     RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
-                     1,
-                     &dg.st.x,
-                     NULL,
-                     NULL,
-                     2);
+        ray.primID,
+        ray.u,
+        ray.v,
+        RTC_BUFFER_TYPE_VERTEX_ATTRIBUTE,
+        1,
+        &dg.st.x,
+        NULL,
+        NULL,
+        2);
   }
 }
 
 static void CurvesUserGeometry_postIntersect(const Geometry *uniform self,
-                                 varying DifferentialGeometry &dg,
-                                 const varying Ray &ray,
-                                 uniform int64 flags)
+    varying DifferentialGeometry &dg,
+    const varying Ray &ray,
+    uniform int64 flags)
 {
   Curves *uniform self = (Curves * uniform) self;
 
@@ -84,10 +71,10 @@ static void CurvesUserGeometry_postIntersect(const Geometry *uniform self,
     const uint32 index = get_int32(self->index, ray.primID);
     const vec4f col0 = get_vec4f(self->color, index);
     const vec4f col1 = get_vec4f(self->color, index + 1);
-    dg.color = lerp(ray.u, col0, col1);   
+    dg.color = lerp(ray.u, col0, col1);
   }
 
-  cif (and(flags & DG_TEXCOORD, valid(self->texcoord))) {
+  if (and(flags & DG_TEXCOORD, valid(self->texcoord))) {
     const uint32 index = get_int32(self->index, ray.primID);
     const vec2f tc0 = get_vec2f(self->texcoord, index);
     const vec2f tc1 = get_vec2f(self->texcoord, index + 1);
@@ -98,11 +85,11 @@ static void CurvesUserGeometry_postIntersect(const Geometry *uniform self,
 unmasked void Curves_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
   Curves *uniform self = (Curves * uniform) args->geometryUserPtr;
-  uniform int primID         = args->primID;
+  uniform int primID = args->primID;
   const uniform uint32 index = get_int32(self->index, primID);
   const uniform vec3f A = get_vec3f(self->vertex, index);
   const uniform vec3f B = get_vec3f(self->vertex, index + 1);
-  box3fa *uniform out        = (box3fa * uniform) args->bounds_o;
+  box3fa *uniform out = (box3fa * uniform) args->bounds_o;
   *out = make_box3fa(min(A, B) - self->radius, max(A, B) + self->radius);
 }
 
@@ -147,7 +134,7 @@ unmasked void Curves_intersect_kernel(
       ray->t = neg_inf;
     } else {
       ray->primID = primID;
-      ray->geomID = self->super.geomID;
+      ray->geomID = 0;
       ray->instID = args->context->instID[0];
     }
   }
@@ -173,47 +160,47 @@ unmasked void Curves_occluded(
 // representation for area sampling, i.e. one cylinder per segment and one
 // sphere per vertex.
 SampleAreaRes Curves_sampleArea(const Geometry *uniform const _self,
-                                     const int32 areaPrimID,
-                                     const uniform affine3f &xfm,
-                                     const uniform affine3f &rcp_xfm,
-                                     const vec2f &s)
+    const int32 areaPrimID,
+    const uniform affine3f &xfm,
+    const uniform affine3f &rcp_xfm,
+    const vec2f &s)
 {
   const Curves *const uniform self = (const Curves *uniform)_self;
-  const uniform float radius            = self->radius;
+  const uniform float radius = self->radius;
 
   vec3f localNormal;
   vec3f localPos;
   const uniform int32 spheres = self->vertex.numItems;
   if (areaPrimID < spheres) {
-    localNormal        = uniformSampleSphere(radius, s);
+    localNormal = uniformSampleSphere(radius, s);
     const vec3f center = get_vec3f(self->vertex, areaPrimID);
-    localPos           = center + localNormal;
+    localPos = center + localNormal;
   } else { // cylinder
     const uint32 idx = get_uint32(self->index, areaPrimID - spheres);
     const vec3f v0 = get_vec3f(self->vertex, idx);
     const vec3f v1 = get_vec3f(self->vertex, idx + 1);
 
-    linear3f frame  = frame(v1 - v0);
-    frame.vy        = normalize(frame.vy);
+    linear3f frame = frame(v1 - v0);
+    frame.vy = normalize(frame.vy);
     const float phi = two_pi * s.x;
     float sinPhi, cosPhi;
     sincos(phi, &sinPhi, &cosPhi);
     localNormal = (cosPhi * radius) * frame.vx + (sinPhi * radius) * frame.vy;
-    localPos    = v0 + localNormal + s.y * frame.vz;
+    localPos = v0 + localNormal + s.y * frame.vz;
   }
 
   SampleAreaRes res;
-  res.pos    = xfmPoint(xfm, localPos);
+  res.pos = xfmPoint(xfm, localPos);
   res.normal = normalize(xfmVector(transposed(rcp_xfm.l), localNormal));
 
   return res;
 }
 
 void Curves_getAreas(const Geometry *const uniform _self,
-                          const int32 *const uniform primIDs,
-                          const uniform int32 numPrims,
-                          const uniform affine3f &xfm,
-                          float *const uniform areas)
+    const int32 *const uniform primIDs,
+    const uniform int32 numPrims,
+    const uniform affine3f &xfm,
+    float *const uniform areas)
 {
   Curves *uniform self = (Curves * uniform) _self;
 
@@ -239,19 +226,18 @@ void Curves_getAreas(const Geometry *const uniform _self,
   // TODO vectorize this loop, with foreach or ProgramCount & ProgramIndex
   for (uniform int32 i = 0; i < numPrims; i++) {
     const uniform int32 primID = primIDs[i];
-    if (primID < spheres) {  // sphere
+    if (primID < spheres) { // sphere
       areas[i] = sphereArea;
-    } else {  // cylinder
+    } else { // cylinder
       const uniform uint32 idx = get_uint32(self->index, primID - spheres);
       const uniform vec3f v0 = get_vec3f(self->vertex, idx);
       const uniform vec3f v1 = get_vec3f(self->vertex, idx + 1);
-      areas[i]                 = cyl1Area * length(v0 - v1);
+      areas[i] = cyl1Area * length(v0 - v1);
     }
   }
 }
 
-void Curves_Constructor(
-    Curves *uniform self, void *uniform cppEquivalent)
+void Curves_Constructor(Curves *uniform self, void *uniform cppEquivalent)
 {
   Geometry_Constructor(&self->super, cppEquivalent, NULL);
   Data1D_Constructor(&self->index);
@@ -268,10 +254,10 @@ export void *uniform Curves_create(void *uniform cppEquivalent)
 }
 
 export void *uniform Curves_set(void *uniform _self,
-                                RTCGeometry geom,
-                                uniform bool haveColor,
-                                uniform bool haveTexture,
-                                int32 uniform numSegments)
+    RTCGeometry geom,
+    uniform bool haveColor,
+    uniform bool haveTexture,
+    int32 uniform numSegments)
 {
   Curves *uniform self = (Curves * uniform) _self;
   self->geom = geom;
@@ -285,17 +271,17 @@ export void *uniform Curves_set(void *uniform _self,
   self->super.postIntersect = Curves_postIntersect;
 
   // TODO implement area sampling of OldCurves for geometry lights
-  self->super.getAreas   = NULL;
+  self->super.getAreas = NULL;
   self->super.sampleArea = NULL;
 }
 
 export void *uniform Curves_setUserGeometry(void *uniform _self,
-                                void *uniform _embreeGeometry,
-                                float uniform radius,
-                                const Data1D *uniform index,
-                                const Data1D *uniform vertex,
-                                const Data1D *uniform color,
-                                const Data1D *uniform texcoord)
+    void *uniform _embreeGeometry,
+    float uniform radius,
+    const Data1D *uniform index,
+    const Data1D *uniform vertex,
+    const Data1D *uniform color,
+    const Data1D *uniform texcoord)
 {
   Curves *uniform self = (Curves * uniform) _self;
 
@@ -305,8 +291,8 @@ export void *uniform Curves_setUserGeometry(void *uniform _self,
   self->color = *color;
   self->texcoord = *texcoord;
 
-  self->super.getAreas      = Curves_getAreas;
-  self->super.sampleArea    = Curves_sampleArea;
+  self->super.getAreas = Curves_getAreas;
+  self->super.sampleArea = Curves_sampleArea;
   self->super.postIntersect = CurvesUserGeometry_postIntersect;
   self->super.numPrimitives = index->numItems;
 

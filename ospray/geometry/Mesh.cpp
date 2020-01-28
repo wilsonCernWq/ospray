@@ -1,18 +1,5 @@
-// ======================================================================== //
-// Copyright 2009-2019 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
+// Copyright 2009-2019 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
 
 // ospray
 #include "Mesh.h"
@@ -24,62 +11,60 @@
 
 namespace ospray {
 
-  std::string Mesh::toString() const
-  {
-    return "ospray::Mesh";
-  }
+Mesh::Mesh()
+{
+  ispcEquivalent = ispc::Mesh_create(this);
+}
 
-  void Mesh::commit()
-  {
-    vertexData = getParamDataT<vec3f>("vertex.position", true);
-    normalData = getParamDataT<vec3f>("vertex.normal");
-    colorData = getParam<Data *>("vertex.color");
-    texcoordData = getParamDataT<vec2f>("vertex.texcoord");
-    indexData = getParamDataT<vec3ui>("index");
-      if (!indexData)
-        indexData = getParamDataT<vec4ui>("index", true);
-    postCreationInfo(vertexData->size());
-  }
+std::string Mesh::toString() const
+{
+  return "ospray::Mesh";
+}
 
-  size_t Mesh::numPrimitives() const
-  {
-    return indexData->size();
-  }
+void Mesh::commit()
+{
+  vertexData = getParamDataT<vec3f>("vertex.position", true);
+  normalData = getParamDataT<vec3f>("vertex.normal");
+  colorData = getParam<Data *>("vertex.color");
+  texcoordData = getParamDataT<vec2f>("vertex.texcoord");
+  indexData = getParamDataT<vec3ui>("index");
+  if (!indexData)
+    indexData = getParamDataT<vec4ui>("index", true);
 
-  LiveGeometry Mesh::createEmbreeGeometry()
-  {
-    const bool isTri = indexData->type == OSP_VEC3UI;
-    auto embreeGeo = rtcNewGeometry(ispc_embreeDevice(),
-        isTri ? RTC_GEOMETRY_TYPE_TRIANGLE : RTC_GEOMETRY_TYPE_QUAD);
-    setEmbreeGeometryBuffer(embreeGeo, RTC_BUFFER_TYPE_VERTEX, vertexData);
-    rtcSetSharedGeometryBuffer(embreeGeo,
-        RTC_BUFFER_TYPE_INDEX,
-        0,
-        isTri ? RTC_FORMAT_UINT3 : RTC_FORMAT_UINT4,
-        indexData->data(),
-        0,
-        isTri ? sizeof(vec3ui) : sizeof(vec4ui),
-        indexData->size());
-    rtcCommitGeometry(embreeGeo);
+  if (embreeGeometry)
+    rtcReleaseGeometry(embreeGeometry);
 
-    LiveGeometry retval;
-    retval.embreeGeometry = embreeGeo;
+  const bool isTri = indexData->type == OSP_VEC3UI;
+  embreeGeometry = rtcNewGeometry(ispc_embreeDevice(),
+      isTri ? RTC_GEOMETRY_TYPE_TRIANGLE : RTC_GEOMETRY_TYPE_QUAD);
+  setEmbreeGeometryBuffer(embreeGeometry, RTC_BUFFER_TYPE_VERTEX, vertexData);
+  rtcSetSharedGeometryBuffer(embreeGeometry,
+      RTC_BUFFER_TYPE_INDEX,
+      0,
+      isTri ? RTC_FORMAT_UINT3 : RTC_FORMAT_UINT4,
+      indexData->data(),
+      0,
+      isTri ? sizeof(vec3ui) : sizeof(vec4ui),
+      indexData->size());
+  rtcCommitGeometry(embreeGeometry);
 
-    retval.ispcEquivalent = ispc::Mesh_create(this);
+  ispc::Mesh_set(getIE(),
+      ispc(indexData),
+      ispc(vertexData),
+      ispc(normalData),
+      ispc(colorData),
+      ispc(texcoordData),
+      colorData && colorData->type == OSP_VEC4F,
+      isTri);
 
-    ispc::Mesh_set(retval.ispcEquivalent,
-        ispc(indexData),
-        ispc(vertexData),
-        ispc(normalData),
-        ispc(colorData),
-        ispc(texcoordData),
-        colorData && colorData->type == OSP_VEC4F,
-        isTri);
+  postCreationInfo(vertexData->size());
+}
 
-    return retval;
+size_t Mesh::numPrimitives() const
+{
+  return indexData->size();
+}
 
-  }
+OSP_REGISTER_GEOMETRY(Mesh, mesh);
 
-  OSP_REGISTER_GEOMETRY(Mesh, mesh);
-
-}  // namespace ospray
+} // namespace ospray

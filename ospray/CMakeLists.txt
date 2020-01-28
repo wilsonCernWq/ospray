@@ -1,30 +1,18 @@
-## ======================================================================== ##
-## Copyright 2009-2019 Intel Corporation                                    ##
-##                                                                          ##
-## Licensed under the Apache License, Version 2.0 (the "License");          ##
-## you may not use this file except in compliance with the License.         ##
-## You may obtain a copy of the License at                                  ##
-##                                                                          ##
-##     http://www.apache.org/licenses/LICENSE-2.0                           ##
-##                                                                          ##
-## Unless required by applicable law or agreed to in writing, software      ##
-## distributed under the License is distributed on an "AS IS" BASIS,        ##
-## WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. ##
-## See the License for the specific language governing permissions and      ##
-## limitations under the License.                                           ##
-## ======================================================================== ##
+## Copyright 2009-2019 Intel Corporation
+## SPDX-License-Identifier: Apache-2.0
 
 # -------------------------------------------------------
 # Setup ospray include directories and source files
 # -------------------------------------------------------
 
 set(OSPRAY_SOURCES
+  ospray.rc
+
   api/API.cpp
   api/Device.cpp
   api/ospray_util_impl.cpp
   api/ospray_cpp_defs.cpp
 
-  common/ospray.rc
   common/OSPCommon.cpp
 
   include/ospray/ospray.h
@@ -111,7 +99,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   geometry/Spheres.ispc
   geometry/Isosurfaces.ispc
   geometry/Isosurfaces.cpp
-  geometry/Mesh.cpp 
+  geometry/Mesh.cpp
   geometry/Mesh.ispc
 
   lights/Light.ispc
@@ -142,8 +130,10 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   render/Renderer.ispc
   render/Renderer.cpp
   render/util.ispc
-  render/raycast/RaycastRenderer.cpp
-  render/raycast/RaycastRenderer.ispc
+
+  render/debug/DebugRenderer.cpp
+  render/debug/DebugRenderer.ispc
+
   render/scivis/SciVis.cpp
   render/scivis/SciVis.ispc
   render/scivis/SciVisMaterial.cpp
@@ -197,12 +187,6 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   volume/Volume.cpp
   volume/VolumetricModel.ispc
   volume/VolumetricModel.cpp
-  volume/VKLSharedStructuredVolume.h
-  volume/VKLSharedStructuredVolume.cpp
-  volume/VKLUnstructuredVolume.h
-  volume/VKLUnstructuredVolume.cpp
-  volume/VKLAMRVolume.h
-  volume/VKLAMRVolume.cpp
 
   volume/transferFunction/LinearTransferFunction.ispc
   volume/transferFunction/LinearTransferFunction.cpp
@@ -234,9 +218,7 @@ endforeach()
 
 add_library(ospray SHARED ${OSPRAY_SOURCES})
 target_link_libraries(ospray PUBLIC $<BUILD_INTERFACE:ospcommon::ospcommon>)
-ospray_install_library(ospray COMPONENT lib)
-set_target_properties(ospray
-  PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
+ospray_install_library(ospray lib)
 
 target_include_directories(ospray
   PUBLIC
@@ -299,6 +281,11 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
       "Must be multiple of largest vector width *and* <= OSPRAY_TILE_SIZE")
   mark_as_advanced(OSPRAY_PIXELS_PER_JOB)
 
+  option(OSPRAY_DEBUG_NO_TASKING
+         "Remove tasking parallelism system for debugging"
+         OFF)
+  mark_as_advanced(OSPRAY_DEBUG_NO_TASKING)
+
   configure_file(common/OSPConfig.h.in ../OSPConfig.h)
   install(FILES ${CMAKE_BINARY_DIR}/OSPConfig.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK
@@ -320,7 +307,7 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
 
   ispc_target_add_sources(ospray_module_ispc ${OSPRAY_ISPC_DEVICE_SOURCES})
 
-  ospray_install_library(ospray_module_ispc COMPONENT lib)
+  ospray_install_library(ospray_module_ispc lib)
 
   target_link_libraries(ospray_module_ispc
   PUBLIC
@@ -345,13 +332,11 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
 
   target_compile_definitions(ospray_module_ispc
   PUBLIC
-    -DTILE_SIZE=${OSPRAY_TILE_SIZE}
-    -DMAX_TILE_SIZE=${OSPRAY_MAX_STACK_TILE_SIZE}
-    -DRENDERTILE_PIXELS_PER_JOB=${OSPRAY_PIXELS_PER_JOB}
+    TILE_SIZE=${OSPRAY_TILE_SIZE}
+    MAX_TILE_SIZE=${OSPRAY_MAX_STACK_TILE_SIZE}
+    RENDERTILE_PIXELS_PER_JOB=${OSPRAY_PIXELS_PER_JOB}
+    $<$<BOOL:${OSPRAY_DEBUG_NO_TASKING}>:OSPRAY_SERIAL_RENDERING>
   )
-
-  set_target_properties(ospray_module_ispc
-    PROPERTIES VERSION ${OSPRAY_VERSION} SOVERSION ${OSPRAY_SOVERSION})
 
 endif()
 
@@ -364,7 +349,7 @@ target_link_libraries(ospray_sdk
 INTERFACE
   ospray_module_ispc ospcommon::ospcommon
 )
-ospray_install_library(ospray_sdk COMPONENT devel)
+ospray_install_target(ospray_sdk devel)
 
 ##############################################################
 # Configure find_package files
