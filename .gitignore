@@ -15,7 +15,7 @@ tags
 *.zip
 *.bak
 *.patch
-.vscode
+!.vscode
 deps
 tbb
 embree

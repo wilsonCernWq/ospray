@@ -1,0 +1,8 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}/scripts/superbuild",
+    "cmake.configureSettings": {
+        "BUILD_EMBREE_FROM_SOURCE": false,
+        "INSTALL_IN_SEPARATE_DIRECTORIES": false
+    },
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+}
