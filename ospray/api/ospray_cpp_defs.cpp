@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "../common/OSPCommon.h"
@@ -8,7 +8,8 @@
 namespace ospray {
 
 OSPTYPEFOR_DEFINITION(cpp::Camera);
-OSPTYPEFOR_DEFINITION(cpp::Data);
+OSPTYPEFOR_DEFINITION(cpp::SharedData);
+OSPTYPEFOR_DEFINITION(cpp::CopiedData);
 OSPTYPEFOR_DEFINITION(cpp::FrameBuffer);
 OSPTYPEFOR_DEFINITION(cpp::Future);
 OSPTYPEFOR_DEFINITION(cpp::GeometricModel);

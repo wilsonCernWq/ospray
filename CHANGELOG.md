@@ -1,6 +1,95 @@
 Version History
 ---------------
 
+### Changes in v2.2.0:
+
+-   Support for texture transformation in SciVis OBJ material
+-   Add transformations for volume textures; volume texture lookups are
+    now with local object coordinates (not world coordinates anymore)
+-   Changed behavior: if solely a texure is given, then the default
+    value of the corresponding parameter is *not* multiplied
+-   Support for better antialiasing using a set of different pixel
+    filters (e.g, box, Gaussian, ...). The size of the pixel filter
+    is defined by the used filter type. Previously OSPRay implicitely
+    used a box filter with a size of 1, for better results the default
+    filter is now `OSP_PIXELFILTER_GAUSS`
+-   Support for Open VKL v0.10.0 and its new sampler object API, thus
+    this is now the requires minimum version
+-   Move from `ospcommon` to `rkcommon` v1.4.0
+-   New minimum ISPC version is 1.10.0
+-   Added support for particle volumes
+-   Status and error callbacks now support a user pointer
+-   Enabled C++ wrappers (`ospray_cpp`) to work with non-rkcommon math types
+    -   Note that while the C API remains the same, the C++ wrappers will
+        require some application updates to account for these changes
+
+### Changes in v2.1.1:
+
+-   CarPaint material obeys `coat` weight parameter
+-   Correct depth buffer values with SciVis renderer
+-   Adaptions to Embree v3.10.0
+-   The Linux binary release finds `ospcommon` again
+
+### Changes in v2.1.0:
+
+-   New clipping geometries feature that allows clipping any scene
+    (geometry and volumes); all OSPRay geometry types can by used as
+    clipping geometry
+    -   Inverted clipping is supported via new `invertNormals` parameter
+        of `GeometricModel`
+    -   Currently there is a fixed upper limit (64) of how many clipping
+        geometries can be nested
+    -   When clipping with curves geometry (any basis except linear)
+        some rendering artifacts may appear
+-   New plane geometry defined via plane equation and optional bounding
+    box
+-   Sun-sky light based on physical model of Hošek-Wilkie
+-   Support for photometric lights (e.g., IES or EULUMDAT)
+-   Add new `ospGetTaskDuration` API call to query execution time of
+    asynchronous tasks
+-   Support for 16bit (unsigned short) textures
+-   Add static `cpp::Device::current` method as a C++ wrapper equivalent
+    to `ospGetCurrentDevice`
+-   Generalized `cpp::Device` parameter setting to match other handle
+    types
+-   Passing `NULL` to `ospRelease` is not reported as error anymore
+-   Fix computation of strides for `OSPData`
+-   Fix transparency in `scivis` renderer
+-   Add missing C++ wrapper for `ospGetVariance`
+-   Proper demonstration of `ospGetVariance` in `ospTutorialAsync`
+-   Fix handling of `--osp:device-params` to process and set all passed
+    arguments first before committing the device, to ensure it is
+    committed in a valid state.
+-   Object factory functions are now registered during module
+    initialization via the appropriate `registerType` function
+-   Fix issue with OSPRay ignoring tasking system thread count settings
+-   Fix issue where OSPRay always loaded the ISPC module, even if not
+    required
+-   OSPRay now requires minimum Open VKL v0.9.0
+
+### Changes in v2.0.1:
+
+-   Fix bug where Embree user-defined geometries were not indexed
+    correctly in the scene, which now requires Embree v3.8.0+
+-   Fix crash when the path tracer encounters geometric models that do
+    not have a material
+-   Fix crash when some path tracer materials generated `NULL` bsdfs
+-   Fix bug where `ospGetBounds` returned incorrect values
+-   Fix missing symbol in denoiser module
+-   Fix missing symbol exports on Windows for all OSPRay built modules
+-   Add the option to specify a single color for geometric models
+-   The `scivis` renderer now respects the opacity component of `color`
+    on geometric models
+-   Fix various inconsistent handling of framebuffer alpha between
+    renderers
+-   `ospGetCurrentDevice` now increments the ref count of the returned
+    `OSPDevice` handle, so applications will need to release the handle
+    when finished by using `ospDeviceRelease` accordingly
+-   Added denoiser to `ospExamples` app
+-   Added `module_mpi` to superbuild (disabled by default)
+-   The superbuild now will emit a CMake error when using any 32-bit
+    CMake generator, as 32-bit builds are not supported
+
 ### Changes in v2.0.0:
 
 -   New major revision of OSPRay brings API breaking improvements over
@@ -50,7 +139,7 @@ Version History
     -   Any unused parameters an object ignores now emit a warning message
 -   New support for volumes in the `pathtracer`
     -   Several parameters are available for performance/quality
-        trade-offs for both photo-realistic and scientific visualization
+        trade-offs for both photorealistic and scientific visualization
         use cases
 -   Simplification of the SciVis renderer
     -   Fixed AO lighting and simple ray marched volume rendering for
@@ -728,7 +817,7 @@ changes.
 -   Incorporated early version of a new Qt-based viewer to eventually
     unify (and replace) the existing simpler GLUT-based viewers
 -   Added new path tracing renderer (`ospray/render/pathtracer`),
--   roughly based on the Embree sample path tracer
+    roughly based on the Embree sample path tracer
 -   Added new features to the volume renderer
     -   Gradient shading (lighting)
     -   Implicit isosurfacing

@@ -1,6 +1,9 @@
 [imgTutorial1]: tutorial_firstframe.png
 [imgTutorial2]: tutorial_accumulatedframe.png
+[renderSunSky]: renderSunSky.png { width=90% }
+[ospExamples]: ospExamples.png { width=90% }
 [imgSpotLight]: spot_light.fig
+[imgSpotCoords]: spot_coords.fig
 [imgQuadLight]: quad_light.fig
 [imgHDRILight]: hdri_light.fig
 [imgCameraPerspective]: camera_perspective.jpg { width=60% }
@@ -20,6 +23,5 @@
 [imgMaterialMetallicPaint]: material_MetallicPaint.jpg { width=60% }
 [imgMaterialLuminous]: material_Luminous.jpg { width=60% }
 [imgColoredWindow]: ColoredWindow.jpg { width=60% }
-[imgExampleViewer]: exampleViewer.jpg
 [imgStructuredSphericalCoords]: structured_spherical_coords.svg { width=60% }
 

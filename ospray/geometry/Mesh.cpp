@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // ospray
@@ -64,7 +64,5 @@ size_t Mesh::numPrimitives() const
 {
   return indexData->size();
 }
-
-OSP_REGISTER_GEOMETRY(Mesh, mesh);
 
 } // namespace ospray

@@ -47,12 +47,14 @@ done
 
 ROOT_DIR=$PWD
 DEP_DIR=$ROOT_DIR/deps
+DEP_BUILD_DIR=$ROOT_DIR/build_deps
 THREADS=`nproc`
+
 
 #### Build dependencies ####
 
-mkdir deps_build
-cd deps_build
+mkdir $DEP_BUILD_DIR
+cd $DEP_BUILD_DIR
 
 # NOTE(jda) - Some Linux OSs need to have lib/ on LD_LIBRARY_PATH at build time
 export LD_LIBRARY_PATH=$DEP_DIR/lib:${LD_LIBRARY_PATH}
@@ -61,6 +63,7 @@ cmake --version
 
 cmake \
   "$@" \
+  -D BUILD_JOBS=$THREADS \
   -D BUILD_DEPENDENCIES_ONLY=ON \
   -D CMAKE_INSTALL_PREFIX=$DEP_DIR \
   -D CMAKE_INSTALL_LIBDIR=lib \
@@ -83,49 +86,39 @@ cd build_release
 rm -rf *
 
 # Setup environment variables for dependencies
-export OSPCOMMON_TBB_ROOT=$DEP_DIR
-export ospcommon_DIR=$DEP_DIR
+export rkcommon_DIR=$DEP_DIR
 export embree_DIR=$DEP_DIR
 export glfw3_DIR=$DEP_DIR
 export openvkl_DIR=$DEP_DIR
 export OpenImageDenoise_DIR=$DEP_DIR
 
-# set release and RPM settings
+# set release settings
 cmake -L \
   -D OSPRAY_BUILD_ISA=ALL \
+  -D TBB_ROOT=$DEP_DIR \
   -D ISPC_EXECUTABLE=$DEP_DIR/bin/ispc \
-  -D OSPRAY_ZIP_MODE=OFF \
-  -D OSPRAY_MODULE_DENOISER=ON \
-  -D OSPRAY_INSTALL_DEPENDENCIES=OFF \
-  -D CPACK_PACKAGING_INSTALL_PREFIX=/usr \
-  ..
-
-# create RPM files
-make -j $THREADS preinstall
-
-check_symbols libospray.so GLIBC   2 14 0
-check_symbols libospray.so GLIBCXX 3 4 14
-check_symbols libospray.so CXXABI  1 3 5
-
-check_symbols libospray_module_ispc.so GLIBC   2 14 0
-check_symbols libospray_module_ispc.so GLIBCXX 3 4 14
-check_symbols libospray_module_ispc.so CXXABI  1 3 5
-
-check_imf libospray.so libospray_module_ispc.so
-
-
-make -j $THREADS package || exit 2
-
-# change settings for zip mode
-cmake -L \
   -D OSPRAY_ZIP_MODE=ON \
+  -D OSPRAY_MODULE_DENOISER=ON \
   -D OSPRAY_INSTALL_DEPENDENCIES=ON \
-  -D CPACK_PACKAGING_INSTALL_PREFIX=/ \
   -D CMAKE_INSTALL_INCLUDEDIR=include \
   -D CMAKE_INSTALL_LIBDIR=lib \
   -D CMAKE_INSTALL_DOCDIR=doc \
   -D CMAKE_INSTALL_BINDIR=bin \
   ..
 
-# create tar.gz files
+# create tar.gz
+make -j $THREADS preinstall
+
+# verify libs
+check_symbols libospray.so GLIBC   2 17 0
+check_symbols libospray.so GLIBCXX 3 4 19
+check_symbols libospray.so CXXABI  1 3 7
+
+check_symbols libospray_module_ispc.so GLIBC   2 17 0
+check_symbols libospray_module_ispc.so GLIBCXX 3 4 19
+check_symbols libospray_module_ispc.so CXXABI  1 3 7
+
+check_imf libospray.so
+check_imf libospray_module_ispc.so
+
 make -j $THREADS package || exit 2

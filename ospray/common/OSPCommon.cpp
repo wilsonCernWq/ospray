@@ -1,10 +1,10 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "OSPCommon.h"
 #include "api/Device.h"
 
-#include "ospcommon/utility/StringManip.h"
+#include "rkcommon/utility/StringManip.h"
 
 #include <map>
 
@@ -30,7 +30,7 @@ WarnOnce::WarnOnce(const std::string &s, uint32_t postAtLogLevel) : s(s)
 
 std::string getArgString(const std::string &s)
 {
-  std::vector<std::string> tokens = ospcommon::utility::split(s, '=');
+  std::vector<std::string> tokens = rkcommon::utility::split(s, '=');
   if (tokens.size() < 2) {
     std::stringstream ss;
     ss << "Invalid format for command-line argument " << s
@@ -58,13 +58,41 @@ int getArgInt(const std::string &s)
 
 void initFromCommandLine(int *_ac, const char ***_av)
 {
-  using namespace ospcommon::utility;
+  using namespace rkcommon::utility;
 
   auto &device = ospray::api::Device::current;
 
   if (_ac && _av) {
     int &ac = *_ac;
     auto &av = *_av;
+
+    // If we have any device-params those must be set first to avoid
+    // initializing the device in an invalid or partial state
+    bool hadDeviceParams = false;
+    for (int i = 1; i < ac;) {
+      if (std::strncmp(av[i], "--osp:device-params", 19) == 0) {
+        hadDeviceParams = true;
+        std::string parmesan = getArgString(av[i]);
+        std::vector<std::string> parmList = split(parmesan, ',');
+        for (std::string &p : parmList) {
+          std::vector<std::string> kv = split(p, ':');
+          if (kv.size() != 2) {
+            postStatusMsg(
+                "Invalid parameters provided for --osp:device-params. "
+                "Must be formatted as <param>:<value>[,<param>:<value>,...]");
+          } else {
+            device->setParam(kv[0], kv[1]);
+          }
+        }
+        removeArgs(ac, av, i, 1);
+      } else {
+        ++i;
+      }
+    }
+    if (hadDeviceParams) {
+      device->commit();
+    }
+
     for (int i = 1; i < ac;) {
       std::string parm = av[i];
       // flag-style arguments
@@ -77,12 +105,12 @@ void initFromCommandLine(int *_ac, const char ***_av)
         device->setParam("warnAsError", true);
         removeArgs(ac, av, i, 1);
       } else if (parm == "--osp:verbose") {
-        device->setParam("logLevel", int(OSP_LOG_INFO));
+        device->setParam("logLevel", OSP_LOG_INFO);
         device->setParam("logOutput", std::string("cout"));
         device->setParam("errorOutput", std::string("cerr"));
         removeArgs(ac, av, i, 1);
       } else if (parm == "--osp:vv") {
-        device->setParam("logLevel", int(OSP_LOG_DEBUG));
+        device->setParam("logLevel", OSP_LOG_DEBUG);
         device->setParam("logOutput", std::string("cout"));
         device->setParam("errorOutput", std::string("cerr"));
         removeArgs(ac, av, i, 1);
@@ -122,26 +150,11 @@ void initFromCommandLine(int *_ac, const char ***_av)
       } else if (beginsWith(parm, "--osp:set-affinity")) {
         int val = getArgInt(parm);
         if (val == 0 || val == 1) {
-          // this will be set to 0 if the value is invalid
-          device->setParam<bool>("setAffinity", atoi(av[i + 1]));
+          device->setParam<int>("setAffinity", val);
         } else {
           postStatusMsg(
               "Invalid value provided for --osp:set-affinity. "
               "Must be 0 or 1");
-        }
-        removeArgs(ac, av, i, 1);
-      } else if (beginsWith(parm, "--osp:device-params")) {
-        std::string parmesan = getArgString(parm);
-        std::vector<std::string> parmList = split(parmesan, ',');
-        for (std::string &p : parmList) {
-          std::vector<std::string> kv = split(p, ':');
-          if (kv.size() != 2) {
-            postStatusMsg(
-                "Invalid parameters provided for --osp:device-params. "
-                "Must be formatted as <param>:<value>[,<param>:<value>,...]");
-          } else {
-            device->setParam(kv[0], kv[1]);
-          }
         }
         removeArgs(ac, av, i, 1);
       } else {
@@ -200,6 +213,12 @@ size_t sizeOf(OSPDataType type)
     return sizeof(int16);
   case OSP_USHORT:
     return sizeof(uint16);
+  case OSP_VEC2US:
+    return sizeof(vec2us);
+  case OSP_VEC3US:
+    return sizeof(vec3us);
+  case OSP_VEC4US:
+    return sizeof(vec4us);
   case OSP_INT:
     return sizeof(int32);
   case OSP_VEC2I:
@@ -313,6 +332,12 @@ OSPDataType typeOf(const char *string)
     return (OSP_SHORT);
   if (strcmp(string, "ushort") == 0)
     return (OSP_USHORT);
+  if (strcmp(string, "vec2us") == 0)
+    return (OSP_VEC2US);
+  if (strcmp(string, "vec3us") == 0)
+    return (OSP_VEC3US);
+  if (strcmp(string, "vec4us") == 0)
+    return (OSP_VEC4US);
   if (strcmp(string, "uint") == 0)
     return (OSP_UINT);
   if (strcmp(string, "uint2") == 0)
@@ -385,6 +410,12 @@ std::string stringFor(OSPDataType type)
     return "short";
   case OSP_USHORT:
     return "ushort";
+  case OSP_VEC2US:
+    return "vec2us";
+  case OSP_VEC3US:
+    return "vec3us";
+  case OSP_VEC4US:
+    return "vec4us";
   case OSP_INT:
     return "int";
   case OSP_VEC2I:
@@ -486,6 +517,14 @@ std::string stringFor(OSPTextureFormat format)
     return "la8";
   case OSP_TEXTURE_R32F:
     return "r32f";
+  case OSP_TEXTURE_RGBA16:
+    return "rgba16";
+  case OSP_TEXTURE_RGB16:
+    return "rgb16";
+  case OSP_TEXTURE_RA16:
+    return "ra16";
+  case OSP_TEXTURE_R16:
+    return "r16";
   case OSP_TEXTURE_FORMAT_INVALID:
     return "invalid";
   }
@@ -517,6 +556,14 @@ size_t sizeOf(OSPTextureFormat format)
     return sizeof(vec2uc);
   case OSP_TEXTURE_R32F:
     return sizeof(float);
+  case OSP_TEXTURE_RGBA16:
+    return sizeof(vec4us);
+  case OSP_TEXTURE_RGB16:
+    return sizeof(vec3us);
+  case OSP_TEXTURE_RA16:
+    return sizeof(vec2us);
+  case OSP_TEXTURE_R16:
+    return sizeof(uint16);
   case OSP_TEXTURE_FORMAT_INVALID:
     return 0;
   }
@@ -587,7 +634,8 @@ void postStatusMsg(const std::string &msg, uint32_t postAtLogLevel)
     if (logAsError)
       handleError(OSP_UNKNOWN_ERROR, msg + '\n');
     else
-      api::Device::current->msg_fcn((msg + '\n').c_str());
+      api::Device::current->msg_fcn(
+          api::Device::current->statusUserData, (msg + '\n').c_str());
   }
 }
 
@@ -599,7 +647,7 @@ void handleError(OSPError e, const std::string &message)
     device.lastErrorCode = e;
     device.lastErrorMsg = "#ospray: " + message;
 
-    device.error_fcn(e, message.c_str());
+    device.error_fcn(device.errorUserData, e, message.c_str());
   } else {
     // NOTE: No device, but something should still get printed for the user to
     //       debug the calling application.
@@ -636,32 +684,35 @@ OSPTYPEFOR_DEFINITION(const char[]);
 OSPTYPEFOR_DEFINITION(bool);
 OSPTYPEFOR_DEFINITION(char);
 OSPTYPEFOR_DEFINITION(unsigned char);
+OSPTYPEFOR_DEFINITION(short);
+OSPTYPEFOR_DEFINITION(unsigned short);
+OSPTYPEFOR_DEFINITION(int);
+OSPTYPEFOR_DEFINITION(unsigned int);
+OSPTYPEFOR_DEFINITION(long);
+OSPTYPEFOR_DEFINITION(unsigned long);
+OSPTYPEFOR_DEFINITION(long long);
+OSPTYPEFOR_DEFINITION(unsigned long long);
+OSPTYPEFOR_DEFINITION(float);
+OSPTYPEFOR_DEFINITION(double);
+
 OSPTYPEFOR_DEFINITION(vec2uc);
 OSPTYPEFOR_DEFINITION(vec3uc);
 OSPTYPEFOR_DEFINITION(vec4uc);
-OSPTYPEFOR_DEFINITION(short);
-OSPTYPEFOR_DEFINITION(unsigned short);
-OSPTYPEFOR_DEFINITION(int32_t);
 OSPTYPEFOR_DEFINITION(vec2i);
 OSPTYPEFOR_DEFINITION(vec3i);
 OSPTYPEFOR_DEFINITION(vec4i);
-OSPTYPEFOR_DEFINITION(uint32_t);
 OSPTYPEFOR_DEFINITION(vec2ui);
 OSPTYPEFOR_DEFINITION(vec3ui);
 OSPTYPEFOR_DEFINITION(vec4ui);
-OSPTYPEFOR_DEFINITION(int64_t);
 OSPTYPEFOR_DEFINITION(vec2l);
 OSPTYPEFOR_DEFINITION(vec3l);
 OSPTYPEFOR_DEFINITION(vec4l);
-OSPTYPEFOR_DEFINITION(uint64_t);
 OSPTYPEFOR_DEFINITION(vec2ul);
 OSPTYPEFOR_DEFINITION(vec3ul);
 OSPTYPEFOR_DEFINITION(vec4ul);
-OSPTYPEFOR_DEFINITION(float);
 OSPTYPEFOR_DEFINITION(vec2f);
 OSPTYPEFOR_DEFINITION(vec3f);
 OSPTYPEFOR_DEFINITION(vec4f);
-OSPTYPEFOR_DEFINITION(double);
 OSPTYPEFOR_DEFINITION(box1i);
 OSPTYPEFOR_DEFINITION(box2i);
 OSPTYPEFOR_DEFINITION(box3i);
@@ -693,5 +744,32 @@ OSPTYPEFOR_DEFINITION(OSPTransferFunction);
 OSPTYPEFOR_DEFINITION(OSPVolume);
 OSPTYPEFOR_DEFINITION(OSPVolumetricModel);
 OSPTYPEFOR_DEFINITION(OSPWorld);
+
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2UC);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3UC);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4UC);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2UI);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3UI);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4UI);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2L);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3L);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4L);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2UL);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3UL);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4UL);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC2F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC3F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_VEC4F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX1I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX2I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX3I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX4I);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX1F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX2F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX3F);
+OSPDIMENSIONALITYOF_DEFINITION(OSP_BOX4F);
 
 } // namespace ospray

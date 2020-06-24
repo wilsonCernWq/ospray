@@ -1,7 +1,5 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
-
-#undef NDEBUG
 
 // ospray
 #include "Curves.h"
@@ -9,8 +7,7 @@
 #include "common/World.h"
 // ispc-generated files
 #include "Curves_ispc.h"
-// ospcommon
-#include "ospcommon/utility/DataView.h"
+#include "rkcommon/utility/DataView.h"
 // std
 #include <map>
 
@@ -150,7 +147,5 @@ void Curves::createEmbreeGeometry()
     rtcCommitGeometry(embreeGeometry);
   }
 }
-
-OSP_REGISTER_GEOMETRY(Curves, curve);
 
 } // namespace ospray

@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -23,7 +23,10 @@ struct OSPRAY_SDK_INTERFACE Isosurfaces : public Geometry
   // Data members //
 
   Ref<const DataT<float>> isovaluesData;
+  // For backwards compatability, a volumetric model was used to set
+  // the volume and color
   Ref<VolumetricModel> model;
+  Ref<Volume> volume;
   VKLValueSelector valueSelector{nullptr};
 };
 

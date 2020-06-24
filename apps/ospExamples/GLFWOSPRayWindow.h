@@ -8,12 +8,11 @@
 #include "GLFW/glfw3.h"
 // ospray
 #include "ospray/ospray_cpp.h"
-// ospcommon
-#include "ospcommon/containers/TransactionalBuffer.h"
+#include "rkcommon/containers/TransactionalBuffer.h"
 // std
 #include <functional>
 
-using namespace ospcommon::math;
+using namespace rkcommon::math;
 using namespace ospray;
 
 enum class OSPRayRendererType
@@ -49,6 +48,7 @@ class GLFWOSPRayWindow
   void buildUI();
   void commitOutstandingHandles();
   void refreshScene(bool resetCamera = false);
+  void refreshFrameOperations();
 
   static GLFWOSPRayWindow *activeWindow;
 
@@ -56,8 +56,10 @@ class GLFWOSPRayWindow
   vec2f previousMouse{-1.f};
 
   bool denoiserAvailable{false};
+  bool updateFrameOpsNextFrame{false};
   bool denoiserEnabled{false};
   bool showAlbedo{false};
+  bool renderSunSky{false};
   bool cancelFrameOnInteraction{false};
 
   // GLFW window instance
@@ -70,11 +72,14 @@ class GLFWOSPRayWindow
   cpp::Renderer renderer;
   cpp::Camera camera{"perspective"};
   cpp::World world;
+  cpp::Light sunSky{"sunSky"};
   cpp::FrameBuffer framebuffer;
   cpp::Future currentFrame;
   cpp::Texture backplateTex{"texture2d"};
 
   vec3f bgColor{0.f};
+  vec3f sunDirection{-0.25f, -1.0f, 0.0f};
+  float turbidity{3.f};
 
   std::string scene{"boxes"};
 
@@ -83,8 +88,10 @@ class GLFWOSPRayWindow
   OSPRayRendererType rendererType{OSPRayRendererType::SCIVIS};
   std::string rendererTypeStr{"scivis"};
 
+  std::string pixelFilterTypeStr{"gaussian"};
+
   // List of OSPRay handles to commit before the next frame
-  ospcommon::containers::TransactionalBuffer<OSPObject> objectsToCommit;
+  rkcommon::containers::TransactionalBuffer<OSPObject> objectsToCommit;
 
   // OpenGL framebuffer texture
   GLuint framebufferTexture = 0;

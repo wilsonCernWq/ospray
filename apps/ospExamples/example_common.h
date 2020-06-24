@@ -1,4 +1,4 @@
-// Copyright 2018-2019 Intel Corporation
+// Copyright 2018-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -25,17 +25,24 @@ inline void initializeOSPRay(
 
   // set an error callback to catch any OSPRay errors and exit the application
   if (errorsFatal) {
-    ospDeviceSetErrorFunc(device, [](OSPError error, const char *errorDetails) {
-      std::cerr << "OSPRay error: " << errorDetails << std::endl;
-      exit(error);
-    });
+    ospDeviceSetErrorCallback(
+        device,
+        [](void *, OSPError error, const char *errorDetails) {
+          std::cerr << "OSPRay error: " << errorDetails << std::endl;
+          exit(error);
+        },
+        nullptr);
   } else {
-    ospDeviceSetErrorFunc(device, [](OSPError, const char *errorDetails) {
-      std::cerr << "OSPRay error: " << errorDetails << std::endl;
-    });
+    ospDeviceSetErrorCallback(
+        device,
+        [](void *, OSPError, const char *errorDetails) {
+          std::cerr << "OSPRay error: " << errorDetails << std::endl;
+        },
+        nullptr);
   }
 
-  ospDeviceSetStatusFunc(device, [](const char *msg) { std::cout << msg; });
+  ospDeviceSetStatusCallback(
+      device, [](void *, const char *msg) { std::cout << msg; }, nullptr);
 
   bool warnAsErrors = true;
   auto logLevel = OSP_LOG_WARNING;
@@ -44,4 +51,5 @@ inline void initializeOSPRay(
   ospDeviceSetParam(device, "logLevel", OSP_INT, &logLevel);
 
   ospDeviceCommit(device);
+  ospDeviceRelease(device);
 }

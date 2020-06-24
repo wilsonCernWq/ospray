@@ -1,14 +1,14 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
-// ospcommon
-#include "ospcommon/memory/IntrusivePtr.h"
-#include "ospcommon/utility/Optional.h"
-#include "ospcommon/utility/ParameterizedObject.h"
+#include "rkcommon/memory/IntrusivePtr.h"
+#include "rkcommon/utility/Optional.h"
+#include "rkcommon/utility/ParameterizedObject.h"
 // ospray
 #include "../common/OSPCommon.h"
+#include "../common/Util.h"
 #include "ospray/version.h"
 // std
 #include <functional>
@@ -30,6 +30,8 @@ struct OSPRAY_CORE_INTERFACE Device : public memory::RefCountedObject,
   virtual ~Device() override = default;
 
   static Device *createDevice(const char *type);
+  template <typename T>
+  static void registerType(const char *type);
 
   /*! gets a device property */
   virtual int64_t getProperty(const OSPDeviceProperty prop);
@@ -128,6 +130,7 @@ struct OSPRAY_CORE_INTERFACE Device : public memory::RefCountedObject,
   virtual void wait(OSPFuture, OSPSyncEvent) = 0;
   virtual void cancel(OSPFuture) = 0;
   virtual float getProgress(OSPFuture) = 0;
+  virtual float getTaskDuration(OSPFuture) = 0;
 
   virtual OSPPickResult pick(
       OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld, const vec2f &)
@@ -163,10 +166,13 @@ struct OSPRAY_CORE_INTERFACE Device : public memory::RefCountedObject,
 
   bool warningsAreErrors{false};
 
-  std::function<void(const char *)> msg_fcn{[](const char *) {}};
+  std::function<void(void *, const char *)> msg_fcn{
+      [](void *, const char *) {}};
+  void *statusUserData{nullptr};
 
-  std::function<void(OSPError, const char *)> error_fcn{
-      [](OSPError, const char *) {}};
+  std::function<void(void *, OSPError, const char *)> error_fcn{
+      [](void *, OSPError, const char *) {}};
+  void *errorUserData{nullptr};
 
   std::function<void(const char *)> trace_fcn{[](const char *) {}};
 
@@ -174,6 +180,10 @@ struct OSPRAY_CORE_INTERFACE Device : public memory::RefCountedObject,
   std::string lastErrorMsg = "no error"; // no braced initializer for MSVC12
 
  private:
+  template <typename BASE_CLASS, typename CHILD_CLASS>
+  friend void ospray::registerTypeHelper(const char *type);
+  static void registerType(const char *type, FactoryFcn<Device> f);
+
   bool committed{false};
 };
 
@@ -185,18 +195,13 @@ OSPRAY_CORE_INTERFACE Device &currentDevice();
 OSPRAY_CORE_INTERFACE
 std::string generateEmbreeDeviceCfg(const Device &device);
 
-/*! \brief registers a internal ospray::<ClassName> renderer under
-    the externally accessible name "external_name"
+// Inlined defintions /////////////////////////////////////////////////////////
 
-    \internal This currently works by defining a extern "C" function
-    with a given predefined name that creates a new instance of this
-    renderer. By having this symbol in the shared lib ospray can
-    lateron always get a handle to this fct and create an instance
-    of this renderer.
-*/
-#define OSP_REGISTER_DEVICE(InternalClass, external_name)                      \
-  OSP_REGISTER_OBJECT(                                                         \
-      ::ospray::api::Device, device, InternalClass, external_name)
+template <typename T>
+inline void Device::registerType(const char *type)
+{
+  registerTypeHelper<Device, T>(type);
+}
 
 } // namespace api
 

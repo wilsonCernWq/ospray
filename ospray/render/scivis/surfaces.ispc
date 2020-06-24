@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // ispc device
@@ -17,15 +17,16 @@ inline vec4f getSurfaceColor(const DifferentialGeometry &dg)
   if (mat) {
     foreach_unique (m in mat) {
       surfaceColor = m->Kd;
-      if (m->map_Kd) {
-        vec4f Kd_from_map = get4f(m->map_Kd, dg);
+      if (valid(m->KdMap)) {
+        vec4f Kd_from_map = get4f(m->KdMap, dg);
         surfaceColor = surfaceColor * make_vec3f(Kd_from_map);
+        opacity *= Kd_from_map.w;
       }
-      opacity = m->d;
+      opacity *= m->d * get1f(m->dMap, dg, 1.f);
     }
   }
 
-  return make_vec4f(surfaceColor * make_vec3f(dg.color), opacity);
+  return make_vec4f(surfaceColor * make_vec3f(dg.color), opacity * dg.color.w);
 }
 
 inline float computeAO(const uniform SciVis *uniform self,

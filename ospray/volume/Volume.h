@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -6,7 +6,6 @@
 #include "api/ISPCDevice.h"
 #include "common/Managed.h"
 // embree
-#include "Volume_ispc.h"
 #include "embree3/rtcore.h"
 
 #include "openvkl/volume.h"
@@ -36,6 +35,7 @@ struct OSPRAY_SDK_INTERFACE Volume : public ManagedObject
 
   RTCGeometry embreeGeometry{nullptr};
   VKLVolume vklVolume{nullptr};
+  VKLSampler vklSampler{nullptr};
 
   box3f bounds{empty};
 

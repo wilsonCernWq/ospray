@@ -1,40 +1,12 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include "../ImageOp.h"
+#include "ToneMapper.h"
 #include "ToneMapper_ispc.h"
 
-using namespace ospcommon;
+using namespace rkcommon;
 
 namespace ospray {
-
-/*! \brief Generic tone mapping operator approximating ACES by default. */
-struct OSPRAY_SDK_INTERFACE ToneMapper : public TileOp
-{
-  void commit() override;
-
-  std::unique_ptr<LiveImageOp> attach(FrameBufferView &fbView) override;
-
-  std::string toString() const override;
-
-  // Params for the tone mapping curve
-  float a, b, c, d;
-  bool acesColor;
-  float exposure;
-};
-
-struct OSPRAY_SDK_INTERFACE LiveToneMapper : public LiveTileOp
-{
-  LiveToneMapper(FrameBufferView &fbView, void *ispcEquiv);
-
-  ~LiveToneMapper() override;
-
-  void process(Tile &t) override;
-
-  void *ispcEquiv;
-};
-
-// Definitions //////////////////////////////////////////////////////////////
 
 void ToneMapper::commit()
 {
@@ -79,7 +51,7 @@ std::unique_ptr<LiveImageOp> ToneMapper::attach(FrameBufferView &fbView)
 {
   void *ispcEquiv = ispc::ToneMapper_create();
   ispc::ToneMapper_set(ispcEquiv, exposure, a, b, c, d, acesColor);
-  return ospcommon::make_unique<LiveToneMapper>(fbView, ispcEquiv);
+  return rkcommon::make_unique<LiveToneMapper>(fbView, ispcEquiv);
 }
 
 std::string ToneMapper::toString() const
@@ -100,7 +72,5 @@ void LiveToneMapper::process(Tile &tile)
 {
   ToneMapper_apply(ispcEquiv, (ispc::Tile &)tile);
 }
-
-OSP_REGISTER_IMAGE_OP(ToneMapper, tonemapper);
 
 } // namespace ospray

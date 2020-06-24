@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "render/pathtracer/GeometryLight.ih"
@@ -38,7 +38,6 @@ inline void postIntersect(const PathContext &pathContext,
     pathVertex.dg.dPdt = make_vec3f(0.f);
     pathVertex.dg.st = make_vec2f(0);
     pathVertex.dg.color = make_vec4f(0.f);
-    pathVertex.dg.primID = RTC_INVALID_GEOMETRY_ID;
     pathVertex.dg.areaPDF = 0.f;
     pathVertex.dg.epsilon = 0.f;
     pathVertex.dg.material = NULL;
@@ -105,7 +104,12 @@ void samplePath(const PathContext &pathContext,
         > ray.t0) // valid hit can hide other geometry
       ray.t = min(pathState.shadowCatcherDist, ray.t);
 
-    traceRay(pathContext.world, ray);
+    // Trace ray in clipping geometries scene, fill array with ray intervals
+    RayIntervals rayIntervals;
+    traceClippingRay(pathContext.world, ray, rayIntervals);
+
+    // Trace ray intervals in geometry
+    traceGeometryRayIntervals(pathContext.world, ray, rayIntervals);
 
     PathVertex pathVertex;
     pathVertex.bsdf = NULL;
@@ -130,6 +134,7 @@ void samplePath(const PathContext &pathContext,
     float freePath = volumeSampleFreePath(pathState,
         pathContext.world,
         ray,
+        rayIntervals,
         pathContext.ldSampler,
         pathContext.randomSampler,
         &pathVertex.volume,
@@ -155,7 +160,7 @@ void samplePath(const PathContext &pathContext,
         && pathVertex.type != VOLUME) {
       pathState.contribution = pathState.contribution
           + evaluateVirtualLights(
-              pathContext, pathState, lastVertex, pathVertex, ray);
+                pathContext, pathState, lastVertex, pathVertex, ray);
     }
 
     if (pathVertex.type == ENVIRONMENT)

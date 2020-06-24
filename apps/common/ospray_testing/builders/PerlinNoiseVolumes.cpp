@@ -1,21 +1,20 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Builder.h"
 #include "ospray_testing.h"
-// ospcommon
-#include "ospcommon/tasking/parallel_for.h"
+#include "rkcommon/tasking/parallel_for.h"
 // stl
 #include <functional>
 
-using namespace ospcommon::math;
+using namespace rkcommon::math;
 
 namespace ospray {
 namespace testing {
 
 struct PerlinNoiseVolumes : public detail::Builder
 {
-  PerlinNoiseVolumes() = default;
+  PerlinNoiseVolumes(bool clip = false);
   ~PerlinNoiseVolumes() override = default;
 
   void commit() override;
@@ -33,6 +32,8 @@ struct PerlinNoiseVolumes : public detail::Builder
 
   float densityScale{10.f};
   float anisotropy{0.f};
+
+  bool withClipping{false};
 };
 
 /* heavily based on Perlin's Java reference implementation of
@@ -372,7 +373,7 @@ PerlinNoise::PerlinNoiseData PerlinNoise::p;
 cpp::Geometry makeBoxGeometry(const box3f &box)
 {
   cpp::Geometry ospGeometry("box");
-  ospGeometry.setParam("box", cpp::Data(1, OSP_BOX3F, &box));
+  ospGeometry.setParam("box", cpp::CopiedData(box));
   ospGeometry.commit();
   return ospGeometry;
 }
@@ -409,15 +410,15 @@ cpp::VolumetricModel createProceduralVolumetricModel(
       voxelRange.extend(v);
   });
 
-  volume.setParam("data", cpp::Data(dims, voxels.data()));
+  volume.setParam("data", cpp::CopiedData(voxels.data(), dims));
   volume.setParam("gridOrigin", vec3f(-1.5f, -1.5f, -1.5f));
   volume.setParam("gridSpacing", vec3f(spacing));
   volume.commit();
 
   cpp::TransferFunction tfn("piecewiseLinear");
   tfn.setParam("valueRange", voxelRange.toVec2());
-  tfn.setParam("color", cpp::Data(colors));
-  tfn.setParam("opacity", cpp::Data(opacities));
+  tfn.setParam("color", cpp::CopiedData(colors));
+  tfn.setParam("opacity", cpp::CopiedData(opacities));
   tfn.commit();
 
   cpp::VolumetricModel volumeModel(volume);
@@ -446,6 +447,8 @@ cpp::GeometricModel createGeometricModel(
 
 // PerlineNoiseVolumes definitions //
 
+PerlinNoiseVolumes::PerlinNoiseVolumes(bool clip) : withClipping(clip) {}
+
 void PerlinNoiseVolumes::commit()
 {
   Builder::commit();
@@ -459,6 +462,8 @@ void PerlinNoiseVolumes::commit()
 
   densityScale = getParam<float>("densityScale", 10.f);
   anisotropy = getParam<float>("anisotropy", 0.f);
+
+  withClipping = getParam<bool>("withClipping", withClipping);
 }
 
 cpp::Group PerlinNoiseVolumes::buildGroup() const
@@ -534,10 +539,10 @@ cpp::Group PerlinNoiseVolumes::buildGroup() const
     geometricModel.commit();
 
   if (!volumetricModels.empty())
-    group.setParam("volume", cpp::Data(volumetricModels));
+    group.setParam("volume", cpp::CopiedData(volumetricModels));
 
   if (!geometricModels.empty())
-    group.setParam("geometry", cpp::Data(geometricModels));
+    group.setParam("geometry", cpp::CopiedData(geometricModels));
 
   group.commit();
 
@@ -546,7 +551,29 @@ cpp::Group PerlinNoiseVolumes::buildGroup() const
 
 cpp::World PerlinNoiseVolumes::buildWorld() const
 {
-  auto world = Builder::buildWorld();
+  // Skip clipping if not enabled
+  std::vector<cpp::Instance> instances;
+  if (withClipping) {
+    // Create clipping sphere
+    cpp::Geometry sphereGeometry("sphere");
+    std::vector<vec3f> position = {vec3f(-.5f, .2f, -.5f)};
+    sphereGeometry.setParam("sphere.position", cpp::CopiedData(position));
+    sphereGeometry.setParam("radius", 1.2f);
+    sphereGeometry.commit();
+
+    cpp::GeometricModel model(sphereGeometry);
+    model.commit();
+
+    cpp::Group group;
+    group.setParam("clippingGeometry", cpp::CopiedData(model));
+    group.commit();
+
+    cpp::Instance inst(group);
+    inst.commit();
+    instances.push_back(inst);
+  }
+
+  auto world = Builder::buildWorld(instances);
 
   std::vector<cpp::Light> lightHandles;
 
@@ -572,12 +599,14 @@ cpp::World PerlinNoiseVolumes::buildWorld() const
   if (lightHandles.empty())
     world.removeParam("light");
   else
-    world.setParam("light", cpp::Data(lightHandles));
+    world.setParam("light", cpp::CopiedData(lightHandles));
 
   return world;
 }
 
 OSP_REGISTER_TESTING_BUILDER(PerlinNoiseVolumes, perlin_noise_volumes);
+OSP_REGISTER_TESTING_BUILDER(
+    PerlinNoiseVolumes(true), clip_perlin_noise_volumes);
 
 } // namespace testing
 } // namespace ospray

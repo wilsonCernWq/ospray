@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Builder.h"
@@ -6,13 +6,12 @@
 // stl
 #include <random>
 #include <vector>
-// ospcommon
-#include "ospcommon/tasking/parallel_for.h"
+#include "rkcommon/tasking/parallel_for.h"
 // raw_to_amr
 #include "rawToAMR.h"
 
-using namespace ospcommon;
-using namespace ospcommon::math;
+using namespace rkcommon;
+using namespace rkcommon::math;
 
 namespace ospray {
 namespace testing {
@@ -21,13 +20,17 @@ using VoxelArray = std::vector<float>;
 
 struct GravitySpheres : public detail::Builder
 {
-  GravitySpheres(
-      bool addVolume = true, bool asAMR = false, bool addIsosurface = false);
+  GravitySpheres(bool addVolume = true,
+      bool asAMR = false,
+      bool addIsosurface = false,
+      bool clip = false,
+      bool multipleIsosurfaces = false);
   ~GravitySpheres() override = default;
 
   void commit() override;
 
   cpp::Group buildGroup() const override;
+  cpp::World buildWorld() const override;
 
  private:
   VoxelArray generateVoxels() const;
@@ -43,12 +46,22 @@ struct GravitySpheres : public detail::Builder
   bool createAsAMR{false};
   bool withIsosurface{false};
   float isovalue{2.5f};
+  bool withClipping{false};
+  bool multipleIsosurfaces{false};
 };
 
 // Inlined definitions ////////////////////////////////////////////////////
 
-GravitySpheres::GravitySpheres(bool addVolume, bool asAMR, bool addIsosurface)
-    : withVolume(addVolume), createAsAMR(asAMR), withIsosurface(addIsosurface)
+GravitySpheres::GravitySpheres(bool addVolume,
+    bool asAMR,
+    bool addIsosurface,
+    bool clip,
+    bool multipleIsosurfaces)
+    : withVolume(addVolume),
+      createAsAMR(asAMR),
+      withIsosurface(addIsosurface),
+      withClipping(clip),
+      multipleIsosurfaces(multipleIsosurfaces)
 {}
 
 void GravitySpheres::commit()
@@ -61,6 +74,7 @@ void GravitySpheres::commit()
   createAsAMR = getParam<bool>("asAMR", createAsAMR);
   withIsosurface = getParam<bool>("withIsosurface", withIsosurface);
   isovalue = getParam<float>("isovalue", 2.5f);
+  withClipping = getParam<bool>("withClipping", withClipping);
 
   addPlane = false;
 }
@@ -80,32 +94,89 @@ cpp::Group GravitySpheres::buildGroup() const
   cpp::Group group;
 
   if (withVolume)
-    group.setParam("volume", cpp::Data(model));
+    group.setParam("volume", cpp::CopiedData(model));
 
   if (withIsosurface) {
     cpp::Geometry isoGeom("isosurface");
-    isoGeom.setParam("isovalue", isovalue);
-    isoGeom.setParam("volume", model);
+    std::vector<float> isovalues = {isovalue};
+    if (multipleIsosurfaces) {
+      isovalues.push_back(isovalue + 1.f);
+    }
+
+    isoGeom.setParam("isovalue", cpp::CopiedData(isovalues));
+    isoGeom.setParam("volume", volume);
     isoGeom.commit();
 
     cpp::GeometricModel isoModel(isoGeom);
 
     if (rendererType == "pathtracer" || rendererType == "scivis") {
       cpp::Material mat(rendererType, "obj");
+      mat.setParam("kd", vec3f(1.f));
+      mat.setParam("d", 0.5f);
       if (rendererType == "pathtracer")
         mat.setParam("ks", vec3f(0.2f));
       mat.commit();
+
+      if (multipleIsosurfaces) {
+        std::vector<vec4f> colors = {
+            vec4f(0.2f, 0.2f, 0.8f, 1.f), vec4f(0.8f, 0.2f, 0.2f, 1.f)};
+        isoModel.setParam("color", cpp::CopiedData(colors));
+      }
       isoModel.setParam("material", mat);
     }
 
     isoModel.commit();
 
-    group.setParam("geometry", cpp::Data(isoModel));
+    group.setParam("geometry", cpp::CopiedData(isoModel));
   }
 
   group.commit();
 
   return group;
+}
+
+cpp::World GravitySpheres::buildWorld() const
+{
+  // Skip clipping if not enabled
+  std::vector<cpp::Instance> instances;
+  if (withClipping) {
+    // Create clipping plane
+    std::vector<cpp::GeometricModel> geometricModels;
+    {
+      cpp::Geometry planeGeometry("plane");
+      std::vector<vec4f> coefficients = {vec4f(1.f, -1.f, 1.f, 0.f)};
+      planeGeometry.setParam(
+          "plane.coefficients", cpp::CopiedData(coefficients));
+      planeGeometry.commit();
+
+      cpp::GeometricModel model(planeGeometry);
+      model.commit();
+      geometricModels.emplace_back(model);
+    }
+
+    // Create clipping sphere
+    {
+      cpp::Geometry sphereGeometry("sphere");
+      std::vector<vec3f> position = {vec3f(.2f, -.2f, .2f)};
+      sphereGeometry.setParam("sphere.position", cpp::CopiedData(position));
+      sphereGeometry.setParam("radius", .5f);
+      sphereGeometry.commit();
+
+      cpp::GeometricModel model(sphereGeometry);
+      model.commit();
+      geometricModels.emplace_back(model);
+    }
+
+    cpp::Group group;
+    group.setParam("clippingGeometry", cpp::CopiedData(geometricModels));
+    group.commit();
+
+    cpp::Instance inst(group);
+    inst.commit();
+    instances.push_back(inst);
+  }
+
+  return Builder::buildWorld(instances);
 }
 
 std::vector<float> GravitySpheres::generateVoxels() const
@@ -178,7 +249,7 @@ cpp::Volume GravitySpheres::createStructuredVolume(
 
   volume.setParam("gridOrigin", vec3f(-1.f, -1.f, -1.f));
   volume.setParam("gridSpacing", vec3f(2.f / reduce_max(volumeDimensions)));
-  volume.setParam("data", cpp::Data(volumeDimensions, voxels.data()));
+  volume.setParam("data", cpp::CopiedData(voxels.data(), volumeDimensions));
   volume.commit();
   return volume;
 }
@@ -194,7 +265,7 @@ cpp::Volume GravitySpheres::createAMRVolume(const VoxelArray &voxels) const
   std::vector<int> refinementLevels;
   std::vector<float> cellWidths;
   std::vector<std::vector<float>> blockDataVectors;
-  std::vector<cpp::Data> blockData;
+  std::vector<cpp::CopiedData> blockData;
 
   // convert the structured volume to AMR
   ospray::amr::makeAMR(voxels,
@@ -209,15 +280,15 @@ cpp::Volume GravitySpheres::createAMRVolume(const VoxelArray &voxels) const
       blockDataVectors);
 
   for (const std::vector<float> &bd : blockDataVectors)
-    blockData.emplace_back(bd.size(), OSP_FLOAT, bd.data());
+    blockData.emplace_back(bd.data(), OSP_FLOAT, bd.size());
 
   // create an AMR volume and assign attributes
   cpp::Volume volume("amr");
 
-  volume.setParam("block.data", cpp::Data(blockData));
-  volume.setParam("block.bounds", cpp::Data(blockBounds));
-  volume.setParam("block.level", cpp::Data(refinementLevels));
-  volume.setParam("block.cellWidth", cpp::Data(cellWidths));
+  volume.setParam("block.data", cpp::CopiedData(blockData));
+  volume.setParam("block.bounds", cpp::CopiedData(blockBounds));
+  volume.setParam("block.level", cpp::CopiedData(refinementLevels));
+  volume.setParam("block.cellWidth", cpp::CopiedData(cellWidths));
 
   volume.commit();
 
@@ -229,8 +300,11 @@ OSP_REGISTER_TESTING_BUILDER(GravitySpheres, gravity_spheres_volume);
 OSP_REGISTER_TESTING_BUILDER(
     GravitySpheres(true, true, false), gravity_spheres_amr);
 
+OSP_REGISTER_TESTING_BUILDER(GravitySpheres(false, false, true, false, true),
+    gravity_spheres_isosurface);
+
 OSP_REGISTER_TESTING_BUILDER(
-    GravitySpheres(false, false, true), gravity_spheres_isosurface);
+    GravitySpheres(true, false, false, true), clip_gravity_spheres_volume);
 
 } // namespace testing
 } // namespace ospray

@@ -1,9 +1,8 @@
-// Copyright 2018-2019 Intel Corporation
+// Copyright 2018-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "BaseFixture.h"
-// ospcommon
-#include "ospcommon/utility/SaveImage.h"
+#include "rkcommon/utility/SaveImage.h"
 
 std::string BaseFixture::dumpFinalImageDir;
 
@@ -13,8 +12,10 @@ BaseFixture::BaseFixture(std::string r, std::string s)
 
 void BaseFixture::SetUp(::benchmark::State &)
 {
-  framebuffer = cpp::FrameBuffer(
-      imgSize, OSP_FB_SRGBA, OSP_FB_COLOR | OSP_FB_ACCUM | OSP_FB_DEPTH);
+  framebuffer = cpp::FrameBuffer(imgSize.x,
+      imgSize.y,
+      OSP_FB_SRGBA,
+      OSP_FB_COLOR | OSP_FB_ACCUM | OSP_FB_DEPTH);
   framebuffer.resetAccumulation();
 
   auto builder = testing::newBuilder(scene);
@@ -27,7 +28,7 @@ void BaseFixture::SetUp(::benchmark::State &)
 
   world.commit();
 
-  auto worldBounds = world.getBounds();
+  auto worldBounds = world.getBounds<box3f>();
 
   ArcballCamera arcballCamera(worldBounds, imgSize);
 

@@ -1,11 +1,10 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // ospray
 #include "Data.h"
 #include "ospray/ospray.h"
-// ospcommon
-#include "ospcommon/utility/multidim_index_sequence.h"
+#include "rkcommon/utility/multidim_index_sequence.h"
 
 namespace ospray {
 
@@ -52,7 +51,7 @@ Data::~Data()
     alignedFree(addr);
 }
 
-ispc::Data1D Data::empytData1D;
+ispc::Data1D Data::emptyData1D;
 
 void Data::init()
 {
@@ -65,9 +64,9 @@ void Data::init()
   if (byteStride.x == 0)
     byteStride.x = sizeOf(type);
   if (byteStride.y == 0)
-    byteStride.y = numItems.x * sizeOf(type);
+    byteStride.y = numItems.x * byteStride.x;
   if (byteStride.z == 0)
-    byteStride.z = numItems.x * numItems.y * sizeOf(type);
+    byteStride.z = numItems.y * byteStride.y;
 
   // precompute dominant axis and set at ispc-side proxy
   if (dimensions != 1)

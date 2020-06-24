@@ -13,7 +13,7 @@ variables:
   stage: build
   tags:
     - docker
-  image: ospray/docker-images:arch  # default image
+  image: $DOCKER_REGISTRY/ospray/docker-images:arch  # default image
   script:
     - scripts/build_gitlab/linux.sh
 
@@ -22,7 +22,7 @@ variables:
   tags:
     - docker
     - modules
-  image: ospray/docker-images:centos7-mod
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7-mod
   script:
     - scripts/build_gitlab/linux.sh
 
@@ -30,6 +30,12 @@ variables:
   stage: build
   tags:
     - build
+
+.job_template: &build_artifacts
+  artifacts:
+    paths:
+      - build/install/ospray
+    expire_in: 3 day
 
 .job_template: &release_job
   stage: deploy
@@ -56,12 +62,13 @@ variables:
 .job_template: &test_job_unix
   <<: *test_job
   script:
-    - scripts/tests/run_tests.sh
+    - LD_LIBRARY_PATH="$CI_PROJECT_DIR/build/install/ospray/lib:$LD_LIBRARY_PATH" PATH="$CI_PROJECT_DIR/build/install/ospray/bin:$PATH" scripts/tests/run_tests.sh "$CI_PROJECT_DIR"
 
 .job_template: &test_job_windows
   <<: *test_job
   script:
-    - scripts\tests\run_tests.ps1
+    - $env:Path += ";$CI_PROJECT_DIR\build\install\ospray\bin"
+    - scripts\tests\run_tests.ps1 "$CI_PROJECT_DIR"
 
 
 ### BUILD JOBS ###
@@ -81,34 +88,50 @@ build-arch-clang:
 build-arch-gcc-extras:
   <<: *build_job_docker
   script:
-    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON -DINSTALL_IN_SEPARATE_DIRECTORIES=ON -DBUILD_OIDN=ON
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON -DBUILD_OIDN=ON
 
 build-arch-clang-extras:
   <<: *build_job_docker
   script:
     - export CC=clang
     - export CXX=clang++
-    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON -DINSTALL_IN_SEPARATE_DIRECTORIES=ON -DBUILD_OIDN=ON
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON -DBUILD_OIDN=ON
+
+build-arch-clang-devel:
+  <<: *build_job_docker
+  script:
+    - export CC=clang
+    - export CXX=clang++
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF -DBUILD_OSPRAY_CI_EXTRAS=ON -DBUILD_EMBREE_FROM_SOURCE=ON -DBUILD_EMBREE_VERSION=devel -DBUILD_OIDN=ON -DBUILD_OIDN_FROM_SOURCE=ON -DBUILD_OIDN_VERSION=devel -DBUILD_OPENVKL_VERSION=devel -DBUILD_RKCOMMON_VERSION=devel 
+  only: [schedules]
 
 build-ubuntu1604-gcc:
   <<: *build_job_docker
-  image: ospray/docker-images:ubuntu16.04
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu16.04
   script:
     - scripts/build_gitlab/linux.sh -G Ninja
-  artifacts:
-    paths:
-      - build/install
-    expire_in: 3 day
+  <<: *build_artifacts
 
 build-ubuntu1804-gcc:
   <<: *build_job_docker
-  image: ospray/docker-images:ubuntu18.04
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu18.04
   script:
     - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF
-  artifacts:
-    paths:
-      - build/install
-    expire_in: 3 day
+  <<: *build_artifacts
+
+build-ubuntu2004-gcc:
+  <<: *build_job_docker
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu20.04
+  script:
+    - scripts/build_gitlab/linux.sh -G Ninja -DBUILD_GLFW=OFF
+  <<: *build_artifacts
+
+build-centos8:
+  <<: *build_job_docker
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos8
+  script:
+    - scripts/build_gitlab/linux.sh -G Ninja
+  <<: *build_artifacts
 
 build-centos7-icc:
   <<: *build_job_docker_modules
@@ -130,11 +153,24 @@ build-centos7-icc15:
 
 build-centos7-gcc:
   <<: *build_job_docker
-  image: ospray/docker-images:centos7
-  artifacts:
-    paths:
-      - build/install
-    expire_in: 3 day
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7
+  <<: *build_artifacts
+
+build-centos7-mpi:
+  <<: *build_job_docker_modules
+  script:
+    - module load cmake
+    - module load intel
+    - scripts/build_gitlab/linux.sh -DBUILD_OSPRAY_MODULE_MPI=ON
+  allow_failure: true
+
+build-centos7-mpi-devel:
+  <<: *build_job_docker_modules
+  script:
+    - module load cmake
+    - module load intel
+    - scripts/build_gitlab/linux.sh -DBUILD_OSPRAY_MODULE_MPI=ON -DBUILD_OSPRAY_MODULE_MPI_VERSION=devel
+  allow_failure: true
 
 build-debug:
   <<: *build_job_docker
@@ -156,22 +192,16 @@ build-windows-msvc14:
   tags:
     - msvc14
     - win
-  artifacts:
-    paths:
-      - build/install
-    expire_in: 3 day
+  <<: *build_artifacts
 
-#build-windows-msvc15:
-#  <<: *build_job_shell
-#  script:
-#    - scripts\build_gitlab\win.ps1 "Visual Studio 15 2017 Win64" "v141"
-#  tags:
-#    - msvc15
-#    - win
-#  artifacts:
-#    paths:
-#      - build/install
-#    expire_in: 3 day
+build-windows-msvc15:
+  <<: *build_job_shell
+  script:
+    - scripts\build_gitlab\win.ps1 "Visual Studio 15 2017 Win64" "v141"
+  tags:
+    - msvc15
+    - win
+  <<: *build_artifacts
 
 #build-windows-icc:
 #  <<: *build_job_shell
@@ -180,28 +210,24 @@ build-windows-msvc14:
 #  tags:
 #    - icc17
 #    - win
-#  artifacts:
-#    paths:
-#      - build/install
-#    expire_in: 3 day
+#  <<: *build_artifacts
 
 build-scan-kw:
   stage: build
-  image: ospray-kw-centos7
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   script:
     - scripts/build_gitlab/build-scan-kw.sh
     - test -s $CI_PROJECT_DIR/kw_build_number
   tags:
-    - kw-scan-docker
+    - docker
   artifacts:
     paths:
         - $CI_PROJECT_DIR/kw_build_number
     expire_in: 3 day
-  allow_failure: true
 
 source-protex-scan:
   stage: build
-  image: amd64/openjdk:8 
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   script:
     - scripts/build_gitlab/source-scan-protex.sh
   dependencies: []
@@ -213,36 +239,59 @@ source-protex-scan:
 
 test-centos7-gcc:
   <<: *test_job_unix
-  image: ospray/docker-images:centos7
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   dependencies:
     - build-centos7-gcc
 
-test-ubuntu1804-gcc:
+test-centos8:
   <<: *test_job_unix
-  image: ospray/docker-images:ubuntu18.04
-  script:
-    - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib64/ scripts/tests/run_tests.sh
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos8
   dependencies:
-    - build-ubuntu1804-gcc
+    - build-centos8
 
 test-ubuntu1604-gcc:
   <<: *test_job_unix
-  image: ospray/docker-images:ubuntu16.04
-  script:
-    - LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib64/ scripts/tests/run_tests.sh
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu16.04
   dependencies:
     - build-ubuntu1604-gcc
+
+test-ubuntu1804-gcc:
+  <<: *test_job_unix
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu18.04
+  dependencies:
+    - build-ubuntu1804-gcc
+
+test-ubuntu2004-gcc:
+  <<: *test_job_unix
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu20.04
+  dependencies:
+    - build-ubuntu2004-gcc
 
 test-tutorials:
   stage: test-build
   tags:
     - docker
-  image: ospray/docker-images:centos7
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   script:
     - scripts/tests/run_tutorials.sh
   dependencies:
     - build-centos7-gcc
   allow_failure: true
+
+test-find-ospray:
+  stage: test-build
+  tags:
+    - docker
+    - modules
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7-mod
+  script:
+    - module load cmake
+    - mkdir buildtut
+    - cd buildtut
+    - cmake -D ospray_DIR=`echo $CI_PROJECT_DIR/build/install/ospray/lib/cmake/ospray-*` ../apps/ospTutorial/ospTutorialFindospray 
+    - cmake --build .
+  dependencies:
+    - build-centos7-gcc
 
 #test-windows-icc:
 #  <<: *test_job_windows
@@ -252,13 +301,13 @@ test-tutorials:
 #  dependencies:
 #    - build-windows-icc
 
-#test-windows-msvc15:
-#  <<: *test_job_windows
-#  tags:
-#    - win
-#    - msvc14
-#  dependencies:
-#    - build-windows-msvc15
+test-windows-msvc15:
+  <<: *test_job_windows
+  tags:
+    - win
+    - msvc15
+  dependencies:
+    - build-windows-msvc15
 
 test-windows-msvc14:
   <<: *test_job_windows
@@ -270,25 +319,25 @@ test-windows-msvc14:
 
 test-kw-critical:
   stage: test-src
-  image: ospray-kw-centos7
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   script:
-    - /tmp/test-kw-critical.sh
-  dependencies:
+    - scripts/build_gitlab/test-kw-critical.sh
+  needs:
     - build-scan-kw
   tags:
-    - kw-scan-docker
+    - docker
   allow_failure: true
 
 generate-ci-baseline:
   <<: *test_job_unix
-  image: ospray/docker-images:ubuntu18.04
+  image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu18.04
   script:
-    - scripts/tests/generate_baseline.sh
+    - LD_LIBRARY_PATH="$CI_PROJECT_DIR/build/install/ospray/lib:$LD_LIBRARY_PATH" PATH="$CI_PROJECT_DIR/build/install/ospray/bin:$PATH" scripts/tests/generate_baseline.sh
   dependencies:
     - build-ubuntu1804-gcc
   artifacts:
     paths:
-      - img
+      - generated_test_images
     expire_in: 3 day
   when: manual
 
@@ -299,7 +348,7 @@ generate-ci-baseline:
   stage: build
   tags:
     - docker
-  image: ospray/docker-images:docu
+  image: $DOCKER_REGISTRY/ospray/docker-images:docu
   variables:
     GIT_SUBMODULE_STRATEGY: normal
 
@@ -326,19 +375,12 @@ web:
 
 ### RELEASE JOBS ###
 
-release-linux-icc:
+release-linux:
   <<: *release_job
-  image: ospray/docker-images:centos7-mod
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7-mod
   script:
     - module load cmake
-    - module load intel
-    - export CC=icc
-    - export CXX=icpc
     - scripts/release/linux.sh
-    - cd build_release
-    - OSPRAY_VERSION=`sed -n 's/#define OSPRAY_VERSION "\(.*\)"/\1/p' ospray/version.h`
-    - $SIGN_FILE_LINUX ospray-*-${OSPRAY_VERSION}-*.rpm
-    - tar czf ospray-${OSPRAY_VERSION}.x86_64.rpm.tar.gz ospray-*-${OSPRAY_VERSION}-*.rpm
   tags:
     - modules
   artifacts:

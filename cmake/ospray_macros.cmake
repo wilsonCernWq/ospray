@@ -1,4 +1,4 @@
-## Copyright 2009-2019 Intel Corporation
+## Copyright 2009-2020 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 include(CMakeFindDependencyMacro)
@@ -139,17 +139,6 @@ macro(ospray_configure_ispc_isa)
     if(EMBREE_ISA_SUPPORTS_AVX512SKX AND OPENVKL_ISA_AVX512SKX)
       set(OSPRAY_ISPC_TARGET_LIST ${OSPRAY_ISPC_TARGET_LIST} avx512skx-i32x16)
       message(STATUS "OSPRay AVX512SKX ISA target enabled.")
-    endif()
-
-    # NOTE(jda) - These checks are due to temporary Open VKL limitations with
-    #             iterators, they ought to be removed when these limitations are
-    #             lifted in a future version.
-    if(NOT EMBREE_ISA_SUPPORTS_AVX512SKX AND OPENVKL_ISA_AVX512SKX)
-      message(FATAL_ERROR "Currently Open VKL cannot have AVX512SKX compiled in without Embree AVX512SKX support")
-    endif()
-
-    if(NOT EMBREE_ISA_SUPPORTS_AVX512KNL AND OPENVKL_ISA_AVX512KNL)
-      message(FATAL_ERROR "Currently Open VKL cannot have AVX512KNL compiled in without Embree AVX512KNL support")
     endif()
 
   elseif (OSPRAY_BUILD_ISA STREQUAL "AVX512SKX")
@@ -342,35 +331,32 @@ function(ospray_verify_embree_features)
   ospray_check_embree_feature(BACKFACE_CULLING "backface culling" OFF)
 endfunction()
 
-macro(ospray_create_embree_target)
-  if (NOT TARGET embree)
-    add_library(embree INTERFACE) # NOTE(jda) - Cannot be IMPORTED due to CMake
-                                  #             issues found on Ubuntu.
-
-    target_include_directories(embree
-    INTERFACE
-      $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>
-    )
-
-    target_link_libraries(embree
-    INTERFACE
-      $<BUILD_INTERFACE:${EMBREE_LIBRARY}>
-    )
-  endif()
-endmacro()
-
 macro(ospray_find_embree EMBREE_VERSION_REQUIRED)
   find_dependency(embree ${EMBREE_VERSION_REQUIRED})
-  if(NOT DEFINED EMBREE_INCLUDE_DIRS)
+  if (NOT embree_FOUND)
     message(FATAL_ERROR
             "We did not find Embree installed on your system. OSPRay requires"
             " an Embree installation >= v${EMBREE_VERSION_REQUIRED}, please"
             " download and extract Embree (or compile Embree from source), then"
             " set the 'embree_DIR' variable to the installation (or build)"
             " directory.")
-  else()
-    message(STATUS "Found Embree v${EMBREE_VERSION}: ${EMBREE_LIBRARY}")
   endif()
+  if (TARGET embree)
+    get_target_property(EMBREE_INCLUDE_DIRS embree
+      INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(CONFIGURATIONS embree IMPORTED_CONFIGURATIONS)
+    list(GET CONFIGURATIONS 0 CONFIGURATION)
+    get_target_property(EMBREE_LIBRARY embree
+        IMPORTED_LOCATION_${CONFIGURATION})
+  else()
+    add_library(embree INTERFACE) # NOTE(jda) - Cannot be IMPORTED due to CMake
+                                  #             issues found on Ubuntu.
+    target_include_directories(embree
+        INTERFACE $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>)
+    target_link_libraries(embree
+       INTERFACE $<BUILD_INTERFACE:${EMBREE_LIBRARY}>)
+  endif()
+  message(STATUS "Found Embree v${embree_VERSION}: ${EMBREE_LIBRARY}")
 endmacro()
 
 macro(ospray_determine_embree_isa_support)
@@ -438,11 +424,12 @@ macro(ospray_find_openvkl OPENVKL_VERSION_REQUIRED)
             " an Open VKL installation >= v${OPENVKL_VERSION_REQUIRED}, please"
             " download and extract Open VKL (or compile from source), then"
             " set the 'openvkl_DIR' variable to the installation directory.")
-  else()
-    get_target_property(OPENVKL_INCLUDE_DIRS openvkl::openvkl
-        INTERFACE_INCLUDE_DIRECTORIES)
-    get_target_property(OPENVKL_LIBRARY openvkl::openvkl
-        IMPORTED_LOCATION_RELEASE)
-    message(STATUS "Found Open VKL: ${OPENVKL_LIBRARY}")
   endif()
+  get_target_property(OPENVKL_INCLUDE_DIRS openvkl::openvkl
+      INTERFACE_INCLUDE_DIRECTORIES)
+  get_target_property(CONFIGURATIONS openvkl::openvkl IMPORTED_CONFIGURATIONS)
+  list(GET CONFIGURATIONS 0 CONFIGURATION)
+  get_target_property(OPENVKL_LIBRARY openvkl::openvkl
+      IMPORTED_LOCATION_${CONFIGURATION})
+  message(STATUS "Found Open VKL v${openvkl_VERSION}: ${OPENVKL_LIBRARY}")
 endmacro()

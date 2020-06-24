@@ -1,4 +1,4 @@
-## Copyright 2009-2019 Intel Corporation
+## Copyright 2009-2020 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 ospray_disable_compiler_warnings()
@@ -7,13 +7,12 @@ add_library(ospray_imgui SHARED
   imgui.cpp
   imgui_draw.cpp
   imgui_demo.cpp
-  imguifilesystem/imguifilesystem.cpp
 )
 
 target_link_libraries(ospray_imgui
 PUBLIC
   ${OPENGL_LIBRARIES}
-  ospcommon::ospcommon
+  rkcommon::rkcommon
 )
 
 ospray_install_library(ospray_imgui apps)
@@ -22,8 +21,6 @@ target_include_directories(
   ospray_imgui
 INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/imguifilesystem>
 PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}
-  ${CMAKE_CURRENT_LIST_DIR}/imguifilesystem
 )

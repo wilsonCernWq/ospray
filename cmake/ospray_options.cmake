@@ -1,4 +1,4 @@
-## Copyright 2009-2019 Intel Corporation
+## Copyright 2009-2020 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 ##############################################################
@@ -10,9 +10,9 @@ include(GNUInstallDirs)
 set(OSPRAY_CMAKECONFIG_DIR
     "${CMAKE_INSTALL_LIBDIR}/cmake/ospray-${OSPRAY_VERSION}")
 
-set(OSPCOMMON_VERSION_REQUIRED 1.1.0)
-set(EMBREE_VERSION_REQUIRED 3.7.0)
-set(OPENVKL_VERSION_REQUIRED 0.8.0)
+set(RKCOMMON_VERSION_REQUIRED 1.4.0)
+set(EMBREE_VERSION_REQUIRED 3.8.0)
+set(OPENVKL_VERSION_REQUIRED 0.10.0)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR})
@@ -25,14 +25,13 @@ ospray_configure_compiler()
 # OSPRay's dependencies
 ###########################################################
 
-# ospcommon
-find_package(ospcommon ${OSPCOMMON_VERSION_REQUIRED} REQUIRED)
+# rkcommon
+find_package(rkcommon ${RKCOMMON_VERSION_REQUIRED} REQUIRED)
 
 # Embree
 ospray_find_embree(${EMBREE_VERSION_REQUIRED})
 ospray_verify_embree_features()
 ospray_determine_embree_isa_support()
-ospray_create_embree_target()
 
 # Open VKL
 ospray_find_openvkl(${OPENVKL_VERSION_REQUIRED})

@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -173,16 +173,27 @@ OSPRAY_INTERFACE void ospDeviceSetParam(
 OSPRAY_INTERFACE void ospDeviceRemoveParam(OSPDevice, const char *id);
 
 // Status message callback function type
-typedef void (*OSPStatusFunc)(const char *messageText);
+typedef void (*OSPStatusCallback)(void *userData, const char *messageText);
 
 // Set callback for given Device to call when a status message occurs
-OSPRAY_INTERFACE void ospDeviceSetStatusFunc(OSPDevice, OSPStatusFunc);
+OSPRAY_INTERFACE void ospDeviceSetStatusCallback(
+    OSPDevice, OSPStatusCallback, void *userData);
 
 // Error message callback function type
-typedef void (*OSPErrorFunc)(OSPError, const char *errorDetails);
+typedef void (*OSPErrorCallback)(
+    void *userData, OSPError, const char *errorDetails);
 
 // Set callback for given Device to call when an error occurs
-OSPRAY_INTERFACE void ospDeviceSetErrorFunc(OSPDevice, OSPErrorFunc);
+OSPRAY_INTERFACE void ospDeviceSetErrorCallback(
+    OSPDevice, OSPErrorCallback, void *userData);
+
+// deprecated callback prototypes and setters
+typedef void (*OSPStatusFunc)(const char *messageText);
+OSPRAY_INTERFACE OSP_DEPRECATED void ospDeviceSetStatusFunc(
+    OSPDevice, OSPStatusFunc);
+typedef void (*OSPErrorFunc)(OSPError, const char *errorDetails);
+OSPRAY_INTERFACE OSP_DEPRECATED void ospDeviceSetErrorFunc(
+    OSPDevice, OSPErrorFunc);
 
 // Get the OSPError code for the last error that has occurred on the device
 OSPRAY_INTERFACE OSPError ospDeviceGetLastErrorCode(OSPDevice);
@@ -279,8 +290,7 @@ OSPRAY_INTERFACE void ospRetain(OSPObject);
 
 // FrameBuffer Manipulation /////////////////////////////////////////////////
 
-OSPRAY_INTERFACE OSPFrameBuffer ospNewFrameBuffer(int size_x,
-    int size_y,
+OSPRAY_INTERFACE OSPFrameBuffer ospNewFrameBuffer(int size_x, int size_y,
     OSPFrameBufferFormat format OSP_DEFAULT_VAL(OSP_FB_SRGBA),
     uint32_t frameBufferChannels OSP_DEFAULT_VAL(OSP_FB_COLOR));
 
@@ -320,6 +330,9 @@ OSPRAY_INTERFACE void ospCancel(OSPFuture);
 
 // Get the completion state of the given task [0.f-1.f]
 OSPRAY_INTERFACE float ospGetProgress(OSPFuture);
+
+// Get the execution duration (in seconds) state of the given task
+OSPRAY_INTERFACE float ospGetTaskDuration(OSPFuture);
 
 typedef struct
 {

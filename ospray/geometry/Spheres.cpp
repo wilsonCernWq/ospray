@@ -1,7 +1,5 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
-
-#undef NDEBUG
 
 // ospray
 #include "Spheres.h"
@@ -44,7 +42,5 @@ size_t Spheres::numPrimitives() const
 {
   return vertexData ? vertexData->size() : 0;
 }
-
-OSP_REGISTER_GEOMETRY(Spheres, sphere);
 
 } // namespace ospray

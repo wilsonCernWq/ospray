@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // ospray
@@ -13,9 +13,14 @@
 
 namespace ospray {
 
+static FactoryMap<Renderer> g_renderersMap;
+
+// Renderer definitions ///////////////////////////////////////////////////////
+
 Renderer::Renderer()
 {
   managedObjectType = OSP_RENDERER;
+  pixelFilter = nullptr;
 }
 
 std::string Renderer::toString() const
@@ -49,6 +54,8 @@ void Renderer::commit()
 
   materialData = getParamDataT<Material *>("material");
 
+  setupPixelFilter();
+
   if (materialData)
     ispcMaterialPtrs = createArrayOfIE(*materialData);
   else
@@ -63,13 +70,19 @@ void Renderer::commit()
         backplate ? backplate->getIE() : nullptr,
         ispcMaterialPtrs.size(),
         ispcMaterialPtrs.data(),
-        maxDepthTexture ? maxDepthTexture->getIE() : nullptr);
+        maxDepthTexture ? maxDepthTexture->getIE() : nullptr,
+        pixelFilter ? pixelFilter->getIE() : nullptr);
   }
 }
 
 Renderer *Renderer::createInstance(const char *type)
 {
-  return createInstanceHelper<Renderer, OSP_RENDERER>(type);
+  return createInstanceHelper(type, g_renderersMap[type]);
+}
+
+void Renderer::registerType(const char *type, FactoryFcn<Renderer> f)
+{
+  g_renderersMap[type] = f;
 }
 
 void Renderer::renderTile(FrameBuffer *fb,
@@ -88,9 +101,9 @@ void Renderer::renderTile(FrameBuffer *fb,
       jobID);
 }
 
-float Renderer::renderFrame(FrameBuffer *fb, Camera *camera, World *world)
+void Renderer::renderFrame(FrameBuffer *fb, Camera *camera, World *world)
 {
-  return TiledLoadBalancer::instance->renderFrame(fb, this, camera, world);
+  TiledLoadBalancer::instance->renderFrame(fb, this, camera, world);
 }
 
 OSPPickResult Renderer::pick(
@@ -131,6 +144,42 @@ OSPPickResult Renderer::pick(
   }
 
   return res;
+}
+
+void Renderer::setupPixelFilter()
+{
+  OSPPixelFilterTypes pixelFilterType = (OSPPixelFilterTypes)getParam<int>("pixelFilter", OSPPixelFilterTypes::OSP_PIXELFILTER_GAUSS);
+  pixelFilter = nullptr;
+  switch(pixelFilterType){
+    case OSPPixelFilterTypes::OSP_PIXELFILTER_BOX:
+    {
+      pixelFilter = rkcommon::make_unique<ospray::BoxPixelFilter>();
+      break;
+    }
+    case OSPPixelFilterTypes::OSP_PIXELFILTER_BLACKMAN_HARRIS:
+    {
+      pixelFilter =
+          rkcommon::make_unique<ospray::BlackmanHarrisLUTPixelFilter>();
+      break;
+    }
+    case OSPPixelFilterTypes::OSP_PIXELFILTER_MITCHELL:
+    {
+      pixelFilter =
+          rkcommon::make_unique<ospray::MitchellNetravaliLUTPixelFilter>();
+      break;
+    }
+    case OSPPixelFilterTypes::OSP_PIXELFILTER_POINT:
+    {
+      pixelFilter = rkcommon::make_unique<ospray::PointPixelFilter>();
+      break;
+    }
+    case OSPPixelFilterTypes::OSP_PIXELFILTER_GAUSS:
+    default:
+    {
+      pixelFilter = rkcommon::make_unique<ospray::GaussianLUTPixelFilter>();
+      break;
+    }
+  }
 }
 
 OSPTYPEFOR_DEFINITION(Renderer *);

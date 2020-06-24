@@ -1,7 +1,5 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
-
-#undef NDEBUG
 
 #include "PathTracer.h"
 // ospray
@@ -112,8 +110,11 @@ void *PathTracer::beginFrame(FrameBuffer *, World *world)
   }
 
   if (world->lights) {
-    for (auto &&obj : *world->lights)
+    for (auto &&obj : *world->lights) {
       lightArray.push_back(obj->getIE());
+      if (obj->getSecondIE().has_value())
+        lightArray.push_back(obj->getSecondIE().value());
+    }
   }
 
   void **lightPtr = lightArray.empty() ? nullptr : &lightArray[0];
@@ -122,7 +123,5 @@ void *PathTracer::beginFrame(FrameBuffer *, World *world)
       getIE(), lightPtr, lightArray.size(), geometryLights);
   return nullptr;
 }
-
-OSP_REGISTER_RENDERER(PathTracer, pathtracer);
 
 } // namespace ospray

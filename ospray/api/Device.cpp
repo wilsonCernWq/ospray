@@ -1,37 +1,36 @@
-﻿// Copyright 2009-2019 Intel Corporation
+﻿// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // ospray
 #include "Device.h"
-#include "common/OSPCommon.h"
-#include "objectFactory.h"
-// ospcommon
-#include "ospcommon/os/library.h"
-#include "ospcommon/tasking/tasking_system_init.h"
-#include "ospcommon/utility/getEnvVar.h"
+#include "rkcommon/os/library.h"
+#include "rkcommon/tasking/tasking_system_init.h"
+#include "rkcommon/utility/getEnvVar.h"
 
 #include <map>
 
 namespace ospray {
 namespace api {
 
-// Helper functions ///////////////////////////////////////////////////////
+static FactoryMap<Device> g_devicesMap;
+
+// Helper functions ///////////////////////////////////////////////////////////
 
 template <typename OSTREAM_T>
 static inline void installStatusMsgFunc(Device &device, OSTREAM_T &stream)
 {
-  device.msg_fcn = [&](const char *msg) { stream << msg; };
+  device.msg_fcn = [&](void *, const char *msg) { stream << msg; };
 }
 
 template <typename OSTREAM_T>
 static inline void installErrorMsgFunc(Device &device, OSTREAM_T &stream)
 {
-  device.error_fcn = [&](OSPError e, const char *msg) {
+  device.error_fcn = [&](void *, OSPError e, const char *msg) {
     stream << "OSPRAY ERROR [" << e << "]: " << msg << std::endl;
   };
 }
 
-// Device definitions /////////////////////////////////////////////////////
+// Device definitions /////////////////////////////////////////////////////////
 
 memory::IntrusivePtr<Device> Device::current;
 uint32_t Device::logLevel = OSP_LOG_NONE;
@@ -43,13 +42,18 @@ Device *Device::createDevice(const char *type)
   //             valid library for core ospray in our main symbol lookup
   //             table.
   auto &repo = *LibraryRepository::getInstance();
-  if (!repo.libraryExists("ospray")) {
+  if (!repo.libraryExists("ospray"))
     repo.addDefaultLibrary();
-    // also load the local device, otherwise ospNewDevice("default") fails
-    repo.add("ospray_module_ispc");
-  }
 
-  return objectFactory<Device, OSP_DEVICE>(type);
+  if (!repo.libraryExists("ospray_module_ispc") && type == std::string("cpu"))
+    repo.add("ospray_module_ispc");
+
+  return createInstanceHelper(type, g_devicesMap[type]);
+}
+
+void Device::registerType(const char *type, FactoryFcn<Device> f)
+{
+  g_devicesMap[type] = f;
 }
 
 void Device::commit()
@@ -96,7 +100,7 @@ void Device::commit()
   else if (dst == "cerr")
     installStatusMsgFunc(*this, std::cerr);
   else if (dst == "none")
-    msg_fcn = [](const char *) {};
+    msg_fcn = [](void *, const char *) {};
 
   auto OSPRAY_ERROR_OUTPUT =
       utility::getEnvVar<std::string>("OSPRAY_ERROR_OUTPUT");
@@ -108,7 +112,7 @@ void Device::commit()
   else if (dst == "cerr")
     installErrorMsgFunc(*this, std::cerr);
   else if (dst == "none")
-    error_fcn = [](OSPError, const char *) {};
+    error_fcn = [](void *, OSPError, const char *) {};
 
   if (debugMode) {
     logLevel = OSP_LOG_DEBUG;
@@ -117,13 +121,11 @@ void Device::commit()
     installErrorMsgFunc(*this, std::cerr);
   }
 
-  threadAffinity = AUTO_DETECT;
+  threadAffinity = getParam<int>("setAffinity", AUTO_DETECT);
 
   auto OSPRAY_SET_AFFINITY = utility::getEnvVar<int>("OSPRAY_SET_AFFINITY");
   if (OSPRAY_SET_AFFINITY)
     threadAffinity = OSPRAY_SET_AFFINITY.value();
-
-  threadAffinity = getParam<bool>("setAffinity", threadAffinity);
 
   tasking::initTaskingSystem(numThreads);
 

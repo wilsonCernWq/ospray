@@ -1,4 +1,4 @@
-// Copyright 2017-2019 Intel Corporation
+// Copyright 2017-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -11,20 +11,11 @@
 #include "ospray/ospray_cpp.h"
 using namespace ospray;
 
-#include "ospcommon/math/vec.h"
-using namespace ospcommon::math;
+#include "rkcommon/math/vec.h"
+using namespace rkcommon::math;
 
 class OSPRayEnvironment : public ::testing::Environment
 {
- private:
-  bool dumpImg;
-  std::string rendererType;
-  std::string deviceType;
-  std::string baselineDir;
-  std::string failedDir;
-  vec2i imgSize{1024, 768};
-  OSPDevice device{nullptr};
-
  public:
   OSPRayEnvironment(int argc, char **argv);
   ~OSPRayEnvironment() = default;
@@ -41,10 +32,6 @@ class OSPRayEnvironment : public ::testing::Environment
   {
     return imgSize;
   }
-  std::string GetDeviceType() const
-  {
-    return deviceType;
-  }
   std::string GetBaselineDir() const
   {
     return baselineDir;
@@ -57,4 +44,11 @@ class OSPRayEnvironment : public ::testing::Environment
   void ParsArgs(int argc, char **argv);
   std::string GetStrArgValue(std::string *arg) const;
   int GetNumArgValue(std::string *arg) const;
+
+ private:
+  bool dumpImg;
+  std::string rendererType;
+  std::string baselineDir;
+  std::string failedDir;
+  vec2i imgSize{1024, 768};
 };

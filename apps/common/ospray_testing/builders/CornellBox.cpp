@@ -1,4 +1,4 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Builder.h"
@@ -6,7 +6,7 @@
 // stl
 #include <random>
 
-using namespace ospcommon::math;
+using namespace rkcommon::math;
 
 namespace ospray {
 namespace testing {
@@ -229,9 +229,9 @@ cpp::Group CornellBox::buildGroup() const
 {
   cpp::Geometry quadMesh("mesh");
 
-  quadMesh.setParam("vertex.position", cpp::Data(vertices));
-  quadMesh.setParam("vertex.color", cpp::Data(colors));
-  quadMesh.setParam("index", cpp::Data(indices));
+  quadMesh.setParam("vertex.position", cpp::CopiedData(vertices));
+  quadMesh.setParam("vertex.color", cpp::CopiedData(colors));
+  quadMesh.setParam("index", cpp::CopiedData(indices));
   quadMesh.commit();
 
   cpp::GeometricModel model(quadMesh);
@@ -248,7 +248,7 @@ cpp::Group CornellBox::buildGroup() const
 
   cpp::Group group;
 
-  group.setParam("geometry", cpp::Data(model));
+  group.setParam("geometry", cpp::CopiedData(model));
   group.commit();
 
   return group;
@@ -268,12 +268,56 @@ cpp::World CornellBox::buildWorld() const
 
   light.commit();
 
-  world.setParam("light", cpp::Data(light));
+  world.setParam("light", cpp::CopiedData(light));
+
+  return world;
+}
+
+struct CornellBoxPhotometric : public CornellBox
+{
+  CornellBoxPhotometric() = default;
+  ~CornellBoxPhotometric() override = default;
+
+  cpp::World buildWorld() const override;
+};
+
+cpp::World CornellBoxPhotometric::buildWorld() const
+{
+  auto world = CornellBox::buildWorld();
+
+  cpp::Light light1d("spot");
+  light1d.setParam("intensity", 5.f);
+  light1d.setParam("position", vec3f(-0.6f, 0.8f, -0.5f));
+  light1d.setParam("direction", vec3f(0.0f, -1.0f, 0.0f));
+  light1d.setParam("openingAngle", 360.f);
+  light1d.setParam("penumbraAngle", 0.f);
+  float lid1d[] = {2.5f, 0.4f, 0.2f, 0.1f, 0.03f, 0.01f, 0.01f};
+  light1d.setParam("intensityDistribution", cpp::CopiedData(lid1d, 7));
+  light1d.commit();
+
+  cpp::Light light2d("spot");
+  light2d.setParam("intensity", 1.f);
+  light2d.setParam("position", vec3f(0.3f, 0.6f, 0.f));
+  light2d.setParam("direction", vec3f(0.0f, -1.0f, 0.0f));
+  light2d.setParam("openingAngle", 270.f);
+  light2d.setParam("penumbraAngle", 10.f);
+  float lid2d[60] = {
+      1.5f, 5.0f, 6.0f, 0.3f, 0.01f, 0.15f, 0.5f, 1.6f, 0.1f, 0.01f};
+  light2d.setParam("intensityDistribution", cpp::CopiedData(lid2d, vec2ul(5, 12)));
+  light2d.setParam("c0", vec3f(1.0f, 0.0f, 0.0f));
+  light2d.commit();
+
+  std::vector<cpp::Light> lights;
+  lights.clear();
+  lights.push_back(light1d);
+  lights.push_back(light2d);
+  world.setParam("light", cpp::CopiedData(lights));
 
   return world;
 }
 
 OSP_REGISTER_TESTING_BUILDER(CornellBox, cornell_box);
+OSP_REGISTER_TESTING_BUILDER(CornellBoxPhotometric, cornell_box_photometric);
 
 } // namespace testing
 } // namespace ospray

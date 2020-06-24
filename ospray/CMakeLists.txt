@@ -1,12 +1,15 @@
-## Copyright 2009-2019 Intel Corporation
+## Copyright 2009-2020 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 # -------------------------------------------------------
 # Setup ospray include directories and source files
 # -------------------------------------------------------
 
+set(OSPRAY_RESOURCE ${CMAKE_CURRENT_SOURCE_DIR}/ospray.rc)
+set(OSPRAY_RESOURCE ${OSPRAY_RESOURCE} PARENT_SCOPE)
+
 set(OSPRAY_SOURCES
-  ospray.rc
+  ${OSPRAY_RESOURCE}
 
   api/API.cpp
   api/Device.cpp
@@ -37,6 +40,8 @@ set(OSPRAY_SOURCES
 
 
 set(OSPRAY_ISPC_DEVICE_SOURCES
+  ${OSPRAY_RESOURCE}
+
   ispc_tasksys.cpp
 
   api/ISPCDevice.h
@@ -52,7 +57,6 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   common/Instance.ispc
   common/Managed.cpp
   common/OSPCommon.ispc
-  common/Material.cpp
   common/Util.h
   common/World.ispc
   common/World.cpp
@@ -65,6 +69,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   fb/ImageOp.cpp
   fb/Tile.h
   fb/TileError.cpp
+  fb/registration.cpp
 
   fb/frame_ops/Blur.cpp
   fb/frame_ops/Debug.cpp
@@ -76,6 +81,12 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   fb/tile_ops/ToneMapper.cpp
   fb/tile_ops/ToneMapper.ispc
 
+  pf/PixelFilter.ih
+  pf/PixelFilter.ispc
+  pf/LUTPixelFilter.ih
+  pf/LUTPixelFilter.ispc
+  pf/PixelFilter.cpp
+
   camera/Camera.cpp
   camera/Camera.ispc
   camera/PerspectiveCamera.ispc
@@ -84,6 +95,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   camera/OrthographicCamera.cpp
   camera/PanoramicCamera.ispc
   camera/PanoramicCamera.cpp
+  camera/registration.cpp
 
   geometry/Geometry.ispc
   geometry/Geometry.cpp
@@ -99,8 +111,11 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   geometry/Spheres.ispc
   geometry/Isosurfaces.ispc
   geometry/Isosurfaces.cpp
+  geometry/Planes.ispc
+  geometry/Planes.cpp
   geometry/Mesh.cpp
   geometry/Mesh.ispc
+  geometry/registration.cpp
 
   lights/Light.ispc
   lights/Light.cpp
@@ -116,6 +131,9 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   lights/QuadLight.ispc
   lights/HDRILight.cpp
   lights/HDRILight.ispc
+  lights/SunSkyLight.cpp
+  lights/sky_model/sky_model.cpp
+  lights/registration.cpp
 
   math/box.ispc
   math/Distribution1D.ispc
@@ -127,9 +145,11 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   math/spectrum.ispc
 
   render/LoadBalancer.cpp
+  render/Material.cpp
   render/Renderer.ispc
   render/Renderer.cpp
   render/util.ispc
+  render/registration.cpp
 
   render/debug/DebugRenderer.cpp
   render/debug/DebugRenderer.ispc
@@ -182,6 +202,8 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   texture/Texture2D.ispc
   texture/TextureVolume.cpp
   texture/TextureVolume.ispc
+  texture/TextureParam.ispc
+  texture/registration.cpp
 
   volume/Volume.ispc
   volume/Volume.cpp
@@ -192,6 +214,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   volume/transferFunction/LinearTransferFunction.cpp
   volume/transferFunction/TransferFunction.ispc
   volume/transferFunction/TransferFunction.cpp
+  volume/transferFunction/registration.cpp
 )
 
 # -------------------------------------------------------
@@ -217,7 +240,8 @@ endforeach()
 ##############################################################
 
 add_library(ospray SHARED ${OSPRAY_SOURCES})
-target_link_libraries(ospray PUBLIC $<BUILD_INTERFACE:ospcommon::ospcommon>)
+target_link_libraries(ospray PUBLIC $<BUILD_INTERFACE:rkcommon::rkcommon>)
+target_compile_definitions(ospray PRIVATE OSPRAY_CPP_RKCOMMON_TYPES)
 ospray_install_library(ospray lib)
 
 target_include_directories(ospray
@@ -302,7 +326,6 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
     ${EMBREE_INCLUDE_DIRS}
     ${OPENVKL_INCLUDE_DIRS}
   )
-
   add_library(ospray_module_ispc SHARED)
 
   ispc_target_add_sources(ospray_module_ispc ${OSPRAY_ISPC_DEVICE_SOURCES})
@@ -312,9 +335,9 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
   target_link_libraries(ospray_module_ispc
   PUBLIC
     ospray
-    ospcommon::ospcommon
+    rkcommon::rkcommon
     $<BUILD_INTERFACE:embree>
-    $<BUILD_INTERFACE:openvkl::openvkl_module_ispc_driver>
+    $<BUILD_INTERFACE:openvkl::openvkl>
   )
 
   target_include_directories(ospray_module_ispc
@@ -332,6 +355,7 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
 
   target_compile_definitions(ospray_module_ispc
   PUBLIC
+    OSPRAY_CPP_RKCOMMON_TYPES
     TILE_SIZE=${OSPRAY_TILE_SIZE}
     MAX_TILE_SIZE=${OSPRAY_MAX_STACK_TILE_SIZE}
     RENDERTILE_PIXELS_PER_JOB=${OSPRAY_PIXELS_PER_JOB}
@@ -347,7 +371,7 @@ endif()
 add_library(ospray_sdk INTERFACE)
 target_link_libraries(ospray_sdk
 INTERFACE
-  ospray_module_ispc ospcommon::ospcommon
+  ospray_module_ispc rkcommon::rkcommon
 )
 ospray_install_target(ospray_sdk devel)
 

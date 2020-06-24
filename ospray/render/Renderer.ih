@@ -1,11 +1,13 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
 
+#include "Material.ih"
 #include "camera/Camera.ih"
 #include "fb/FrameBuffer.ih"
 #include "fb/Tile.ih"
+#include "pf/PixelFilter.ih"
 #include "texture/Texture2D.ih"
 
 struct Renderer;
@@ -79,6 +81,8 @@ struct Renderer
 
   int32 numMaterials;
   Material **material;
+
+  PixelFilter *pixelFilter;
 };
 
 vec4f Renderer_getBackground(
