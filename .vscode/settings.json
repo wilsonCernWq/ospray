@@ -1,8 +1,17 @@
 {
-    "cmake.sourceDirectory": "${workspaceFolder}/scripts/superbuild",
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
     "cmake.configureSettings": {
-        "BUILD_EMBREE_FROM_SOURCE": false,
-        "INSTALL_IN_SEPARATE_DIRECTORIES": false
+        "CMAKE_PREFIX_PATH": "${workspaceFolder}/build-deps/install",
+        "OSPRAY_APPS_TUTORIAL_GLM": true,
+        "OSPRAY_BUILD_ISA": "ALL",
+        "OSPRAY_MODULE_BILINEAR_PATCH": false,
+        "OSPRAY_MODULE_DENOISER": false,
+        "OSPRAY_INSTALL_DEPENDENCIES": false,
+        "OSPRAY_STRICT_BUILD": true,
+        "OSPRAY_WARN_AS_ERRORS": false,
+        "ISPC_EXECUTABLE": "${workspaceFolder}/build-deps/install/bin/ispc",
+        "RKCOMMON_TBB_ROOT": "${workspaceFolder}/build-deps/install"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }

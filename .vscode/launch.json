@@ -1,0 +1,22 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(Windows) Launch ospExamples",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/install/bin/ospExamples.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/install/bin",
+            "environment": [{
+                "name": "PATH",
+                "value": "${env:PATH};${workspaceFolder}/build/install/bin"
+            }],
+            "externalConsole": false
+        }
+    ]
+}

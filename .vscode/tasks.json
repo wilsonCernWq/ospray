@@ -1,0 +1,64 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build Dependencies (Make Directory)",
+      "type": "shell",
+      "windows": {
+        "command": "if (-not (Test-Path '${workspaceFolder}\\build-deps')) { mkdir '${workspaceFolder}\\build-deps' }",
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "Build Dependencies (CMake Configure)",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+        "args": [
+          "--no-warn-unused-cli",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build-deps",
+          "-G",
+          "Visual Studio 16 2019",
+          "-T",
+          "host=x64",
+          "-A",
+          "x64"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/build-deps"
+      },
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build Dependencies (Make Directory)"
+      ],
+    },
+    {
+      "label": "Build Dependencies (CMake Build)",
+      "type": "shell",
+      "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build-deps",
+        "--config",
+        "RelWithDebInfo"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/build-deps"
+      },
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build Dependencies (CMake Configure)"
+      ],
+    }
+  ]
+}
