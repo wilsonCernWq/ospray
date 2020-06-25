@@ -34,27 +34,36 @@
           "x64"
         ]
       },
-      "options": {
-        "cwd": "${workspaceFolder}/build-deps"
-      },
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Directory)"
       ],
     },
     {
-      "label": "Build Dependencies (CMake Build)",
+      "label": "Build Dependencies (CMake Build) - Debug",
       "type": "shell",
       "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
       "args": [
         "--build",
         "${workspaceFolder}/build-deps",
         "--config",
-        "RelWithDebInfo"
+        "Debug"
       ],
-      "options": {
-        "cwd": "${workspaceFolder}/build-deps"
-      },
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build Dependencies (CMake Configure)"
+      ],
+    },
+    {
+      "label": "Build Dependencies (CMake Build) - Release",
+      "type": "shell",
+      "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build-deps",
+        "--config",
+        "Release"
+      ],
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (CMake Configure)"

@@ -11,7 +11,8 @@
         "OSPRAY_STRICT_BUILD": true,
         "OSPRAY_WARN_AS_ERRORS": false,
         "ISPC_EXECUTABLE": "${workspaceFolder}/build-deps/install/bin/ispc",
-        "RKCOMMON_TBB_ROOT": "${workspaceFolder}/build-deps/install"
+        "RKCOMMON_TBB_ROOT": "${workspaceFolder}/build-deps/install",
+        "glm_DIR": "${workspaceFolder}/build-deps/install/cmake/glm"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }

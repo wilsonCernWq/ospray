@@ -5,16 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(Windows) Launch ospExamples",
+            "name": "ospExamples (Windows) Debug",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/install/bin/ospExamples.exe",
+            "program": "${workspaceFolder}/build/Debug/ospExamples.exe",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build/install/bin",
+            "cwd": "${workspaceFolder}/build/Debug",
             "environment": [{
                 "name": "PATH",
-                "value": "${env:PATH};${workspaceFolder}/build/install/bin"
+                "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/bin/intel64/vc14;${env:PATH}"
+            }],
+            "externalConsole": false
+        },
+        {
+            "name": "standalone (Windows) Debug",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Debug/standalone.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/Debug",
+            "environment": [{
+                "name": "PATH",
+                "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/bin/intel64/vc14;${env:PATH}"
             }],
             "externalConsole": false
         }
