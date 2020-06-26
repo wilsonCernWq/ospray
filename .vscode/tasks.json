@@ -7,11 +7,13 @@
       "label": "Build Dependencies (Make Directory)",
       "type": "shell",
       "windows": {
-        "command": "if (-not (Test-Path '${workspaceFolder}\\build-deps')) { mkdir '${workspaceFolder}\\build-deps' }",
+        "command": "if (-not (Test-Path '${workspaceFolder}\\build-deps')) { mkdir '${workspaceFolder}\\build-deps' }"
       },
+      "command": "mkdir -p '${workspaceFolder}/build-deps'",
       "options": {
         "cwd": "${workspaceFolder}"
-      }
+      },
+      "problemMatcher": []
     },
     {
       "label": "Build Dependencies (CMake Configure)",
@@ -34,15 +36,29 @@
           "x64"
         ]
       },
+      "command": "cmake",
+      "args": [
+        "--no-warn-unused-cli",
+        "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+        "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+        "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+        "-H${workspaceFolder}/scripts/superbuild",
+        "-B${workspaceFolder}/build-deps"
+      ],
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Directory)"
       ],
+      "problemMatcher": []
     },
     {
       "label": "Build Dependencies (CMake Build) - Debug",
       "type": "shell",
-      "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "command": "cmake",
       "args": [
         "--build",
         "${workspaceFolder}/build-deps",
@@ -53,11 +69,15 @@
       "dependsOn": [
         "Build Dependencies (CMake Configure)"
       ],
+      "problemMatcher": []
     },
     {
       "label": "Build Dependencies (CMake Build) - Release",
       "type": "shell",
-      "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "command": "cmake",
       "args": [
         "--build",
         "${workspaceFolder}/build-deps",
@@ -68,6 +88,7 @@
       "dependsOn": [
         "Build Dependencies (CMake Configure)"
       ],
+      "problemMatcher": []
     }
   ]
 }
