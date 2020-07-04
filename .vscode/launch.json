@@ -1,36 +1,64 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "standalone (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/standalone",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "environment": [
         {
-            "name": "ospExamples (Windows) Debug",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/ospExamples.exe",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build/Debug",
-            "environment": [{
-                "name": "PATH",
-                "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/bin/intel64/vc14;${env:PATH}"
-            }],
-            "externalConsole": false
-        },
-        {
-            "name": "standalone (Windows) Debug",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/Debug/standalone.exe",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build/Debug",
-            "environment": [{
-                "name": "PATH",
-                "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/bin/intel64/vc14;${env:PATH}"
-            }],
-            "externalConsole": false
+          "name": "LD_LIBRARY_PATH",
+          "value": "${workspaceFolder}/build-deps/install/lib:${workspaceFolder}/build-deps/install/lib/intel64/gcc4.8:${workspaceFolder}/build:${env:LD_LIBRARY_PATH}"
         }
-    ]
+      ],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "ospExamples (Windows) Debug",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/ospExamples.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/Debug",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/bin/intel64/vc14;${env:PATH}"
+        }
+      ],
+      "externalConsole": false
+    },
+    {
+      "name": "standalone (Windows) Debug",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/Debug/standalone.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/Debug",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/bin/intel64/vc14;${env:PATH}"
+        }
+      ],
+      "externalConsole": false
+    }
+  ]
 }
