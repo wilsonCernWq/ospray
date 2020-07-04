@@ -195,7 +195,8 @@ OSPRAY_CATCH_END()
 extern "C" OSPDevice ospGetCurrentDevice() OSPRAY_CATCH_BEGIN
 {
   auto *ptr = Device::current.ptr;
-  ptr->refInc();
+  if (ptr)
+    ptr->refInc();
   return (OSPDevice)ptr;
 }
 OSPRAY_CATCH_END(nullptr)
@@ -217,7 +218,7 @@ extern "C" void ospDeviceSetParam(OSPDevice _object,
     object->setParam<int>(id, *(int *)mem);
     break;
   case OSP_BOOL:
-    object->setParam<bool>(id, *(int *)mem);
+    object->setParam<bool>(id, *(bool *)mem);
     break;
   case OSP_VOID_PTR:
     object->setParam<void *>(id, *(void **)&mem);
@@ -328,6 +329,8 @@ extern "C" void ospDeviceRelease(OSPDevice _object) OSPRAY_CATCH_BEGIN
   THROW_IF_NULL_OBJECT(_object);
 
   auto *object = (Device *)_object;
+  if (!object)
+    return;
   object->refDec();
 }
 OSPRAY_CATCH_END()
@@ -337,6 +340,8 @@ extern "C" void ospDeviceRetain(OSPDevice _object) OSPRAY_CATCH_BEGIN
   THROW_IF_NULL_OBJECT(_object);
 
   auto *object = (Device *)_object;
+  if (!object)
+    return;
   object->refInc();
 }
 OSPRAY_CATCH_END()

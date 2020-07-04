@@ -141,6 +141,15 @@ To use the newly committed device, you must call
 This then sets the given device as the object which will respond to all
 other OSPRay API calls.
 
+Device handle lifetimes are managed with two calls, the first which
+increments the internal reference count to the given `OSPDevice`
+
+    void ospDeviceRetain(OSPDevice)
+
+and the second which decrements the reference count
+
+    void ospDeviceRelease(OSPDevice)
+
 Users can change parameters on the device after initialization (from
 either method above), by calling
 
@@ -152,7 +161,17 @@ the device. If changes are made to the device that is already set as the
 current device, it does not need to be set as current again. Note this
 API call will increment the ref count of the returned device handle, so
 applications must use `ospDeviceRelease` when finished using the handle
-to avoid leaking the underlying device object.
+to avoid leaking the underlying device object. If there is no current
+device set, this will return an invalid NULL handle.
+
+When a device is created, its reference count is initially `1`. When
+a device is set as the current device, it internally has its reference
+count incremented. Note that `ospDeviceRetain` and `ospDeviceRelease`
+should only be used with reference counts that the application tracks:
+removing reference held by the current set device should be handled
+by `ospShutdown`. Thus `ospDeviceRelease` should only decrement the
+reference counts that come from `ospNewDevice`, `ospGetCurrentDevice`,
+and the number of explicit calls to `ospDeviceRetain`.
 
 OSPRay allows applications to query runtime properties of a device in
 order to do enhanced validation of what device was loaded at runtime.
@@ -1115,7 +1134,7 @@ type string "`plane`".
 
 OSPRay can directly render multiple isosurfaces of a volume without
 first tessellating them. To do so create an isosurfaces geometry by
-calling `ospNewGeometry` with type string "`isosurface`". 
+calling `ospNewGeometry` with type string "`isosurface`".
 The appearance information of the surfaces is set through
 the Geometric Model. Per-isosurface colors can be set by passing
 per-primitive colors to the Geometric Model, in order of the isosurface
@@ -1265,6 +1284,10 @@ the spotlight supports the special parameters listed in the table.
                                                radius of a disk with normal
                                                `direction`
 
+  float      innerRadius                     0 in combination with
+                                               `radius` turns the disk
+                                               into a ring
+
   float[]    intensityDistribution             luminous intensity distribution
                                                for photometric lights; can be 2D
                                                for asymmetric illumination;
@@ -1283,7 +1306,8 @@ the spotlight supports the special parameters listed in the table.
 
 Setting the radius to a value greater than zero will result in soft
 shadows when the renderer uses stochastic sampling (like the [path
-tracer]).
+tracer]). Additionally setting the inner radius will result in a ring
+instead of a disk emitting the light.
 
 Measured light sources (IES, EULUMDAT, ...) are supported by providing
 an `intensityDistribution` [data] array to modulate the intensity per
@@ -1650,6 +1674,10 @@ supports the following special parameters:
   ---------- ------------------ --------  ------------------------------------
   Type       Name                Default  Description
   ---------- ------------------ --------  ------------------------------------
+  int        lightSamples            all  number of random light samples
+                                          per path vertex, per default
+                                          all light sources are sampled
+
   bool       geometryLights         true  whether geometries with an emissive
                                           material (e.g., [Luminous]) illuminate
                                           the scene
@@ -1860,6 +1888,7 @@ in the table below.
 
   float  normal                     1  normal map/scale
 
+  vec3f  flakeColor         Aluminium  color of metallic flakes
   float  flakeDensity               0  density of metallic flakes in [0–1], 0 disables flakes,
                                        1 fully covers the surface with flakes
 
@@ -2267,10 +2296,12 @@ supports the special parameters listed in the table below.
 
                                `OSP_STEREO_SIDE_BY_SIDE`
 
+                               `OSP_STEREO_TOP_BOTTOM` (left eye at top half)
+
   float interpupillaryDistance distance between left and right eye when
-                               stereo is enabled
+                               stereo is enabled, default 0.0635
   ----- ---------------------- -----------------------------------------
-  : Parameters accepted by the perspective camera.
+  : Addtional parameters accepted by the perspective camera.
 
 Note that when computing the `aspect` ratio a potentially set image region
 (using `imageStart` & `imageEnd`) needs to be regarded as well.
@@ -2295,7 +2326,7 @@ field.][imgCameraPerspective]
 distortion, resulting in parallel vertical
 edges.][imgCameraArchitectural]
 
-![Example 3D stereo image using `stereoMode` side-by-side.][imgCameraStereo]
+![Example 3D stereo image using `stereoMode = OSP_STEREO_SIDE_BY_SIDE`.][imgCameraStereo]
 
 #### Orthographic Camera
 
@@ -2311,7 +2342,7 @@ parameters:
   float  height  size of the camera's image plane in y, in world coordinates
   float  aspect  ratio of width by height of the frame
   ------ ------- ------------------------------------------------------------
-  : Parameters accepted by the orthographic camera.
+  : Addtional parameters accepted by the orthographic camera.
 
 For convenience the size of the camera sensor, and thus the extent of
 the scene that is captured in the image, can be controlled with the
@@ -2323,12 +2354,33 @@ and `imageEnd`, and both methods can be combined. In any case, the
 
 #### Panoramic Camera
 
-The panoramic camera implements a simple camera without support for
-motion blur. It captures the complete surrounding with a latitude /
+The panoramic camera implements a simple camera with support for stereo
+rendering. It captures the complete surrounding with a latitude /
 longitude mapping and thus the rendered images should best have a ratio
 of 2:1. A panoramic camera is created by passing the type string
 "`panoramic`" to `ospNewCamera`. It is placed and oriented in the scene
 by using the [general parameters](#cameras) understood by all cameras.
+
+  ----- ---------------------- -----------------------------------------
+  Type  Name                   Description
+  ----- ---------------------- -----------------------------------------
+  int   stereoMode             `OSPStereoMode` for stereo rendering,
+                               possible values are:
+
+                               `OSP_STEREO_NONE` (default)
+
+                               `OSP_STEREO_LEFT`
+
+                               `OSP_STEREO_RIGHT`
+
+                               `OSP_STEREO_SIDE_BY_SIDE`
+
+                               `OSP_STEREO_TOP_BOTTOM` (left eye at top half)
+
+  float interpupillaryDistance distance between left and right eye when
+                               stereo is enabled, default 0.0635
+  ----- ---------------------- -----------------------------------------
+  : Addtional parameters accepted by the panoramic camera.
 
 ![Latitude / longitude map created with the panoramic camera.][imgCameraPanoramic]
 

@@ -57,7 +57,7 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   common/Instance.ispc
   common/Managed.cpp
   common/OSPCommon.ispc
-  common/Util.h
+  common/World.ih
   common/World.ispc
   common/World.cpp
 
@@ -143,6 +143,9 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   math/spectrum.h
   math/spectrum.ih
   math/spectrum.ispc
+  math/random.ih
+  math/halton.ih
+  math/halton.ispc
 
   render/LoadBalancer.cpp
   render/Material.cpp
@@ -231,6 +234,12 @@ foreach(dir ${SUBDIRS})
       FILES_MATCHING
       PATTERN *.h
       PATTERN *.ih
+    )
+    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${dir}
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK
+      COMPONENT devel
+      FILES_MATCHING
+      PATTERN *_ispc.h
     )
   endif()
 endforeach()
