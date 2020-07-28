@@ -169,7 +169,7 @@ a device is set as the current device, it internally has its reference
 count incremented. Note that `ospDeviceRetain` and `ospDeviceRelease`
 should only be used with reference counts that the application tracks:
 removing reference held by the current set device should be handled
-by `ospShutdown`. Thus `ospDeviceRelease` should only decrement the
+by `ospShutdown`. Thus, `ospDeviceRelease` should only decrement the
 reference counts that come from `ospNewDevice`, `ospGetCurrentDevice`,
 and the number of explicit calls to `ospDeviceRetain`.
 
@@ -526,13 +526,12 @@ Structured volumes only need to store the values of the samples, because
 their addresses in memory can be easily computed from a 3D position. A
 common type of structured volumes are regular grids.
 
-Structured regular volumes are created by passing the
-`structuredRegular` type string to `ospNewVolume`. Structured volumes
-are represented through an `OSPData` 3D array `data` (which may or may
-not be shared with the application), where currently the voxel data
-needs to be laid out compact in memory in xyz-order^[For consecutive
-memory addresses the x-index of the corresponding voxel changes the
-quickest.]
+Structured regular volumes are created by passing the type string
+"`structuredRegular`" to `ospNewVolume`. Structured volumes are
+represented through an `OSPData` 3D array `data` (which may or may not
+be shared with the application), where currently the voxel data needs to
+be laid out compact in memory in xyz-order^[For consecutive memory
+addresses the x-index of the corresponding voxel changes the quickest.]
 
 The parameters understood by structured volumes are summarized in the
 table below.
@@ -552,7 +551,7 @@ as is the type of the voxel values (currently supported are:
 ### Structured Spherical Volume
 
 Structured spherical volumes are also supported, which are created by
-passing a type string of `"structuredSpherical"` to `ospNewVolume`. The
+passing a type string of "`structuredSpherical`" to `ospNewVolume`. The
 grid dimensions and parameters are defined in terms of radial distance
 $r$, inclination angle $\theta$, and azimuthal angle $\phi$, conforming
 with the ISO convention for spherical coordinate systems. The coordinate
@@ -595,7 +594,7 @@ levels.
 
 There can be any number of refinement levels and any number of blocks at
 any level of refinement. An AMR volume type is created by passing the
-type string `"amr"` to `ospNewVolume`.
+type string "`amr`" to `ospNewVolume`.
 
 Blocks are defined by three parameters: their bounds, the refinement
 level in which they reside, and the scalar data contained within each
@@ -624,7 +623,9 @@ Note that cell widths are defined _per refinement level_, not per block.
                                                     level
 
   OSPData[]      block.data                   NULL  [data] array of OSPData containing
-                                                    the actual scalar voxel data
+                                                    the actual scalar voxel data, only
+                                                    `OSP_FLOAT` is supported as
+                                                    `OSPDataType`
 
   vec3f          gridOrigin            $(0, 0, 0)$  origin of the grid in world-space
 
@@ -638,21 +639,25 @@ like the structured volume equivalent, but they only modify the root
 (coarsest level) of refinement.
 
 In particular, OSPRay's / Open VKL's AMR implementation was designed to
-cover Berger-Colella [1] and Chombo [2] AMR data. The `method` parameter
-above determines the interpolation method used when sampling the volume.
+cover Berger-Colella [1]\ and Chombo\ [2] AMR data. The `method`
+parameter above determines the interpolation method used when sampling
+the volume.
 
-* `OSP_AMR_CURRENT` finds the finest refinement level at that cell and
-  interpolates through this "current" level
-* `OSP_AMR_FINEST` will interpolate at the closest existing cell in the
-  volume-wide finest refinement level regardless of the sample cell's
-  level
-* `OSP_AMR_OCTANT` interpolates through all available refinement levels
-* at that
-  cell. This method avoids discontinuities at refinement level
-  boundaries at the cost of performance
+OSP_AMR_CURRENT
+: finds the finest refinement level at that cell and interpolates
+through this "current" level
+
+OSP_AMR_FINEST
+: will interpolate at the closest existing cell in the volume-wide
+finest refinement level regardless of the sample cell's level
+
+OSP_AMR_OCTANT
+: interpolates through all available refinement levels at that cell.
+This method avoids discontinuities at refinement level boundaries at the
+cost of performance
 
 Details and more information can be found in the publication for the
-implementation [3].
+implementation\ [3].
 
 1. M.J. Berger and P. Colella, "Local adaptive mesh refinement for
    shock hydrodynamics." Journal of Computational Physics 82.1 (1989):
@@ -700,10 +705,11 @@ the vertices and data values. Vertex ordering is the same as
 `VTK_PYRAMID`: four bottom vertices counterclockwise, then the top
 vertex.
 
-To maintain VTK data compatibility an index array may be specified via
-the `indexPrefixed` array that allows vertex indices to be interleaved
-with cell sizes in the following format: $n, id_1, ..., id_n, m, id_1,
-..., id_m$.
+To maintain VTK data compatibility, the `index` array may be specified
+with cell sizes interleaved with vertex indices in the following format:
+$n, id_1, ..., id_n, m, id_1, ..., id_m$. This alternative `index` array
+layout can be enabled through the `indexPrefixed` flag (in which case,
+the `cell.type` parameter must be omitted).
 
   ------------------- ------------------ --------  ---------------------------------------
   Type                Name                Default  Description
@@ -716,7 +722,7 @@ with cell sizes in the following format: $n, id_1, ..., id_n, m, id_1,
   uint32[] / uint64[] index                        [data] array of indices (into the
                                                    vertex array(s)) that form cells
 
-  uint32[] / uint64[] indexPrefixed                alternative [data] array of indices
+  bool                indexPrefixed          false indicates that the `index` array is
                                                    compatible to VTK, where the indices of
                                                    each cell are prefixed with the number
                                                    of vertices
@@ -728,8 +734,9 @@ with cell sizes in the following format: $n, id_1, ..., id_n, m, id_1,
   float[]             cell.data                    [data] array of cell data values to be
                                                    sampled
 
-  uint8[]             cell.type                    [data] array of cell types
-                                                   (VTK compatible). Supported types are:
+  uint8[]             cell.type                    [data] array of cell types (VTK
+                                                   compatible), only set if `indexPrefixed
+                                                   = false` false. Supported types are:
 
                                                    `OSP_TETRAHEDRON`
 
@@ -750,10 +757,82 @@ with cell sizes in the following format: $n, id_1, ..., id_n, m, id_1,
   ------------------- ------------------ --------  ---------------------------------------
   : Configuration parameters for unstructured volumes.
 
+### VDB Volume
+
+VDB volumes implement a data structure that is very similar to the data
+structure outlined in Museth\ [1], they are created by passing the type
+string "`vdb`" to `ospNewVolume`.
+
+The data structure is a hierarchical regular grid at its core: Nodes are
+regular grids, and each grid cell may either store a constant value
+(this is called a tile), or child pointers. Nodes in VDB trees are wide:
+Nodes on the first level have a resolution of 32^3^ voxels, on the next
+level 16^3^, and on the leaf level 8^3^ voxels. All nodes on a given
+level have the same resolution. This makes it easy to find the node
+containing a coordinate using shift operations (see\ [1]). VDB leaf
+nodes are implicit in OSPRay / Open VKL: they are stored as pointers to
+user-provided data.
+
+![Topology of VDB volumes.][imgVdbStructure]
+
+VDB volumes interpret input data as constant cells (which are then
+potentially filtered). This is in contrast to `structuredRegular`
+volumes, which have a vertex-centered interpretation.
+
+The VDB implementation in OSPRay / Open VKL follows the following goals:
+
+  - Efficient data structure traversal on vector architectures.
+  - Enable the use of industry-standard `.vdb` files created through the
+    OpenVDB library.
+  - Compatibility with OpenVDB on a leaf data level, so that `.vdb` file
+    may be loaded with minimal overhead.
+
+VDB volumes have the following parameters:
+
+  ---------- ----------------- -------------------------------------------------
+  Type       Name              Description
+  ---------- ----------------- -------------------------------------------------
+  int        maxIteratorDepth  do not descend further than to this depth during
+                               interval iteration, the maximum value and the
+                               default is 3
+
+  int        maxSamplingDepth  do not descend further than to this depth during
+                               sampling, the maximum value and the default is 3
+
+  uint32[]   node.level        level on which each input node exists, may be 1,
+                               2 or 3 (levels are counted from the root level
+                               = 0 down)
+
+  vec3i[]    node.origin       the node origin index (per input node)
+
+  OSPData[]  node.data         [data] arrays with the node data (per input
+                               node). Nodes that are tiles are expected to have
+                               single-item arrays. Leaf-nodes with grid data
+                               expected to have compact 3D arrays in zyx layout
+                               (z changes most quickly) with the correct number
+                               of voxels for the `level`. Only `OSP_FLOAT` is
+                               supported as field `OSPDataType`.
+
+  int        filter            filter used for reconstructing the field, default
+                               is `OSP_VOLUME_FILTER_TRILINEAR`, alternatively
+                               `OSP_VOLUME_FILTER_NEAREST`.
+
+  int        gradientFilter    filter used for reconstructing the field during
+                               gradient computations, default same as `filter`
+  ---------- ----------------- -------------------------------------------------
+  : Configuration parameters for VDB volumes.
+
+
+1. Museth, K. VDB: High-Resolution Sparse Volumes with Dynamic Topology.
+   ACM Transactions on Graphics 32(3), 2013. DOI: 10.1145/2487228.2487235
+
 ### Particle Volume
 
 Particle volumes consist of a set of points in space. Each point has a
 position, a radius, and a weight typically associated with an attribute.
+Particle volumes are created by passing the type string "`particle`" to
+`ospNewVolume`.
+
 A radial basis function defines the contribution of that particle.
 Currently, we use the Gaussian radial basis function
 $$\phi(P) = w \exp\left(-\frac{(P - p)^2}{2 r^2}\right),$$
@@ -763,8 +842,8 @@ is then computed as the sum of each radial basis function $\phi$, for
 each particle that overlaps it.
 
 The OSPRay / Open VKL implementation is similar to direct evaluation of
-samples in Reda et al. [2]. It uses an Embree-built BVH with a custom
-traversal, similar to the method in [1].
+samples in Reda et al.\ [2]. It uses an Embree-built BVH with a custom
+traversal, similar to the method in\ [1].
 
   -------- ----------------------- --------  ---------------------------------------
   Type     Name                     Default  Description
@@ -777,10 +856,10 @@ traversal, similar to the method in [1].
                                              weights, specifying the height of the
                                              kernel.
 
-  float    radiusSupportFactor          3.0  The multipler of the particle radius
+  float    radiusSupportFactor          3.0  The multiplier of the particle radius
                                              required for support. Larger radii
                                              ensure smooth results at the cost of
-                                             performance. In the Gaussian kernel, the
+                                             performance. In the Gaussian kernel,
                                              the radius is one standard deviation
                                              ($\sigma$), so a value of 3 corresponds
                                              to $3 \sigma$.
@@ -792,6 +871,19 @@ traversal, similar to the method in [1].
                                              contributions will halt when this value
                                              is reached. A value of zero or less
                                              turns this off.
+
+  bool     estimateValueRanges         true  Enable heuristic estimation of value
+                                             ranges which are used in internal
+                                             acceleration structures as well as for
+                                             determining the volume's overall value
+                                             range. When set to `false`, the user
+                                             *must* specify
+                                             `clampMaxCumulativeValue`, and all
+                                             value ranges will be assumed [0,
+                                             `clampMaxCumulativeValue`]. Disabling
+                                             this switch may improve volume commit
+                                             time, but will make volume rendering
+                                             less efficient.
   -------- ----------------------- --------  ---------------------------------------
   : Configuration parameters for particle volumes.
 
@@ -1479,12 +1571,12 @@ via a transform. To create and instance call
 
     OSPInstance ospNewInstance(OSPGroup);
 
-  ------------------ --------------- ---------- --------------------------------------
-  Type               Name               Default Description
-  ------------------ --------------- ---------- --------------------------------------
-  affine3f           xfm             (identity) world-space transform for all attached
-                                                geometries and volumes
-  ------------------ --------------- ---------- ---------------------------------------
+  ------------ ------ ---------- --------------------------------------
+  Type         Name      Default Description
+  ------------ ------ ---------- --------------------------------------
+  affine3f     xfm      identity world-space transform for all attached
+                                 geometries and volumes
+  ------------ ------ ---------- --------------------------------------
   : Parameters understood by instances.
 
 
@@ -2301,7 +2393,7 @@ supports the special parameters listed in the table below.
   float interpupillaryDistance distance between left and right eye when
                                stereo is enabled, default 0.0635
   ----- ---------------------- -----------------------------------------
-  : Addtional parameters accepted by the perspective camera.
+  : Additional parameters accepted by the perspective camera.
 
 Note that when computing the `aspect` ratio a potentially set image region
 (using `imageStart` & `imageEnd`) needs to be regarded as well.
@@ -2342,7 +2434,7 @@ parameters:
   float  height  size of the camera's image plane in y, in world coordinates
   float  aspect  ratio of width by height of the frame
   ------ ------- ------------------------------------------------------------
-  : Addtional parameters accepted by the orthographic camera.
+  : Additional parameters accepted by the orthographic camera.
 
 For convenience the size of the camera sensor, and thus the extent of
 the scene that is captured in the image, can be controlled with the
@@ -2380,7 +2472,7 @@ by using the [general parameters](#cameras) understood by all cameras.
   float interpupillaryDistance distance between left and right eye when
                                stereo is enabled, default 0.0635
   ----- ---------------------- -----------------------------------------
-  : Addtional parameters accepted by the panoramic camera.
+  : Additional parameters accepted by the panoramic camera.
 
 ![Latitude / longitude map created with the panoramic camera.][imgCameraPanoramic]
 
