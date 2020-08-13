@@ -10,6 +10,7 @@ stages:
   - scan2
   - release
   - scan3
+  - mirror
 
 variables:
   GIT_DEPTH: "15"
@@ -18,8 +19,7 @@ variables:
 
 .job_template: &build_job_docker
   stage: build
-  tags:
-    - docker
+  tags: [docker]
   image: $DOCKER_REGISTRY/ospray/docker-images:arch  # default image
   script:
     - scripts/build_gitlab/linux.sh
@@ -33,11 +33,6 @@ variables:
   script:
     - scripts/build_gitlab/linux.sh
 
-.job_template: &build_job_shell
-  stage: build
-  tags:
-    - build
-
 .job_template: &build_artifacts
   artifacts:
     paths:
@@ -48,10 +43,7 @@ variables:
 
 .job_template: &release_job
   stage: release
-  tags:
-    - release
-  needs:
-    - pdf
+  needs: [pdf]
   only:
     - devel
     - master
@@ -202,15 +194,16 @@ build-linux-debug:
   <<: *build_artifacts
 
 build-osx-clang:
-  <<: *build_job_shell
+  stage: build
   script:
     - scripts/build_gitlab/macosx.sh
   tags:
     - osx
     - clang
+  <<: *build_artifacts
 
 build-windows-msvc14:
-  <<: *build_job_shell
+  stage: build
   script:
     - scripts\build_gitlab\win.ps1 "Visual Studio 14 2015 Win64" "v140" "Release"
   tags:
@@ -219,7 +212,7 @@ build-windows-msvc14:
   <<: *build_artifacts
 
 build-windows-msvc15:
-  <<: *build_job_shell
+  stage: build
   script:
     - scripts\build_gitlab\win.ps1 "Visual Studio 15 2017 Win64" "v141" "Release"
   tags:
@@ -228,7 +221,7 @@ build-windows-msvc15:
   <<: *build_artifacts
 
 build-windows-debug-all:
-  <<: *build_job_shell
+  stage: build
   script:
     - scripts\build_gitlab\win.ps1 "Visual Studio 15 2017 Win64" "v141" "Debug"
   tags:
@@ -238,7 +231,7 @@ build-windows-debug-all:
   only: [schedules]
 
 #build-windows-icc:
-#  <<: *build_job_shell
+  stage: build
 #  script:
 #    - scripts\build_gitlab\win.ps1 "Visual Studio 14 2015 Win64" "Intel C++ Compiler 17.0"
 #  tags:
@@ -252,45 +245,46 @@ build-windows-debug-all:
 test-centos7-gcc:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:centos7
-  needs:
-    - build-centos7-gcc
+  needs: [build-centos7-gcc]
 
 test-centos8:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:centos8
-  needs:
-    - build-centos8
+  needs: [build-centos8]
 
 test-ubuntu1604-gcc:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu16.04
-  needs:
-    - build-ubuntu1604-gcc
+  needs: [build-ubuntu1604-gcc]
 
 test-ubuntu1804-gcc:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu18.04
-  needs:
-    - build-ubuntu1804-gcc
+  needs: [build-ubuntu1804-gcc]
 
 test-ubuntu2004-gcc:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu20.04
-  needs:
-    - build-ubuntu2004-gcc
+  needs: [build-ubuntu2004-gcc]
 
 test-linux-debug:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:arch
-  needs:
-    - build-linux-debug
+  needs: [build-linux-debug]
 
 test-linux-debug-all:
   <<: *test_job_unix
   image: $DOCKER_REGISTRY/ospray/docker-images:arch
-  needs:
-    - build-linux-debug-all
+  needs: [build-linux-debug-all]
   only: [schedules]
+
+test-osx-clang:
+  <<: *test_job
+  tags:
+    - osx
+  script:
+    - DYLD_FALLBACK_LIBRARY_PATH="$CI_PROJECT_DIR/build/install/ospray/lib:$DYLD_FALLBACK_LIBRARY_PATH" PATH="$CI_PROJECT_DIR/build/install/ospray/bin:$PATH" scripts/tests/run_tests.sh "$CI_PROJECT_DIR"
+  needs: [build-osx-clang]
 
 test-tutorials:
   stage: test
@@ -299,8 +293,7 @@ test-tutorials:
   image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   script:
     - scripts/tests/run_tutorials.sh
-  needs:
-    - build-centos7-gcc
+  needs: [build-centos7-gcc]
 
 test-find-ospray:
   stage: test
@@ -314,40 +307,28 @@ test-find-ospray:
     - cd buildtut
     - cmake -D ospray_DIR=`echo $CI_PROJECT_DIR/build/install/ospray/lib/cmake/ospray-*` ../apps/ospTutorial/ospTutorialFindospray 
     - cmake --build .
-  needs:
-    - build-centos7-gcc
-
-#test-windows-icc:
-#  <<: *test_job_windows
-#  tags:
-#    - win
-#    - icc
-#  needs:
-#    - build-windows-icc
+  needs: [build-centos7-gcc]
 
 test-windows-msvc14:
   <<: *test_job_windows
   tags:
     - win
     - msvc14
-  needs:
-    - build-windows-msvc14
+  needs: [build-windows-msvc14]
 
 test-windows-msvc15:
   <<: *test_job_windows
   tags:
     - win
     - msvc15
-  needs:
-    - build-windows-msvc15
+  needs: [build-windows-msvc15]
 
 test-windows-debug-all:
   <<: *test_job_windows
   tags:
     - win
     - msvc15
-  needs:
-    - build-windows-debug-all
+  needs: [build-windows-debug-all]
   only: [schedules]
 
 generate-ci-baseline:
@@ -355,8 +336,7 @@ generate-ci-baseline:
   image: $DOCKER_REGISTRY/ospray/docker-images:ubuntu18.04
   script:
     - LD_LIBRARY_PATH="$CI_PROJECT_DIR/build/install/ospray/lib:$LD_LIBRARY_PATH" PATH="$CI_PROJECT_DIR/build/install/ospray/bin:$PATH" scripts/tests/generate_baseline.sh
-  needs:
-    - build-ubuntu1804-gcc
+  needs: [build-ubuntu1804-gcc]
   artifacts:
     paths:
       - generated_test_images
@@ -367,8 +347,7 @@ generate-ci-baseline:
 
 benchmark-x8280-1:
   <<: *benchmark_job
-  needs:
-    - build-centos8
+  needs: [build-centos8]
   tags:
     - vis-perf-x8280-1
 
@@ -388,6 +367,7 @@ pdf:
   script:
     - cd doc
     - make pdf
+    - make checklinks
   artifacts:
     paths:
       - readme.pdf
@@ -417,6 +397,7 @@ release-linux:
   artifacts:
     paths:
       - build_release/*.gz
+    expire_in: 3 day
 
 release-osx-clang:
   <<: *release_job
@@ -424,7 +405,7 @@ release-osx-clang:
     - export CC=clang
     - export CXX=clang++
     - scripts/release/macosx.sh
-    - $SIGN_FILE_MAC -o runtime -e scripts/release/ospray.entitlements build_release/ospray-*
+    - $SIGN_FILE_MAC -o runtime -e scripts/release/ospray.entitlements build_release/ospray-*pkg
     - scripts/release/macosx_notarization.sh build_release/ospray-*.pkg
   tags:
     - clang
@@ -433,6 +414,7 @@ release-osx-clang:
     paths:
       - build_release/*.zip
       - build_release/*.pkg
+    expire_in: 3 day
 
 release-windows:
   <<: *release_job
@@ -446,6 +428,7 @@ release-windows:
     paths:
       - build_release\ospray*.zip
       - build_release\ospray*.msi
+    expire_in: 3 day
 
 
 ### SCAN JOBS ###
@@ -471,52 +454,41 @@ protex:
     - scripts/scan/protex.sh
   needs: []
   tags: [docker]
-  allow_failure: true
 
 kw-critical:
   stage: scan2
   image: $DOCKER_REGISTRY/ospray/docker-images:centos7
   script:
     - scripts/scan/kw.sh
-  needs:
-    - build-kw
+  needs: [build-kw]
   tags:
     - docker
 
-scan-bdba-linux:
+scan-bdba:
   <<: *release_job
   stage: scan3
   image: $DOCKER_REGISTRY/ospray/docker-images:centos7 
   script:
-    - scripts/scan/bdba.sh build_release/ospray-*.linux.tar.gz
+    - scripts/scan/bdba.sh "build_release/ospray*"
   needs:
     - release-linux
-  tags:
-    - docker
-  allow_failure: true
-
-scan-bdba-windows:
-  <<: *release_job
-  stage: scan3
-  image: $DOCKER_REGISTRY/ospray/docker-images:centos7 
-  script:
-    - scripts/scan/bdba.sh build_release/ospray-*.windows.msi 
-    - scripts/scan/bdba.sh build_release/ospray-*.windows.zip 
-  needs:
+    - release-osx-clang
     - release-windows
   tags:
     - docker
-  allow_failure: true
+  artifacts:
+    paths:
+      - build_release/ospray-*
 
-scan-bdba-osx:
-  <<: *release_job
-  stage: scan3
-  image: $DOCKER_REGISTRY/ospray/docker-images:centos7 
+
+### Mirror ###
+
+mirror:
+  stage: mirror
+  tags: [docker]
+  image: $DOCKER_REGISTRY/ospray/docker-images:centos7-mod
+  only: [devel]
+  dependencies: []
   script:
-    - scripts/scan/bdba.sh build_release/ospray-*.macosx.pkg 
-    - scripts/scan/bdba.sh build_release/ospray-*.macosx.zip 
-  needs:
-    - release-osx-clang
-  tags:
-    - docker
-  allow_failure: true
+    - git remote add github https://${GITHUB_TOKEN}github.com/ospray/OSPRay.git
+    - git push github HEAD:devel
