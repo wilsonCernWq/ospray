@@ -7,9 +7,9 @@
       "label": "Build Dependencies (Make Directory)",
       "type": "shell",
       "windows": {
-        "command": "if (-not (Test-Path '${workspaceFolder}\\build-deps')) { mkdir '${workspaceFolder}\\build-deps' }"
+        "command": "if (-not (Test-Path 'build-deps')) { mkdir 'build-deps' }"
       },
-      "command": "mkdir -p '${workspaceFolder}/build-deps'",
+      "command": "mkdir -p 'build-deps'",
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -21,31 +21,34 @@
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
         "args": [
-          "--no-warn-unused-cli",
-          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
-          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
-          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
-          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
-          "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build-deps",
           "-G",
           "Visual Studio 16 2019",
           "-T",
           "host=x64",
           "-A",
-          "x64"
+          "x64",
+          "--no-warn-unused-cli",
+          "-Dopenvkl_ROOT=D:/repos/openvkl", // build customized OpenVKL
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build-deps"
         ]
       },
-      "command": "cmake",
-      "args": [
-        "--no-warn-unused-cli",
-        "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
-        "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
-        "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
-        "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
-        "-H${workspaceFolder}/scripts/superbuild",
-        "-B${workspaceFolder}/build-deps"
-      ],
+      "linux": {
+        "command": "cmake",
+        "args": [
+          "--no-warn-unused-cli",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build-deps"
+        ],
+      },
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Directory)"
@@ -53,7 +56,7 @@
       "problemMatcher": []
     },
     {
-      "label": "Build Dependencies (CMake Build) - Debug",
+      "label": "Build Dependencies (CMake Build)",
       "type": "shell",
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
@@ -63,26 +66,9 @@
         "--build",
         "${workspaceFolder}/build-deps",
         "--config",
-        "Debug"
-      ],
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "Build Dependencies (CMake Configure)"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "Build Dependencies (CMake Build) - Release",
-      "type": "shell",
-      "windows": {
-        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
-      },
-      "command": "cmake",
-      "args": [
-        "--build",
-        "${workspaceFolder}/build-deps",
-        "--config",
-        "Release"
+        "${input:configuration}",
+        "--parallel",
+        "20"
       ],
       "dependsOrder": "sequence",
       "dependsOn": [
@@ -90,5 +76,18 @@
       ],
       "problemMatcher": []
     }
+  ],
+  "inputs": [
+    {
+      "type": "pickString",
+      "id": "configuration",
+      "description": "What type of configuration do you want to create?",
+      "options": [
+        "Debug",
+        "Release",
+        "RelWithDebInfo"
+      ],
+      "default": "RelWithDebInfo"
+    },
   ]
 }

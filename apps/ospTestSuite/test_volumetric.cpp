@@ -207,7 +207,8 @@ INSTANTIATE_TEST_SUITE_P(TestScenesVolumes,
                            "perlin_noise_volumes",
                            "unstructured_volume",
                            "particle_volume",
-                           "vdb_volume"),
+                           "vdb_volume",
+                           "htg_volume"),
         ::testing::Values("scivis", "pathtracer")));
 
 TEST_P(TextureVolumeTransform, simple)

@@ -2,7 +2,7 @@
     "cmake.sourceDirectory": "${workspaceFolder}",
     "cmake.buildDirectory": "${workspaceFolder}/build",
     "cmake.configureSettings": {
-        "CMAKE_PREFIX_PATH": "${workspaceFolder}/build-deps/install",
+        // "CMAKE_PREFIX_PATH": "${workspaceFolder}/build-deps/install",
         "OSPRAY_APPS_TUTORIAL_GLM": true,
         "OSPRAY_BUILD_ISA": "ALL",
         "OSPRAY_MODULE_BILINEAR_PATCH": false,
@@ -10,9 +10,17 @@
         "OSPRAY_INSTALL_DEPENDENCIES": false,
         "OSPRAY_STRICT_BUILD": true,
         "OSPRAY_WARN_AS_ERRORS": false,
-        "ISPC_EXECUTABLE": "${workspaceFolder}/build-deps/install/bin/ispc",
-        "RKCOMMON_TBB_ROOT": "${workspaceFolder}/build-deps/install",
-        "glm_DIR": "${workspaceFolder}/build-deps/install/cmake/glm"
+        "ISPC_EXECUTABLE": "${workspaceFolder}/build-deps/install/ispc/bin/ispc.exe",
+        "RKCOMMON_TBB_ROOT": "${workspaceFolder}/build-deps/install/tbb",
+        "embree_DIR": "${workspaceFolder}/build-deps/install/embree",
+        "rkcommon_DIR": "${workspaceFolder}/build-deps/install/rkcommon/lib/cmake/rkcommon-1.4.2",
+        "glfw3_DIR": "${workspaceFolder}/build-deps/install/glfw/lib/cmake/glfw3",
+        "glm_DIR": "${workspaceFolder}/build-deps/install/glm/cmake/glm",
+        "openvkl_DIR": "${workspaceFolder}/build-deps/install/openvkl/lib/cmake/openvkl-0.11.0",
     },
-    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "files.associations": {
+        "vector": "cpp",
+        "ostream": "cpp"
+    }
 }

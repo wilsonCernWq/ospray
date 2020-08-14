@@ -8,14 +8,23 @@ if (INSTALL_IN_SEPARATE_DIRECTORIES)
   set(COMPONENT_PATH ${INSTALL_DIR_ABSOLUTE}/${COMPONENT_NAME})
 endif()
 
+if(openvkl_ROOT)
+  set(OPENVKL_SOURCE_DIR ${openvkl_ROOT})
+  set(OPENVKL_URL)
+  message(STATUS "Using customized OpenVKL from ${OPENVKL_SOURCE_DIR}")
+else()
+  set(OPENVKL_SOURCE_DIR ${COMPONENT_NAME}/src)
+  set(OPENVKL_URL URL "http://github.com/openvkl/openvkl/archive/${BUILD_OPENVKL_VERSION}.zip")
+endif()
+
 ExternalProject_Add(${COMPONENT_NAME}
   PREFIX ${COMPONENT_NAME}
   DOWNLOAD_DIR ${COMPONENT_NAME}
   STAMP_DIR ${COMPONENT_NAME}/stamp
-  SOURCE_DIR ${COMPONENT_NAME}/src
+  SOURCE_DIR ${OPENVKL_SOURCE_DIR}
   BINARY_DIR ${COMPONENT_NAME}/build
   LIST_SEPARATOR | # Use the alternate list separator
-  URL "http://github.com/openvkl/openvkl/archive/${BUILD_OPENVKL_VERSION}.zip"
+  ${OPENVKL_URL}
   CMAKE_ARGS
     -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
