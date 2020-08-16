@@ -69,8 +69,8 @@ struct FileMap
   HANDLE hFile = INVALID_HANDLE_VALUE;
   // HANDLE hMap  = INVALID_HANDLE_VALUE;
   // char *map    = NULL;
-  static const DWORD stream_buffer_size = 64 * 1024;
-  DWORD stream_p = stream_buffer_size;
+  static const DWORD stream_buffer_size = 512 * 1024;
+  DWORD stream_p = 0;
   char stream_buffer[stream_buffer_size];
 
   // size_t refresh_buffer()
@@ -108,7 +108,7 @@ inline FileMap filemap_read_create(const std::string &filename)
       0,
       NULL,
       OPEN_EXISTING,
-      // FILE_FLAG_SEQUENTIAL_SCAN, 
+      // FILE_FLAG_SEQUENTIAL_SCAN,
       FILE_FLAG_NO_BUFFERING,
       NULL);
 
@@ -194,49 +194,62 @@ inline void filemap_read(FileMap &file, void *data, const size_t bytes)
   char *text = (char *)data;
 
   size_t bytes_completed = 0;
+
   while (bytes_completed < bytes) {
-    // printf("------\n");
+    // compute how many bypes to read in the next stream
+    const size_t avail =
+        std::min(file.file_size - file.p, size_t(file.stream_buffer_size));
 
-    // const size_t avail = file.refresh_buffer(); // read a new buffer
-
-    const size_t avail = std::min(file.file_size - file.p, size_t(file.stream_buffer_size));
+    // of course the stream progress should be resetted
     if (file.stream_p >= avail) {
       file.stream_p = 0;
+    }
+
+    // how many bytes to copy from the buffer
+    const size_t bytes_to_read =
+        std::min(bytes - bytes_completed, size_t(avail - file.stream_p));
+
+    // whether we can skup the copy in this round
+    bool skip_copy = false;
+
+    if (file.stream_p == 0) {
+      // when the data needed equals to the data to be streamed, we can directly
+      // use the destination as the stream buffer. therefore here we use a
+      // pointer to indicate the buffer to use for streaming.
+
+      char *buf = file.stream_buffer;
+
+      if (bytes_to_read == avail) {
+        buf = &text[bytes_completed];
+        skip_copy = true;
+      }
+
+      // actually stream data from file to the `buffer`
       DWORD bytes_read;
       if (!ReadFile(
-              file.hFile, file.stream_buffer, file.stream_buffer_size, &bytes_read, NULL)) {
+              file.hFile, buf, file.stream_buffer_size, &bytes_read, NULL)) {
         PrintLastError("failed to load streaming buffer");
       }
       if (bytes_read < file.stream_buffer_size) {
         std::cout << "strange bytes_read " << bytes_read << std::endl;
       }
-      file.p += avail;
+      assert(bytes_read == avail);
+      
+      // always update the file progress
+      file.p += bytes_read;
     }
-    // return avail;
 
-    // printf("avail %zu, stream_p %zu\n", avail, file.stream_p);
-
-    const size_t bytes_to_read =
-        std::min(bytes - bytes_completed, size_t(avail - file.stream_p));
-
-    // printf("bytes_to_read %zu, bytes_remains %zu\n", bytes_to_read,
-    // bytes_remains);
-
-    for (size_t i = 0; i < bytes_to_read; i++)
-      text[bytes_completed + i] = file.stream_buffer[file.stream_p + i];
+    // copy data from the stream buffer to the destination because additional
+    // bytes are streamed.
+    if (!skip_copy) {
+      printf("copied\n");
+      for (size_t i = 0; i < bytes_to_read; i++)
+        text[bytes_completed + i] = file.stream_buffer[file.stream_p + i];
+    }
 
     file.stream_p += bytes_to_read;
     bytes_completed += bytes_to_read;
-
-    // printf("bytes_to_read %zu, file_size %zu, progress %zu, stream_p %zu\n",
-    //     bytes_to_read,
-    //     file.file_size,
-    //     file.p,
-    //     file.stream_p);
   }
-
-  // if (bytes_remains)
-  //   throw std::runtime_error("something is wrong");
 
   // for (size_t i = 0; i < bytes; i++) {
   //   text[i] = file.map[file.p + i];
@@ -303,8 +316,8 @@ cpp::Group HtgVolume::buildGroup() const
   LARGE_INTEGER beginClock, endClock, cpuClockFreq;
   QueryPerformanceFrequency(&cpuClockFreq);
 
-  auto reader = filemap_read_create("bunny_cloud.htg");
-  // auto reader = filemap_read_create("C:/Datasets/wdas_cloud.htg");
+  // auto reader = filemap_read_create("bunny_cloud.htg");
+  auto reader = filemap_read_create("C:/Datasets/wdas_cloud.htg");
 
   vec3f _actualBounds;
   float _extendBounds;
