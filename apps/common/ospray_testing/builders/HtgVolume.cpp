@@ -386,6 +386,7 @@ inline void FileReader_ByByte::read(void *data, const size_t bytes)
 {
   assert(this->direction == FileRef::READ);
   assert(bytes <= this->file_size);
+
   printf("read %zu bytes\n", bytes);
 
   char *text = (char *)data;
@@ -414,16 +415,20 @@ inline void FileReader_ByByte::read(void *data, const size_t bytes)
       // directly use the destination as the stream buffer. therefore here
       // we use a pointer to indicate the buffer to use for streaming.
       char *buffer = this->stream_buffer;
-      if (bytes_to_read == avail) {
+      if (bytes_to_read == this->STREAM_BUFFER_SIZE) {
         buffer = &text[p];
         skip_copy = true;
       }
 
       // actually stream data from file to the `buffer`
       DWORD bytes_read;
-      if (!ReadFile(
-              this->hFile, buffer, this->STREAM_BUFFER_SIZE, &bytes_read, NULL))
+      if (!ReadFile(this->hFile,
+              buffer,
+              this->STREAM_BUFFER_SIZE,
+              &bytes_read,
+              NULL)) {
         ThrowLastError("failed to load streaming buffer");
+      }
       assert(bytes_read == avail);
 
       // always update the file progress
@@ -432,9 +437,11 @@ inline void FileReader_ByByte::read(void *data, const size_t bytes)
 
     // copy data from the stream buffer to the destination because
     // additional bytes are streamed.
-    if (!skip_copy)
-      for (size_t i = 0; i < bytes_to_read; i++)
+    if (!skip_copy) {
+      for (size_t i = 0; i < bytes_to_read; i++) {
         text[p + i] = this->stream_buffer[this->stream_p + i];
+      }
+    }
 
     this->stream_p += bytes_to_read;
     p += bytes_to_read;
