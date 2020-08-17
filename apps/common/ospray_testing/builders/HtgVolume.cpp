@@ -32,9 +32,10 @@ namespace testing {
 // ----------------------------------------------------------------------------
 // File I/O
 // ----------------------------------------------------------------------------
-#if defined(_WIN32) // Create a string with last error message
-inline void PrintLastError(const std::string &msg)
+inline void ThrowLastError(const std::string &msg)
 {
+#if defined(_WIN32) // Create a string with last error message
+  std::string result;
   DWORD error = GetLastError();
   if (error) {
     LPVOID lpMsgBuf;
@@ -48,238 +49,431 @@ inline void PrintLastError(const std::string &msg)
         NULL);
     if (bufLen) {
       LPCSTR lpMsgStr = (LPCSTR)lpMsgBuf;
-      std::string result(lpMsgStr, lpMsgStr + bufLen);
+      result = lpMsgStr, lpMsgStr + bufLen;
       LocalFree(lpMsgBuf);
-      std::cerr << msg << ": " << result << std::endl;
+      // std::cerr << msg << ": " << result << std::endl;
     }
   }
+  throw std::runtime_error(msg + ": " + result);
+#else
+  perror(msg.c_str());
+  throw std::runtime_error("Termination caused by I/O errors");
+#endif // defined(_WIN32)
 }
-#endif defined(_WIN32)
 
-struct FileMap
+class FileRef
 {
-  enum IO_TYPE
+ protected:
+  enum Direction
   {
-    BINARY_WRITE,
-    BINARY_READ
-  } type;
-  size_t p = 0;
-  size_t file_size = 0;
-#if defined(_WIN32)
+    READ,
+    WRITE
+  } direction;
+#if defined(_WIN32) // Platform: Windows
   HANDLE hFile = INVALID_HANDLE_VALUE;
-  // HANDLE hMap  = INVALID_HANDLE_VALUE;
-  // char *map    = NULL;
-  static const DWORD stream_buffer_size = 512 * 1024;
-  DWORD stream_p = 0;
-  char stream_buffer[stream_buffer_size];
-
-  // size_t refresh_buffer()
-  // {
-  //   const size_t avail = std::min(file_size - p, size_t(stream_buffer_size));
-  //   if (stream_p >= avail) {
-  //     stream_p = 0;
-  //     DWORD bytes_read;
-  //     if (!ReadFile(
-  //             hFile, stream_buffer, stream_buffer_size, &bytes_read, NULL)) {
-  //       PrintLastError("failed to load streaming buffer");
-  //     }
-  //     if (bytes_read < stream_buffer_size) {
-  //       std::cout << "strange bytes_read " << bytes_read << std::endl;
-  //     }
-  //     p += avail;
-  //   }
-  //   return avail;
-  // }
-#else // Platform: Unix
-  char *map = (char *)MAP_FAILED;
+#else // Platform: POSIX
   int fd = -1;
 #endif // defined(_WIN32)
+  size_t file_p = 0;
+  size_t file_size = 0;
+
+ public:
+  virtual ~FileRef();
+  virtual void read(void *data, size_t bytes) = 0;
+  virtual void write(const void *data, size_t bytes) = 0;
 };
 
-inline FileMap filemap_read_create(const std::string &filename)
+typedef FileRef *FileMap;
+
+// File I/O using virtual memories (mmap)
+struct FileRef_VM : FileRef
 {
-  FileMap ret;
-  ret.type = FileMap::BINARY_READ;
+#if defined(_WIN32)
+  HANDLE hMap = INVALID_HANDLE_VALUE;
+  char *map = NULL;
+#else // Platform: Unix
+  char *map = (char *)MAP_FAILED;
+#endif // defined(_WIN32)
+
+ public:
+  ~FileRef_VM();
+  /* reader */
+  FileRef_VM(const std::string &filename);
+  /* writer */
+  FileRef_VM(const std::string &filename, size_t requested_size);
+  void read(void *data, size_t bytes) override;
+  void write(const void *data, size_t bytes) override;
+};
+
+// #if defined(_WIN32)
+//     struct FileMapReader_ByFile : FileMap
+//     {
+//      public:
+//       FileMapReader_ByFile();
+//
+//      private:
+//       HANDLE hFile = INVALID_HANDLE_VALUE;
+//     };
+// #endif  // defined(_WIN32)
 
 #if defined(_WIN32)
+struct FileReader_ByByte : FileRef
+{
+  static const DWORD STREAM_BUFFER_SIZE = 512 * 1024;
+  char stream_buffer[STREAM_BUFFER_SIZE];
+  DWORD stream_p = 0;
+  HANDLE hFile = INVALID_HANDLE_VALUE;
 
-  ret.hFile = CreateFile(filename.c_str(),
+ public:
+  FileReader_ByByte(const std::string &filename);
+  void read(void *data, size_t bytes) override;
+  void write(const void *data, size_t bytes) override;
+};
+#endif // defined(_WIN32)
+
+// ----------------------------------------------------------------------------
+// Inline Implementations
+// ----------------------------------------------------------------------------
+
+inline FileRef::~FileRef()
+{
+#if defined(_WIN32) // Platform: Windows
+
+  FlushFileBuffers(this->hFile);
+  CloseHandle(this->hFile);
+
+#else // Platform: POSIX
+
+  // Un-mmaping doesn't close the file, so we still need to do that.
+  close(this->fd);
+
+#endif // defined(_WIN32)
+}
+
+inline FileRef_VM::~FileRef_VM()
+{
+#if defined(_WIN32) // Platform: Windows
+
+  UnmapViewOfFile(this->map);
+  CloseHandle(this->hMap);
+
+#else // Platform: POSIX
+
+  // Don't forget to free the mmapped memory
+  if (munmap(this->map, this->file_size) == -1) {
+    ThrowLastError("Error un-mmapping the file");
+  }
+
+#endif // defined(_WIN32)
+}
+
+inline FileRef_VM::FileRef_VM(const std::string &filename)
+{
+  direction = FileRef::READ;
+
+#if defined(_WIN32) // Platform: Windows
+
+  this->hFile = CreateFile(filename.c_str(),
       FILE_ATTRIBUTE_READONLY,
-      0,
+      FILE_SHARE_READ,
       NULL,
       OPEN_EXISTING,
-      // FILE_FLAG_SEQUENTIAL_SCAN,
-      FILE_FLAG_NO_BUFFERING,
+      FILE_FLAG_SEQUENTIAL_SCAN,
       NULL);
 
-  if (ret.hFile == INVALID_HANDLE_VALUE) {
-    PrintLastError("failed to open file " + filename);
-    throw std::runtime_error("termination caused by I/O errors");
+  if (this->hFile == INVALID_HANDLE_VALUE) {
+    ThrowLastError("failed to open file " + filename);
   }
 
   LARGE_INTEGER file_size;
-  GetFileSizeEx(ret.hFile, &file_size);
+  GetFileSizeEx(this->hFile, &file_size);
   if (file_size.QuadPart == 0) {
-    CloseHandle(ret.hFile);
-    throw std::runtime_error("cannot map 0 size file");
+    throw std::runtime_error("Cannot map 0 size file");
   }
-  ret.file_size = file_size.QuadPart;
 
   // Now map the file
+  this->hMap =
+      CreateFileMapping(this->hFile, nullptr, PAGE_READONLY, 0, 0, nullptr);
+  if (this->hMap == INVALID_HANDLE_VALUE) {
+    ThrowLastError("Failed to map file " + filename);
+  }
 
-  // ret.hMap =
-  //     CreateFileMapping(ret.hFile, nullptr, PAGE_READONLY, 0, 0,
-  //     nullptr);
-  // if (ret.hMap == INVALID_HANDLE_VALUE) {
-  //   CloseHandle(ret.hFile);
-  //   PrintLastError("failed to map file " + filename);
-  //   throw std::runtime_error("termination caused by I/O errors");
-  // }
+  this->file_size = file_size.QuadPart;
+  this->map =
+      (char *)MapViewOfFile(this->hMap, FILE_MAP_READ, 0, 0, this->file_size);
+  if (!this->map) {
+    ThrowLastError("Failed to map view of file " + filename);
+  }
 
-  // ret.map =
-  //     (char *)MapViewOfFile(ret.hMap, FILE_MAP_READ, 0, 0,
-  //     ret.file_size);
-  // if (!ret.map) {
-  //   CloseHandle(ret.hMap);
-  //   CloseHandle(ret.hFile);
-  //   PrintLastError("failed to map view of file " + filename);
-  //   throw std::runtime_error("termination caused by I/O errors");
-  // }
+#else // Platform: POSIX
 
-#else // Platform: Unix
+  this->fd = open(filename.c_str(), O_RDONLY, (mode_t)0600);
 
-  ret.fd = open(filename.c_str(), O_RDONLY, (mode_t)0600);
-
-  if (ret.fd == -1) {
-    perror("error opening file for writing");
-    throw std::runtime_error("termination caused by I/O errors");
+  if (this->fd == -1) {
+    ThrowLastError("Error opening file for writing");
   }
 
   struct stat fileInfo = {0};
 
-  if (fstat(ret.fd, &fileInfo) == -1) {
-    close(ret.fd);
-    perror("error getting the file size");
-    throw std::runtime_error("termination caused by I/O errors");
+  if (fstat(this->fd, &fileInfo) == -1) {
+    ThrowLastError("Error getting the file size");
   }
 
   if (fileInfo.st_size == 0) {
-    close(ret.fd);
-    throw std::runtime_error("error: file is empty, nothing to do");
+    ThrowLastError("Error: File is empty, nothing to do");
   }
 
-  printf("file size is %ji\n", (intmax_t)fileInfo.st_size);
+  printf("File size is %ji\n", (intmax_t)fileInfo.st_size);
 
-  ret.map = (char *)mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0);
-  if (ret.map == MAP_FAILED) {
-    close(ret.fd);
-    perror("error mmapping the file");
-    throw std::runtime_error("termination caused by I/O errors");
+  this->map = (char *)mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0);
+  if (this->map == MAP_FAILED) {
+    ThrowLastError("Error mmapping the file");
   }
 
-  ret.file_size = fileInfo.st_size;
+  this->file_size = fileInfo.st_size;
+
+#endif // defined(_WIN32)
+}
+
+inline FileRef_VM::FileRef_VM(
+    const std::string &filename, size_t requested_size)
+{
+  direction = FileRef::WRITE;
+
+#if defined(_WIN32) // Platform: Windows
+
+  this->hFile = CreateFile(filename.c_str(),
+      GENERIC_WRITE | GENERIC_READ,
+      FILE_SHARE_WRITE,
+      NULL,
+      CREATE_ALWAYS,
+      FILE_FLAG_WRITE_THROUGH,
+      NULL);
+
+  if (this->hFile == INVALID_HANDLE_VALUE) {
+    ThrowLastError("Failed to open file " + filename);
+  }
+
+  // Stretch the file size to the size of the (mapped) array of char
+  LARGE_INTEGER file_size;
+  file_size.QuadPart = requested_size;
+  if (SetFilePointerEx(this->hFile, file_size, NULL, FILE_BEGIN) == 0) {
+    ThrowLastError("Error calling lseek() to 'stretch' the file");
+  }
+
+  // Actually stretch the file
+  SetEndOfFile(this->hFile);
+
+  // Verify file size
+  GetFileSizeEx(this->hFile, &file_size);
+  if (file_size.QuadPart != requested_size) {
+    ThrowLastError("Incorrect file size");
+  }
+
+  // Now map the file
+  this->hMap =
+      CreateFileMapping(this->hFile, nullptr, PAGE_READWRITE, 0, 0, nullptr);
+  if (this->hMap == INVALID_HANDLE_VALUE) {
+    ThrowLastError("Failed to map file " + filename);
+  }
+
+  this->map = (char *)MapViewOfFile(
+      this->hMap, FILE_MAP_ALL_ACCESS, 0, 0, requested_size);
+  if (!this->map) {
+    ThrowLastError("Failed to map view of file " + filename);
+  }
+
+#else // Platform: POSIX
+
+  /* Open a file for writing.
+      - Creating the file if it doesn't exist.
+      - Truncating it to 0 size if it already exists. (not really needed)
+     Note: "O_WRONLY" mode is not sufficient when mmaping. */
+
+  this->fd = open(filename.c_str(), O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
+
+  if (this->fd == -1) {
+    ThrowLastError("Error opening file for writing");
+  }
+
+  // Stretch the file size to the size of the (mmapped) array of char
+  if (lseek(this->fd, requested_size - 1, SEEK_SET) == -1) {
+    ThrowLastError("Error calling lseek() to 'stretch' the file");
+  }
+
+  /* Something needs to be written at the end of the file to
+     have the file actually have the new size.
+     Just writing an empty string at the current file position will do.
+     Note:
+     - The current position in the file is at the end of the stretched
+       file due to the call to lseek().
+     - An empty string is actually a single '\0' character, so a zero-byte
+       will be written at the last byte of the file. */
+
+  if (write(this->fd, "", 1) == -1) {
+    ThrowLastError("Error writing last byte of the file");
+  }
+
+  // Now the file is ready to be mmapped.
+  this->map = (char *)mmap(
+      0, requested_size, PROT_READ | PROT_WRITE, MAP_SHARED, this->fd, 0);
+  if (this->map == MAP_FAILED) {
+    ThrowLastError("Error mmapping the file");
+  }
 
 #endif // defined(_WIN32)
 
-  return ret;
+  this->file_size = requested_size;
 }
 
-inline void filemap_read(FileMap &file, void *data, const size_t bytes)
+inline void FileRef_VM::read(void *data, const size_t bytes)
 {
-  assert(file.type == FileMap::BINARY_READ);
-  assert(bytes <= file.file_size);
+  assert(this->direction == FileRef::READ);
+  assert(bytes <= this->file_size);
 
+  printf("Read %zu bytes\n", bytes);
+
+  char *text = (char *)data;
+  for (size_t i = 0; i < bytes; i++) {
+    text[i] = this->map[this->file_p + i];
+  }
+
+  this->file_p += bytes;
+}
+
+inline void FileRef_VM::write(const void *data, const size_t bytes)
+{
+  assert(this->direction == FileRef::WRITE);
+  assert(bytes <= this->file_size);
+
+  printf("Writing %zu bytes\n", bytes);
+
+  // Write data to in-core memory
+  const char *text = (const char *)data;
+  for (size_t i = 0; i < bytes; i++) {
+    this->map[this->file_p + i] = text[i];
+  }
+
+  this->file_p += bytes;
+}
+
+#if defined(_WIN32)
+inline FileReader_ByByte::FileReader_ByByte(const std::string &filename)
+{
+  this->direction = FileRef::READ;
+
+  this->hFile = CreateFile(filename.c_str(),
+      FILE_ATTRIBUTE_READONLY,
+      0,
+      NULL,
+      OPEN_EXISTING,
+      FILE_FLAG_SEQUENTIAL_SCAN,
+      NULL);
+
+  if (this->hFile == INVALID_HANDLE_VALUE) {
+    ThrowLastError("failed to open file " + filename);
+  }
+
+  LARGE_INTEGER file_size;
+  GetFileSizeEx(this->hFile, &file_size);
+  if (file_size.QuadPart == 0) {
+    ThrowLastError("cannot map 0 size file");
+  }
+  this->file_size = file_size.QuadPart;
+}
+
+inline void FileReader_ByByte::read(void *data, const size_t bytes)
+{
+  assert(this->direction == FileRef::READ);
+  assert(bytes <= this->file_size);
   printf("read %zu bytes\n", bytes);
 
   char *text = (char *)data;
 
-  size_t bytes_completed = 0;
+  size_t p = 0;
 
-  while (bytes_completed < bytes) {
+  while (p < bytes) {
     // compute how many bypes to read in the next stream
-    const size_t avail =
-        std::min(file.file_size - file.p, size_t(file.stream_buffer_size));
+    const size_t avail = std::min(
+        this->file_size - this->file_p, size_t(this->STREAM_BUFFER_SIZE));
 
     // of course the stream progress should be resetted
-    if (file.stream_p >= avail) {
-      file.stream_p = 0;
+    if (this->stream_p >= avail) {
+      this->stream_p = 0;
     }
 
     // how many bytes to copy from the buffer
     const size_t bytes_to_read =
-        std::min(bytes - bytes_completed, size_t(avail - file.stream_p));
+        std::min(bytes - p, size_t(avail - this->stream_p));
 
     // whether we can skup the copy in this round
     bool skip_copy = false;
 
-    if (file.stream_p == 0) {
-      // when the data needed equals to the data to be streamed, we can directly
-      // use the destination as the stream buffer. therefore here we use a
-      // pointer to indicate the buffer to use for streaming.
-
-      char *buf = file.stream_buffer;
-
+    if (this->stream_p == 0) {
+      // when the data needed equals to the data to be streamed, we can
+      // directly use the destination as the stream buffer. therefore here
+      // we use a pointer to indicate the buffer to use for streaming.
+      char *buffer = this->stream_buffer;
       if (bytes_to_read == avail) {
-        buf = &text[bytes_completed];
+        buffer = &text[p];
         skip_copy = true;
       }
 
       // actually stream data from file to the `buffer`
       DWORD bytes_read;
       if (!ReadFile(
-              file.hFile, buf, file.stream_buffer_size, &bytes_read, NULL)) {
-        PrintLastError("failed to load streaming buffer");
-      }
-      if (bytes_read < file.stream_buffer_size) {
-        std::cout << "strange bytes_read " << bytes_read << std::endl;
-      }
+              this->hFile, buffer, this->STREAM_BUFFER_SIZE, &bytes_read, NULL))
+        ThrowLastError("failed to load streaming buffer");
       assert(bytes_read == avail);
-      
+
       // always update the file progress
-      file.p += bytes_read;
+      this->file_p += bytes_read;
     }
 
-    // copy data from the stream buffer to the destination because additional
-    // bytes are streamed.
-    if (!skip_copy) {
-      printf("copied\n");
+    // copy data from the stream buffer to the destination because
+    // additional bytes are streamed.
+    if (!skip_copy)
       for (size_t i = 0; i < bytes_to_read; i++)
-        text[bytes_completed + i] = file.stream_buffer[file.stream_p + i];
-    }
+        text[p + i] = this->stream_buffer[this->stream_p + i];
 
-    file.stream_p += bytes_to_read;
-    bytes_completed += bytes_to_read;
+    this->stream_p += bytes_to_read;
+    p += bytes_to_read;
   }
+}
 
-  // for (size_t i = 0; i < bytes; i++) {
-  //   text[i] = file.map[file.p + i];
-  // }
+inline void FileReader_ByByte::write(const void *data, size_t bytes)
+{
+  throw std::runtime_error("write is not supported");
+}
+#endif // defined(_WIN32)
 
-  // rkcommon::tasking::parallel_for(
-  //     bytes, [&](size_t i) { text[i] = file.map[file.p + i]; });
+inline FileMap filemap_write_create(
+    const std::string &filename, size_t requested_size)
+{
+  FileMap ret = new FileRef_VM(filename, requested_size);
+  return ret;
+}
+
+inline FileMap filemap_read_create(const std::string &filename)
+{
+  // FileMap ret = new FileRef_VM(filename);
+  FileMap ret = new FileReader_ByByte(filename);
+  return ret;
+}
+
+inline void filemap_write(FileMap &file, const void *data, const size_t bytes)
+{
+  file->write(data, bytes);
+}
+
+inline void filemap_read(FileMap &file, void *data, const size_t bytes)
+{
+  file->read(data, bytes);
 }
 
 inline void filemap_close(FileMap &file)
 {
-#if defined(_WIN32)
-
-  // UnmapViewOfFile(file.map);
-  // CloseHandle(file.hMap);
-  CloseHandle(file.hFile);
-
-#else // Platform: Unix
-
-  // Don't forget to free the mmapped memory
-  if (munmap(file.map, file.file_size) == -1) {
-    close(file.fd);
-    perror("error un-mmapping the file");
-    throw std::runtime_error("termination caused by I/O errors");
-  }
-
-  // Un-mmaping doesn't close the file, so we still need to do that.
-  close(file.fd);
-
-#endif // defined(_WIN32)
+  delete file;
 }
 
 // ----------------------------------------------------------------------------
