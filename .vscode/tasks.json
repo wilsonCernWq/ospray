@@ -44,7 +44,7 @@
           "-A",
           "x64",
           "--no-warn-unused-cli",
-          "-Dopenvkl_ROOT=D:/repos/openvkl", // build customized OpenVKL
+          "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
           "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
