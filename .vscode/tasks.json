@@ -96,6 +96,28 @@
         "Build Dependencies (CMake Configure)"
       ],
       "problemMatcher": []
+    },
+    // rebuild OpenVKL
+    {
+      "label": "Rebuild OpenVKL",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "linux": {
+        "command": "cmake",
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/build-deps/openvkl/build",
+        "--config",
+        "${input:configuration}",
+        "--target",
+        "install",
+        "--parallel",
+        "20"
+      ],
+      "problemMatcher": []
     }
   ],
   "inputs": [
