@@ -9,9 +9,25 @@
       "windows": {
         "command": "if (-not (Test-Path 'build-deps')) { mkdir 'build-deps' }"
       },
-      "command": "mkdir -p 'build-deps'",
+      "linux": {
+        "command": "mkdir -p 'build-deps'",
+      },
       "options": {
         "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Build Dependencies (Clean)",
+      "type": "shell",
+      "windows": {
+        "command": "if (Test-Path 'x64/${input:configuration}') { rm -r 'x64/${input:configuration}' }"
+      },
+      "linux": {
+        // not sure what to do yet
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/build-deps"
       },
       "problemMatcher": []
     },
@@ -28,7 +44,8 @@
           "-A",
           "x64",
           "--no-warn-unused-cli",
-          "-Dopenvkl_ROOT=D:/repos/openvkl", // build customized OpenVKL
+          "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE",
@@ -41,6 +58,7 @@
         "command": "cmake",
         "args": [
           "--no-warn-unused-cli",
+          "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE",
@@ -51,7 +69,8 @@
       },
       "dependsOrder": "sequence",
       "dependsOn": [
-        "Build Dependencies (Make Directory)"
+        "Build Dependencies (Make Directory)",
+        "Build Dependencies (Clean)"
       ],
       "problemMatcher": []
     },
@@ -61,7 +80,9 @@
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
       },
-      "command": "cmake",
+      "linux": {
+        "command": "cmake",
+      },
       "args": [
         "--build",
         "${workspaceFolder}/build-deps",
@@ -73,6 +94,28 @@
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (CMake Configure)"
+      ],
+      "problemMatcher": []
+    },
+    // rebuild OpenVKL
+    {
+      "label": "Rebuild OpenVKL",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "linux": {
+        "command": "cmake",
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/build-deps/openvkl/build",
+        "--config",
+        "${input:configuration}",
+        "--target",
+        "install",
+        "--parallel",
+        "20"
       ],
       "problemMatcher": []
     }

@@ -15,7 +15,7 @@
       "environment": [
         {
           "name": "PATH",
-          "value": "${workspaceFolder}/build-deps/install/tbb/bin/intel64/vc14;${workspaceFolder}/build-deps/install/embree/bin;${workspaceFolder}/build-deps/install/rkcommon/bin;${workspaceFolder}/build-deps/install/openvkl/bin;${env:PATH}"
+          "value": "${workspaceFolder}/build-deps/install/tbb/bin/intel64/vc14;${workspaceFolder}/build-deps/install/embree/bin;${workspaceFolder}/build-deps/install/rkcommon/bin;${workspaceFolder}/build-deps/install/openvkl/bin;${workspaceFolder}/build-deps/install/oidn/bin;${env:PATH}"
         }
       ],
       "externalConsole": false

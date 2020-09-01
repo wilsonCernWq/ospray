@@ -107,6 +107,9 @@ void Volume::handleParams()
     } else if (param.data.is<const char *>()) {
       vklSetString(
           vklVolume, param.name.c_str(), param.data.get<const char *>());
+    } else if (param.data.is<std::string>()) {
+      vklSetString(
+          vklVolume, param.name.c_str(), param.data.get<std::string>().c_str());
     } else if (param.data.is<vec3i>()) {
       vklSetVec3i(vklVolume,
           param.name.c_str(),
