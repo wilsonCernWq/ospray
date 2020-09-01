@@ -62,7 +62,8 @@ cpp::Group HtgVolume::buildGroup() const
 {
   vec3f gridScaling = (float)domainRes;
 
-  std::string file = "C:/Datasets/wdas_cloud.htg";
+  std::string file = "C:/Datasets/bunny_cloud.tamr";
+  // std::string file = "C:/Datasets/wdas_cloud.htg";
   // std::string file = "C:/Datasets/bunny_cloud.htg";
 
   cpp::Volume volume("htg");
