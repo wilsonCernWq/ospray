@@ -17,6 +17,9 @@ Version History
         `ospTutorialGLM` as an example
 -   Fix shading for multiple modes of the `debug` renderer
 -   Depth is now "accumulated" as well, using the minimum
+-   Added support for data arrays with a stride between voxels in
+    volumes
+-   New minimum ISPC version is 1.14.1
 
 ### Changes in v2.2.0:
 
