@@ -1,11 +1,11 @@
-// Copyright 2009-2019 Intel Corporation
+// Copyright 2009-2020 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 // ospray
 #include "VolumetricModel.ih"
 #include "common/Ray.ih"
-#include "math/box.ih"
-#include "math/vec.ih"
+#include "rkcommon/math/box.ih"
+#include "rkcommon/math/vec.ih"
 
 export void *uniform VolumetricModel_create(
     void *uniform cppE, void *uniform volume)
@@ -21,7 +21,8 @@ export void VolumetricModel_set(void *uniform _self,
     void *uniform transferFunction,
     const uniform box3f &bounds,
     uniform float densityScale,
-    uniform float anisotropy)
+    uniform float anisotropy,
+    uniform float gradientShadingScale)
 {
   VolumetricModel *uniform self = (VolumetricModel * uniform) _self;
 
@@ -29,6 +30,7 @@ export void VolumetricModel_set(void *uniform _self,
   self->boundingBox = bounds;
   self->densityScale = densityScale;
   self->anisotropy = anisotropy;
+  self->gradientShadingScale = gradientShadingScale;
 }
 
 export void VolumetricModel_set_valueSelector(

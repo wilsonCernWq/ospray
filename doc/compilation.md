@@ -30,28 +30,27 @@ before you can build OSPRay you need the following prerequisites:
     `~/Projects/ospray`, ISPC will also be searched in
     `~/Projects/ispc-v1.14.1-linux`] Alternatively set the CMake
     variable `ISPC_EXECUTABLE` to the location of the ISPC compiler.
--   OSPRay builds on top of the Intel oneAPI Rendering Toolkit common
-    library `rkcommon`. The library provides abstractions for tasking,
-    aligned memory allocation, vector math types, among others. For
-    users who also need to build
-    [rkcommon](https://www.github.com/ospray/rkcommon), we recommend the
-    default the Intel [Threading Building
-    Blocks](https://www.threadingbuildingblocks.org/) (TBB) as tasking
-    system for performance and flexibility reasons. Alternatively you
-    can set CMake variable `RKCOMMON_TASKING_SYSTEM` to `OpenMP` or
-    `Internal`.
--   OSPRay also heavily uses Intel [Embree], installing version 3.8.0 or
-    newer is required. If Embree is not found by CMake its location can
-    be hinted with the variable `embree_DIR`.
+-   OSPRay builds on top of the [Intel oneAPI Rendering Toolkit common
+    library (rkcommon)](https://www.github.com/ospray/rkcommon). The
+    library provides abstractions for tasking, aligned memory
+    allocation, vector math types, among others. For users who also need
+    to build rkcommon, we recommend the default the Intel [Threading
+    Building Blocks (TBB)](https://www.threadingbuildingblocks.org/) as
+    tasking system for performance and flexibility reasons.
+    Alternatively you can set CMake variable `RKCOMMON_TASKING_SYSTEM`
+    to `OpenMP` or `Internal`.
+-   OSPRay also heavily uses Intel [Embree], installing version 3.12.0
+    or newer is required. If Embree is not found by CMake its location
+    can be hinted with the variable `embree_DIR`.
 -   OSPRay also heavily uses Intel [Open VKL](https://www.openvkl.org/),
-    installing version 0.10.0 or newer is required. If Open VKL is not
+    installing version 0.12.0 or newer is required. If Open VKL is not
     found by CMake its location can be hinted with the variable
     `openvkl_DIR`.
--   OSPRay also provides an optional module that adds support for Intel
-    [Open Image Denoise], which is enabled by `OSPRAY_MODULE_DENOISER`.
-    When loaded, this module enables the `denosier` image operation. You
-    may need to hint the location of the library with the CMake variable
-    `OpenImageDenoise_DIR`.
+-   OSPRay also provides an optional module implementing the `denosier`
+    image operation, which is enabled by `OSPRAY_MODULE_DENOISER`. This
+    module requires Intel [Open Image Denoise] in version 1.2.3 or
+    newer. You may need to hint the location of the library with the
+    CMake variable `OpenImageDenoise_DIR`.
 
 Depending on your Linux distribution you can install these dependencies
 using `yum` or `apt-get`. Some of these packages might already be
@@ -121,6 +120,10 @@ BUILD_OIDN_FROM_SOURCE
 
 BUILD_OIDN_VERSION
 : determines which version of Open Image Denoise to pull down.
+
+BUILD_OSPRAY_MODULE_MPI
+: set to ON to build OSPRay's MPI module for data-replicated and
+distributed parallel rendering on multiple nodes.
 
 For the full set of options, run:
 

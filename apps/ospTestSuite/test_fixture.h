@@ -77,27 +77,22 @@ class Base
 class FromOsprayTesting
     : public Base,
       public ::testing::TestWithParam<std::tuple<const char * /*scene name*/,
-          const char * /*renderer type*/>>
+          const char * /*renderer type*/,
+          unsigned int /*spp*/>>
 {
  public:
   FromOsprayTesting();
   void SetUp() override;
 
- private:
+ protected:
   std::string sceneName;
 };
 
-// with direct lighting only
-class FromOsprayTestingDirect
-    : public Base,
-      public ::testing::TestWithParam<std::tuple<const char * /*scene name*/>>
+// with map_maxDepth texture
+class FromOsprayTestingMaxDepth : public FromOsprayTesting
 {
  public:
-  FromOsprayTestingDirect();
   void SetUp() override;
-
- private:
-  std::string sceneName;
 };
 
 } // namespace OSPRayTestScenes

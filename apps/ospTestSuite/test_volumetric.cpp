@@ -340,8 +340,16 @@ INSTANTIATE_TEST_SUITE_P(TestScenesVolumes,
                            "unstructured_volume_simple",
                            "particle_volume",
                            "vdb_volume",
-                           "htg_volume"),
-        ::testing::Values("scivis", "pathtracer")));
+                           "htg_volume",
+                           "gravity_spheres_amr"),
+        ::testing::Values("scivis", "pathtracer", "ao"),
+        ::testing::Values(16)));
+
+INSTANTIATE_TEST_SUITE_P(TestScenesVolumesStrictParams,
+    FromOsprayTesting,
+    ::testing::Values(std::make_tuple("perlin_noise_many_volumes", "scivis", 4),
+        std::make_tuple("perlin_noise_many_volumes", "pathtracer", 32),
+        std::make_tuple("perlin_noise_many_volumes", "ao", 4)));
 
 TEST_P(UnstructuredVolume, simple)
 {
@@ -350,7 +358,7 @@ TEST_P(UnstructuredVolume, simple)
 
 INSTANTIATE_TEST_SUITE_P(TestScenesVolumes,
     UnstructuredVolume,
-    ::testing::Combine(::testing::Values("scivis", "pathtracer"),
+    ::testing::Combine(::testing::Values("scivis", "pathtracer", "ao"),
         ::testing::Values(false, true)));
 
 TEST_P(TextureVolumeTransform_deprecated, simple)

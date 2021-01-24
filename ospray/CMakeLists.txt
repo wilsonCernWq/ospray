@@ -135,7 +135,6 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   lights/sky_model/sky_model.cpp
   lights/registration.cpp
 
-  math/box.ispc
   math/Distribution1D.ispc
   math/Distribution2D.ispc
   math/sobol.ih
@@ -157,12 +156,20 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   render/debug/DebugRenderer.cpp
   render/debug/DebugRenderer.ispc
 
+  render/ao/AORenderer.cpp
+  render/ao/AORenderer.ispc
+  render/ao/Material.cpp
+  render/ao/Material.ispc
+  render/ao/surfaces.ispc
+  render/ao/volumes.ispc
+
   render/scivis/SciVis.cpp
   render/scivis/SciVis.ispc
   render/scivis/SciVisMaterial.cpp
   render/scivis/SciVisMaterial.ispc
   render/scivis/surfaces.ispc
   render/scivis/volumes.ispc
+  render/scivis/lightAlpha.ispc
 
   render/pathtracer/PathTracer.ispc
   render/pathtracer/PathTracer.cpp
@@ -331,6 +338,7 @@ if(OSPRAY_BUILD_ISPC_DEVICE)
     ${CMAKE_SOURCE_DIR}/ospray
     ${CMAKE_SOURCE_DIR}
     ${PROJECT_BINARY_DIR}
+    ${RKCOMMON_INCLUDE_DIRS}
     ${EMBREE_INCLUDE_DIRS}
     ${OPENVKL_INCLUDE_DIRS}
   )
