@@ -28,6 +28,29 @@
       ]
     },
     {
+      "name": "ospSimulator (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/ospSimulator",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "environment": [
+        {
+          "name": "LD_LIBRARY_PATH",
+          "value": "${env:LD_LIBRARY_PATH}:${workspaceFolder}/build-deps/install/lib"
+        }
+      ],
+      "MIMode": "gdb",
+      "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          }
+      ]
+    },
+    {
       "name": "ospExamples (Windows) RelWithDebInfo",
       "type": "cppvsdbg",
       "request": "launch",

@@ -20,7 +20,7 @@
     },
     /* cleanup caches for previous builds */
     {
-      "label": "Build Dependencies (Clean)",
+      "label": "Build Dependencies (Clean Dependency Directory)",
       "type": "shell",
       "windows": {
         // ignore cleaning
@@ -87,7 +87,7 @@
           "-A",
           "x64",
           "--no-warn-unused-cli",
-          "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DOPENVKL_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
           "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
@@ -101,7 +101,7 @@
         "command": "cmake",
         "args": [
           "--no-warn-unused-cli",
-          "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DOPENVKL_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
           "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
@@ -141,7 +141,7 @@
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Dependency Directory)",
-        // "Build Dependencies (Clean)",
+        // "Build Dependencies (Clean Dependency Directory)",
         "Build Dependencies (Internal - CMake Configure - Default)",
         "Build Dependencies (Internal - CMake Build)"
       ],
@@ -154,7 +154,7 @@
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Dependency Directory)",
-        // "Build Dependencies (Clean)",
+        // "Build Dependencies (Clean Dependency Directory)",
         "Build Dependencies (Internal - CMake Configure - OpenVKL)",
         "Build Dependencies (Internal - CMake Build)"
       ],
