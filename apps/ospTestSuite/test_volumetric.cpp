@@ -340,7 +340,6 @@ INSTANTIATE_TEST_SUITE_P(TestScenesVolumes,
                            "unstructured_volume_simple",
                            "particle_volume",
                            "vdb_volume",
-                           "htg_volume",
                            "gravity_spheres_amr"),
         ::testing::Values("scivis", "pathtracer", "ao"),
         ::testing::Values(16)));
