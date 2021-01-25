@@ -25,7 +25,7 @@ add_library(ospray_testing SHARED
   builders/ClippingGeometries.cpp
   builders/ParticleVolume.cpp
   builders/VdbVolume.cpp
-  builders/HtgVolume.cpp # require HTG module from OpenVKL
+  builders/RawVolume.cpp
   builders/Transparency.cpp
   # regression test scenes
   builders/test_pt_glass.cpp
