@@ -3,8 +3,9 @@
   // for the documentation about the tasks.json format
   "version": "2.0.0",
   "tasks": [
+    /* create the 'build-deps' directory for all platforms */
     {
-      "label": "Build Dependencies (Make Directory)",
+      "label": "Build Dependencies (Make Dependency Directory)",
       "type": "shell",
       "windows": {
         "command": "if (-not (Test-Path 'build-deps')) { mkdir 'build-deps' }"
@@ -17,22 +18,26 @@
       },
       "problemMatcher": []
     },
+    /* cleanup caches for previous builds */
     {
       "label": "Build Dependencies (Clean)",
       "type": "shell",
       "windows": {
+        // ignore cleaning
         "command": "if (Test-Path 'x64/${input:configuration}') { rm -r 'x64/${input:configuration}' }"
       },
       "linux": {
-        // not sure what to do yet
+        // ignore cleaning
+        "command": "rm -fr ${workspaceFolder}/build-deps/*"
       },
       "options": {
         "cwd": "${workspaceFolder}/build-deps"
       },
       "problemMatcher": []
     },
+    /* a clean OSPRay build */
     {
-      "label": "Build Dependencies (CMake Configure)",
+      "label": "Build Dependencies (Internal - CMake Configure - Default)",
       "type": "shell",
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
@@ -44,11 +49,10 @@
           "-A",
           "x64",
           "--no-warn-unused-cli",
-          // "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
           "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
-          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE", // TODO retest this option
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
           "-B${workspaceFolder}/build-deps"
@@ -61,21 +65,57 @@
           "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
-          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
           "-B${workspaceFolder}/build-deps"
         ],
       },
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "Build Dependencies (Make Directory)",
-        "Build Dependencies (Clean)"
-      ],
       "problemMatcher": []
     },
+    /* OSPRay build with customized OpenVKL */
     {
-      "label": "Build Dependencies (CMake Build)",
+      "label": "Build Dependencies (Internal - CMake Configure - OpenVKL)",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+        "args": [
+          "-G",
+          "Visual Studio 16 2019",
+          "-T",
+          "host=x64",
+          "-A",
+          "x64",
+          "--no-warn-unused-cli",
+          "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DBUILD_OIDN=ON",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE", // TODO retest this option
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build-deps"
+        ]
+      },
+      "linux": {
+        "command": "cmake",
+        "args": [
+          "--no-warn-unused-cli",
+          "-Dopenvkl_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DBUILD_OIDN=ON",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build-deps"
+        ],
+      },
+      "problemMatcher": []
+    },
+    /* start the build */
+    {
+      "label": "Build Dependencies (Internal - CMake Build)",
       "type": "shell",
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
@@ -91,13 +131,36 @@
         "--parallel",
         "20"
       ],
+      "problemMatcher": []
+    },
+    /* Build Options */
+    {
+      /* Creating a Clean OSPRay Build */
+      "label": "Build Dependencies (Default)",
+      "type": "shell",
       "dependsOrder": "sequence",
       "dependsOn": [
-        "Build Dependencies (CMake Configure)"
+        "Build Dependencies (Make Dependency Directory)",
+        // "Build Dependencies (Clean)",
+        "Build Dependencies (Internal - CMake Configure - Default)",
+        "Build Dependencies (Internal - CMake Build)"
       ],
       "problemMatcher": []
     },
-    // rebuild OpenVKL
+    {
+      /* Creating a Clean OSPRay Build */
+      "label": "Build Dependencies (OpenVKL)",
+      "type": "shell",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build Dependencies (Make Dependency Directory)",
+        // "Build Dependencies (Clean)",
+        "Build Dependencies (Internal - CMake Configure - OpenVKL)",
+        "Build Dependencies (Internal - CMake Build)"
+      ],
+      "problemMatcher": []
+    },
+    /* rebuild customized OpenVKL */
     {
       "label": "Rebuild OpenVKL",
       "type": "shell",

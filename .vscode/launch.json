@@ -15,10 +15,9 @@
       "environment": [
         {
           "name": "LD_LIBRARY_PATH",
-          "value": "${env:LD_LIBRARY_PATH}:${workspaceFolder}/build-deps/install/embree/lib:${workspaceFolder}/build-deps/install/rkcommon/lib:${workspaceFolder}/build-deps/install/openvkl/lib:${workspaceFolder}/build-deps/install/oidn/lib"
+          "value": "${env:LD_LIBRARY_PATH}:${workspaceFolder}/build-deps/install/lib"
         }
       ],
-      "console": "externalTerminal",
       "MIMode": "gdb",
       "setupCommands": [
           {

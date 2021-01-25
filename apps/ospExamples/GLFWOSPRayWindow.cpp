@@ -49,7 +49,8 @@ static const std::vector<std::string> g_scenes = {"boxes_lit",
     "particle_volume",
     "particle_volume_isosurface",
     "vdb_volume",
-    "htg_volume"};
+    "htg_volume",
+};
 
 static const std::vector<std::string> g_curveVariant = {
     "bspline", "hermite", "catmull-rom", "linear", "cones"};
