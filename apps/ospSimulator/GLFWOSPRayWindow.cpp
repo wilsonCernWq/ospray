@@ -29,10 +29,14 @@ static bool g_quitNextFrame = false;
 
 static int whichScene = 0;
 static const std::vector<std::string> g_scenes = {
-    "boxes_lit",
     "cornell_box",
-    "perlin_noise_volumes",
+    "raw_volume",
     "vdb_volume",
+    "perlin_noise_volumes",
+    "perlin_noise_many_volumes",
+    "clip_perlin_noise_volumes",
+    "perlin_noise_volumes_gradient",
+    "clip_perlin_noise_volumes_gradient",
 };
 
 // the default is scivis
