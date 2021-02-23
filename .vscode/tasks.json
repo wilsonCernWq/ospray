@@ -52,7 +52,7 @@
           "-DBUILD_OIDN=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
-          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=TRUE", // TODO retest this option
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
           "-B${workspaceFolder}/build-deps"
