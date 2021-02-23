@@ -29,14 +29,14 @@ static bool g_quitNextFrame = false;
 
 static int whichScene = 0;
 static const std::vector<std::string> g_scenes = {
-    "cornell_box",
+    // "cornell_box",
     "raw_volume",
     "vdb_volume",
-    "perlin_noise_volumes",
-    "perlin_noise_many_volumes",
-    "clip_perlin_noise_volumes",
-    "perlin_noise_volumes_gradient",
-    "clip_perlin_noise_volumes_gradient",
+    // "perlin_noise_volumes",
+    // "perlin_noise_many_volumes",
+    // "clip_perlin_noise_volumes",
+    // "perlin_noise_volumes_gradient",
+    // "clip_perlin_noise_volumes_gradient",
 };
 
 // the default is scivis
@@ -133,24 +133,35 @@ void error_callback(int error, const char *desc)
 GLFWOSPRayWindow *GLFWOSPRayWindow::activeWindow = nullptr;
 
 GLFWOSPRayWindow::GLFWOSPRayWindow(const vec2i &windowSize, bool denoiser)
-    : previousMouse{-1.f},
-      denoiserAvailable(denoiser),
-      updateFrameOpsNextFrame{false},
-      denoiserEnabled{false},
-      renderSunSky{false},
-      cancelFrameOnInteraction{false},
-      // OSPRay objects managed by this class
-      rendererSV{"scivis"},
-      rendererDB{"debug"},
-      // other parameters
-      bgColor{0.f},
-      sunDirection{-0.25f, -1.0f, 0.0f},
-      turbidity{3.f},
-      horizonExtension{0.1f},
-      // GUI options
+    : denoiserAvailable(denoiser),
+      // correctly update GUI options
       scene{g_scenes[whichScene]},
       rendererTypeStr{g_renderers[whichRenderer]},
-      pixelFilterTypeStr{g_pixelFilterTypes[whichPixelFilter]}
+      pixelFilterTypeStr{g_pixelFilterTypes[whichPixelFilter]},
+      // transfer function
+      tfnColorData{
+          vec3f(0.f, 0.0f, 0.f),
+          vec3f(1.f, 0.f, 0.f),
+          vec3f(0.f, 1.f, 1.f),
+          vec3f(1.f, 1.f, 1.f),
+      },
+      tfnOpacityData{
+          {0.f, 0.33f, 0.66f, 1.f},
+      },
+      tfnWidget([&](const tfn::list1f &_colors,
+                    const tfn::list1f &_opacities,
+                    const tfn::range1f &range) {
+        this->tfnColorData.resize(_colors.size() / 3);
+        for (int i = 0; i < _colors.size() / 3; ++i) {
+          this->tfnColorData[i] =
+              vec3f(_colors[3 * i + 0], _colors[3 * i + 1], _colors[3 * i + 2]);
+        }
+        this->tfnOpacityData.resize(_opacities.size() / 2);
+        for (int i = 0; i < _opacities.size() / 2; ++i) {
+          this->tfnOpacityData[i] = _opacities[2 * i + 1];
+        }
+        updateTransferFunction();
+      })
 {
   if (activeWindow != nullptr) {
     throw std::runtime_error("Cannot create more than one GLFWOSPRayWindow!");
@@ -247,11 +258,13 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const vec2i &windowSize, bool denoiser)
   backplate.push_back(vec4f(0.2f, 0.2f, 0.8f, 1.0f));
   backplate.push_back(vec4f(0.4f, 0.2f, 0.4f, 1.0f));
 
-  OSPTextureFormat texFmt = OSP_TEXTURE_RGBA32F;
-  backplateTex.setParam(
-      "data", cpp::CopiedData(backplate.data(), vec2ul(2, 2)));
+  auto texData = cpp::CopiedData(backplate.data(), vec2ul(2, 2));
+  auto texFmt = OSP_TEXTURE_RGBA32F;
+  backplateTex.setParam("data", texData);
   backplateTex.setParam("format", OSP_INT, &texFmt);
   addObjectToCommit(backplateTex.handle());
+
+  updateTransferFunction(); // update before refreshing the scene
 
   refreshScene(true);
 
@@ -506,12 +519,9 @@ void GLFWOSPRayWindow::buildUI()
           nullptr,
           g_renderers.size())) {
     rendererTypeStr = g_renderers[whichRenderer];
-
     if (rendererType == OSPRayRendererType::DEBUGGER)
       whichDebuggerType = 0; // reset UI if switching away from debug renderer
-
     rendererType = convertRendererStrToType(rendererTypeStr);
-
     refreshScene();
   }
 
@@ -602,6 +612,12 @@ void GLFWOSPRayWindow::buildUI()
   }
 
   ImGui::End();
+
+  // TODO checkbox to control widget
+  // TODO simplifies the API
+  if (tfnWidget.drawUI()) {
+    tfnWidget.render();
+  };
 }
 
 void GLFWOSPRayWindow::commitOutstandingHandles()
@@ -619,6 +635,8 @@ void GLFWOSPRayWindow::refreshScene(bool resetCamera)
 {
   auto builder = testing::newBuilder(scene);
   testing::setParam(builder, "rendererType", rendererTypeStr);
+  testing::setParam(builder, "transferFunction", tfnObject);
+
   testing::commit(builder);
 
   world = testing::buildWorld(builder);
@@ -634,6 +652,7 @@ void GLFWOSPRayWindow::refreshScene(bool resetCamera)
   default:
     throw std::runtime_error("invalid renderer chosen!");
   }
+
   // retains a set background color on renderer change
   renderer->setParam("backgroundColor", bgColor);
   addObjectToCommit(renderer->handle());
@@ -661,4 +680,11 @@ void GLFWOSPRayWindow::refreshFrameOperations()
   }
 
   framebuffer.commit();
+}
+
+void GLFWOSPRayWindow::updateTransferFunction()
+{
+  tfnObject.setParam("color", cpp::CopiedData(tfnColorData));
+  tfnObject.setParam("opacity", cpp::CopiedData(tfnOpacityData));
+  addObjectToCommit(tfnObject.handle());
 }

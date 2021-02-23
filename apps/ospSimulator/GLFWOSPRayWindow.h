@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ArcballCamera.h"
+#include "tfn/TransferFunctionWidget.h"
 // glfw
 #include "GLFW/glfw3.h"
 // ospray
@@ -36,29 +37,37 @@ class GLFWOSPRayWindow
  protected:
   void addObjectToCommit(OSPObject obj);
 
+  /* camera control */
   void updateCamera();
-
   void reshape(const vec2i &newWindowSize);
   void motion(const vec2f &position);
-  void display();
+
+  /* transfer function control */
+  void updateTransferFunction();
+
+  /* framebuffer control */
+  void commitOutstandingHandles();
+  void refreshFrameOperations();
+
   void startNewOSPRayFrame();
   void waitOnOSPRayFrame();
-  void updateTitleBar();
-  void buildUI();
-  void commitOutstandingHandles();
+
   void refreshScene(bool resetCamera = false);
-  void refreshFrameOperations();
+
+  void display();
+  void buildUI();
+  void updateTitleBar();
 
   static GLFWOSPRayWindow *activeWindow;
 
   vec2i windowSize;
   vec2f previousMouse;
 
-  bool denoiserAvailable;
-  bool updateFrameOpsNextFrame;
-  bool denoiserEnabled;
-  bool renderSunSky;
-  bool cancelFrameOnInteraction;
+  bool denoiserAvailable{false};
+  bool updateFrameOpsNextFrame{false};
+  bool denoiserEnabled{false};
+  bool renderSunSky{false};
+  bool cancelFrameOnInteraction{false};
 
   // GLFW window instance
   GLFWwindow *glfwWindow = nullptr;
@@ -67,8 +76,8 @@ class GLFWOSPRayWindow
   std::unique_ptr<ArcballCamera> arcballCamera;
 
   // OSPRay objects managed by this class
-  cpp::Renderer rendererSV;
-  cpp::Renderer rendererDB;
+  cpp::Renderer rendererSV{"scivis"};
+  cpp::Renderer rendererDB{"debug"};
   cpp::Renderer *renderer{nullptr};
   cpp::Camera camera{"perspective"};
   cpp::World world;
@@ -76,11 +85,12 @@ class GLFWOSPRayWindow
   cpp::FrameBuffer framebuffer;
   cpp::Future currentFrame;
   cpp::Texture backplateTex{"texture2d"};
+  cpp::TransferFunction tfnObject{"piecewiseLinear"};
 
-  vec3f bgColor;
-  vec3f sunDirection;
-  float turbidity;
-  float horizonExtension;
+  vec3f bgColor{0.f};
+  vec3f sunDirection{-0.25f, -1.0f, 0.0f};
+  float turbidity{3.f};
+  float horizonExtension{0.1f};
 
   std::string scene;
 
@@ -106,4 +116,9 @@ class GLFWOSPRayWindow
 
   // FPS measurement of last frame
   float latestFPS{0.f};
+
+  // transfer function widget for volume rendering
+  std::vector<vec3f> tfnColorData;
+  std::vector<float> tfnOpacityData;
+  tfn::TransferFunctionWidget tfnWidget;
 };

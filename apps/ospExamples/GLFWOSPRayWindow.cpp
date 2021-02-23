@@ -683,7 +683,6 @@ void GLFWOSPRayWindow::commitOutstandingHandles()
   if (!handles.empty()) {
     for (auto &h : handles)
       ospCommit(h);
-    // TODO reset accumulation
     framebuffer.resetAccumulation();
   }
 }

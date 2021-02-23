@@ -54,6 +54,7 @@ struct RawVolume : public detail::Builder
   float densityScale{10.f};
   float anisotropy{0.f};
   float gradientShadingScale{1.f};
+  cpp::TransferFunction transferFunction;
 };
 
 // Inlined definitions ////////////////////////////////////////////////////////
@@ -118,61 +119,25 @@ void RawVolume::commit()
   anisotropy = getParam<float>("anisotropy", 0.f);
   gradientShadingScale =
       getParam<float>("gradientShadingScale", gradientShadingScale);
+  transferFunction = getParam<cpp::TransferFunction>(
+      "transferFunction", makeTransferFunction({0.f, 1.f}));
 }
 
 cpp::Group RawVolume::buildGroup() const
 {
   cpp::Group group;
 
-  cpp::TransferFunction tfn0 = makeTransferFunction({0.f, 1.f});
-
-  cpp::TransferFunction tfn1("piecewiseLinear");
-  {
-    std::vector<vec3f> colors = {
-        vec3f(0.f, 0.0f, 0.f),
-        vec3f(1.f, 0.f, 0.f),
-        vec3f(0.f, 1.f, 1.f),
-        vec3f(1.f, 1.f, 1.f),
-    };
-
-    std::vector<float> opacities = {
-        {0.f, 0.33f, 0.66f, 1.f},
-    };
-
-    tfn1.setParam("color", cpp::CopiedData(colors));
-    tfn1.setParam("opacity", cpp::CopiedData(opacities));
-    tfn1.commit();
-  }
-
-  cpp::TransferFunction tfn2("piecewiseLinear");
-  {
-    std::vector<vec3f> colors = {
-        vec3f(0.0, 0.0, 0.0),
-        vec3f(1.0, 0.65, 0.0),
-        vec3f(0.12, 0.6, 1.0),
-        vec3f(1.0, 1.0, 1.0),
-    };
-
-    std::vector<float> opacities = {
-        {0.f, 0.33f, 0.66f, 1.f},
-    };
-
-    tfn2.setParam("color", cpp::CopiedData(colors));
-    tfn2.setParam("opacity", cpp::CopiedData(opacities));
-    tfn2.commit();
-  }
-
   std::vector<cpp::VolumetricModel> volumetricModels;
   {
     volumetricModels.emplace_back(createVolumetricModel(
         createProceduralVolume(
             [](const vec3f &p) { return turbulentSphere(p, 1.f); }),
-        tfn0));
+        transferFunction));
 
     volumetricModels.emplace_back(createVolumetricModel(
         createProceduralVolume(
             [](const vec3f &p) { return turbulentTorus(p, 1.f, 0.375f); }),
-        tfn0));
+        transferFunction));
 
     for (auto volumetricModel : volumetricModels)
       volumetricModel.commit();
