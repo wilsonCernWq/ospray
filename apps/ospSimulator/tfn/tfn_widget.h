@@ -1,39 +1,122 @@
 // ======================================================================== //
-// Copyright SCI Institute, University of Utah, 2018
+// Copyright Qi Wu, since 2019                                              //
+// Copyright SCI Institute, University of Utah, 2018                        //
 // ======================================================================== //
+#pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <stdexcept>
+#include "GLFW/glfw3.h"
+
+#include "default_maps.h"
+#include "helper.h"
+#include "tfn_core.h"
 
 #include <imconfig.h>
 #include <imgui.h>
 
-#include "DefaultTransferFunctionMaps.h"
-#include "HelperFunctions.h"
-#include "TransferFunctionWidget.h"
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <fstream>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
-using namespace tfn;
-// using namespace tfn_widget;
+namespace tfn {
 
-TransferFunctionWidget::~TransferFunctionWidget()
+class TFN_MODULE_INTERFACE TransferFunctionWidget
 {
-  if (tfn_palette) {
+ private:
+  using setter = std::function<void(const list1f &, const list1f &, const vec2f &)>;
+
+ private:
+  /* Variables Controlled by Users */
+  setter _setter_cb;
+  vec2f valueRange; //< the current value range controlled by the user
+  vec2f defaultRange; //< the default value range being displayed on the GUI
+  /*
+   * Flags
+   *   tfn_changed: Track if the function changed and must be re-uploaded. We start by marking it changed to upload the initial palette
+   */
+  bool tfn_changed{true};
+  /*
+   * OpenGL Variables
+   *   tfn_palette: The 2d palette texture on the GPU for displaying the color map preview in the UI.
+   */
+  GLuint tfn_palette;
+
+  // TODO: to be cleaned
+  // TODO
+  // This MAYBE the correct way of doing this
+  /*       struct TFN { */
+  /* 	std::vector<ColorPoint>   colors; */
+  /* 	std::vector<OpacityPoint_Linear> opacity; */
+  /* 	tfn::TransferFunction reader; */
+  /*       }; */
+  std::vector<tfn::TransferFunction> tfn_readers;
+
+  // TFNs information:
+  std::vector<bool> tfn_editable;
+  std::vector<std::vector<ColorPoint>> tfn_c_list;
+  std::vector<std::vector<OpacityPoint_Linear>> tfn_o_list;
+
+  std::vector<ColorPoint> *tfn_c;
+  std::vector<OpacityPoint_Linear> *tfn_o;
+  std::vector<std::string> tfn_names; // name of TFNs in the dropdown menu
+
+  // State Variables:
+  // TODO: those variables might be unnecessary
+  bool tfn_edit;
+  std::vector<char> tfn_text_buffer; // The filename input text buffer
+
+  // Meta Data
+  // * Interpolated trasnfer function size
+  // int tfn_w = 256;
+  // int tfn_h = 1; // TODO: right now we onlu support 1D TFN
+
+  // * The selected transfer function being shown
+  int tfn_selection;
+
+ public:
+  ~TransferFunctionWidget();
+  TransferFunctionWidget(const setter &);
+  TransferFunctionWidget(const TransferFunctionWidget &);
+  TransferFunctionWidget &operator=(const TransferFunctionWidget &);
+  /* Setup the default data value range for the transfer function */
+  void setDefaultRange(const float &a, const float &b);
+  /* Draw the transfer function editor widget, returns true if the transfer function changed */
+  bool drawUI(bool *p_open = NULL);
+  /* Render the transfer function to a 1D texture that can be applied to volume data */
+  void render(size_t tfn_w = 256, size_t tfn_h = 1);
+  /** Load the transfer function in the file passed and set it active */
+  void load(const std::string &fileName);
+  /** Save the current transfer function out to the file */
+  void save(const std::string &fileName) const;
+
+ private:
+  /** Namely, make a selected transfer function table current */
+  void setTfn(int);
+  /** Load all the pre-defined transfer function maps */
+  void setDefaultTfns();
+  /** Draw the Tfn Editor in a window */
+  void drawTfnEditor(const float margin, const float height);
+  tfn::vec4f drawTfnEditor_PreviewTexture(void *_draw_list, const tfn::vec3f &, const tfn::vec2f &, const tfn::vec4f &);
+  tfn::vec4f drawTfnEditor_ColorControlPoints(void *_draw_list, const tfn::vec3f &, const tfn::vec2f &, const tfn::vec4f &, const float &);
+  tfn::vec4f drawTfnEditor_OpacityControlPoints(void *_draw_list, const tfn::vec3f &, const tfn::vec2f &, const tfn::vec4f &, const float &);
+  tfn::vec4f drawTfnEditor_InteractionBlocks(void *_draw_list, const tfn::vec3f &, const tfn::vec2f &, const tfn::vec4f &, const float &, const float &);
+};
+
+inline TransferFunctionWidget::~TransferFunctionWidget()
+{
+  if (tfn_palette)
     glDeleteTextures(1, &tfn_palette);
-  }
 }
 
-TransferFunctionWidget::TransferFunctionWidget(const setter &fcn)
-    : tfn_selection(0),
-      tfn_changed(true),
-      tfn_palette(0),
-      tfn_text_buffer(512, '\0'),
-      tfn_sample_set(fcn),
-      valueRange{0.f, 0.f},
-      defaultRange{0.f, 0.f}
+inline TransferFunctionWidget::TransferFunctionWidget(const setter &fcn)
+    : tfn_selection(0), tfn_changed(true), tfn_palette(0), tfn_text_buffer(512, '\0'), _setter_cb(fcn), valueRange{0.f, 0.f}, defaultRange{0.f, 0.f}
 {
   setDefaultTfns();
   tfn_c = &(tfn_c_list[tfn_selection]);
@@ -41,8 +124,7 @@ TransferFunctionWidget::TransferFunctionWidget(const setter &fcn)
   tfn_edit = tfn_editable[tfn_selection];
 }
 
-TransferFunctionWidget::TransferFunctionWidget(
-    const TransferFunctionWidget &core)
+inline TransferFunctionWidget::TransferFunctionWidget(const TransferFunctionWidget &core)
     : tfn_c_list(core.tfn_c_list),
       tfn_o_list(core.tfn_o_list),
       tfn_readers(core.tfn_readers),
@@ -50,7 +132,7 @@ TransferFunctionWidget::TransferFunctionWidget(
       tfn_changed(true),
       tfn_palette(0),
       tfn_text_buffer(512, '\0'),
-      tfn_sample_set(core.tfn_sample_set),
+      _setter_cb(core._setter_cb),
       valueRange(core.valueRange),
       defaultRange(core.defaultRange)
 {
@@ -59,8 +141,7 @@ TransferFunctionWidget::TransferFunctionWidget(
   tfn_edit = tfn_editable[tfn_selection];
 }
 
-TransferFunctionWidget &TransferFunctionWidget::operator=(
-    const TransferFunctionWidget &core)
+inline TransferFunctionWidget &TransferFunctionWidget::operator=(const TransferFunctionWidget &core)
 {
   if (this == &core) {
     return *this;
@@ -71,15 +152,13 @@ TransferFunctionWidget &TransferFunctionWidget::operator=(
   tfn_selection = core.tfn_selection;
   tfn_changed = true;
   tfn_palette = 0;
-  tfn_sample_set = core.tfn_sample_set;
-  valueRange[0] = core.valueRange[0];
-  valueRange[1] = core.valueRange[1];
-  defaultRange[0] = core.defaultRange[0];
-  defaultRange[1] = core.defaultRange[1];
+  this->_setter_cb = core._setter_cb;
+  valueRange = core.valueRange;
+  defaultRange = core.defaultRange;
   return *this;
 }
 
-void TransferFunctionWidget::setTfn(int selection)
+inline void TransferFunctionWidget::setTfn(int selection)
 {
   if (tfn_selection != selection) {
     tfn_selection = selection; // Remember to update other constructors also
@@ -90,15 +169,14 @@ void TransferFunctionWidget::setTfn(int selection)
   }
 }
 
-void TransferFunctionWidget::setDefaultRange(const float &a, const float &b)
+inline void TransferFunctionWidget::setDefaultRange(const float &a, const float &b)
 {
-  valueRange[0] = defaultRange[0] = a;
-  valueRange[1] = defaultRange[1] = b;
+  valueRange.x = defaultRange.x = a;
+  valueRange.y = defaultRange.y = b;
   tfn_changed = true;
 }
 
-tfn::vec4f TransferFunctionWidget::drawTfnEditor_PreviewTexture(
-    void *_draw_list,
+inline tfn::vec4f TransferFunctionWidget::drawTfnEditor_PreviewTexture(void *_draw_list,
     const tfn::vec3f &margin, /* left, right, spacing*/
     const tfn::vec2f &size,
     const tfn::vec4f &cursor)
@@ -110,16 +188,11 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_PreviewTexture(
   // TODO: more generic way of drawing arbitary splats
   for (int i = 0; i < tfn_o->size() - 1; ++i) {
     std::vector<ImVec2> polyline;
-    polyline.emplace_back(
-        cursor.x + margin.x + (*tfn_o)[i].p * size.x, cursor.y + size.y);
-    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i].p * size.x,
-        cursor.y + (1.f - (*tfn_o)[i].a) * size.y);
-    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i + 1].p * size.x + 1,
-        cursor.y + (1.f - (*tfn_o)[i + 1].a) * size.y);
-    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i + 1].p * size.x + 1,
-        cursor.y + size.y);
-    draw_list->AddConvexPolyFilled(
-        polyline.data(), polyline.size(), 0xFFD8D8D8, true);
+    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i].p * size.x, cursor.y + size.y);
+    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i].p * size.x, cursor.y + (1.f - (*tfn_o)[i].a) * size.y);
+    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i + 1].p * size.x + 1, cursor.y + (1.f - (*tfn_o)[i + 1].a) * size.y);
+    polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i + 1].p * size.x + 1, cursor.y + size.y);
+    draw_list->AddConvexPolyFilled(polyline.data(), polyline.size(), 0xFFD8D8D8, true);
   }
   tfn::vec4f new_cursor = {
       cursor.x,
@@ -131,8 +204,7 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_PreviewTexture(
   return new_cursor;
 }
 
-tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(
-    void *_draw_list,
+inline tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(void *_draw_list,
     const tfn::vec3f &margin, /* left, right, spacing*/
     const tfn::vec2f &size,
     const tfn::vec4f &cursor,
@@ -140,32 +212,23 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(
 {
   auto draw_list = (ImDrawList *)_draw_list;
   // draw circle background
-  draw_list->AddRectFilled(ImVec2(cursor.x + margin.x, cursor.y - margin.z),
-      ImVec2(
-          cursor.x + margin.x + size.x, cursor.y - margin.x + 2.5 * color_len),
-      0xFF474646);
+  draw_list->AddRectFilled(
+      ImVec2(cursor.x + margin.x, cursor.y - margin.z), ImVec2(cursor.x + margin.x + size.x, cursor.y - margin.x + 2.5 * color_len), 0xFF474646);
   // draw circles
   for (int i = tfn_c->size() - 1; i >= 0; --i) {
     const ImVec2 pos(cursor.x + size.x * (*tfn_c)[i].p + margin.x, cursor.y);
     ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y));
     // white background
-    draw_list->AddTriangleFilled(ImVec2(pos.x - 0.5f * color_len, pos.y),
-        ImVec2(pos.x + 0.5f * color_len, pos.y),
-        ImVec2(pos.x, pos.y - color_len),
-        0xFFD8D8D8);
-    draw_list->AddCircleFilled(
-        ImVec2(pos.x, pos.y + 0.5f * color_len), color_len, 0xFFD8D8D8);
+    draw_list->AddTriangleFilled(
+        ImVec2(pos.x - 0.5f * color_len, pos.y), ImVec2(pos.x + 0.5f * color_len, pos.y), ImVec2(pos.x, pos.y - color_len), 0xFFD8D8D8);
+    draw_list->AddCircleFilled(ImVec2(pos.x, pos.y + 0.5f * color_len), color_len, 0xFFD8D8D8);
     // draw picker
-    ImVec4 picked_color =
-        ImColor((*tfn_c)[i].r, (*tfn_c)[i].g, (*tfn_c)[i].b, 1.f);
-    ImGui::SetCursorScreenPos(
-        ImVec2(pos.x - color_len, pos.y + 1.5f * color_len));
+    ImVec4 picked_color = ImColor((*tfn_c)[i].r, (*tfn_c)[i].g, (*tfn_c)[i].b, 1.f);
+    ImGui::SetCursorScreenPos(ImVec2(pos.x - color_len, pos.y + 1.5f * color_len));
     if (ImGui::ColorEdit4(("##ColorPicker" + std::to_string(i)).c_str(),
             (float *)&picked_color,
-            ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_NoInputs
-                | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview
-                | ImGuiColorEditFlags_NoOptions
-                | ImGuiColorEditFlags_NoTooltip)) {
+            ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaPreview
+                | ImGuiColorEditFlags_NoOptions | ImGuiColorEditFlags_NoTooltip)) {
       (*tfn_c)[i].r = picked_color.x;
       (*tfn_c)[i].g = picked_color.y;
       (*tfn_c)[i].b = picked_color.z;
@@ -178,12 +241,8 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(
       int cb = static_cast<int>(picked_color.z * 255);
       // setup tooltip
       ImGui::BeginTooltip();
-      ImVec2 sz(ImGui::GetFontSize() * 4 + ImGui::GetStyle().FramePadding.y * 2,
-          ImGui::GetFontSize() * 4 + ImGui::GetStyle().FramePadding.y * 2);
-      ImGui::ColorButton("##PreviewColor",
-          picked_color,
-          ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_AlphaPreview,
-          sz);
+      ImVec2 sz(ImGui::GetFontSize() * 4 + ImGui::GetStyle().FramePadding.y * 2, ImGui::GetFontSize() * 4 + ImGui::GetStyle().FramePadding.y * 2);
+      ImGui::ColorButton("##PreviewColor", picked_color, ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_AlphaPreview, sz);
       ImGui::SameLine();
       ImGui::Text(
           "Left click to edit\n"
@@ -204,15 +263,11 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(
   for (int i = 0; i < tfn_c->size(); ++i) {
     const ImVec2 pos(cursor.x + size.x * (*tfn_c)[i].p + margin.x, cursor.y);
     // draw button
-    ImGui::SetCursorScreenPos(
-        ImVec2(pos.x - color_len, pos.y - 0.5 * color_len));
-    ImGui::InvisibleButton(("##ColorControl-" + std::to_string(i)).c_str(),
-        ImVec2(2.f * color_len, 2.f * color_len));
+    ImGui::SetCursorScreenPos(ImVec2(pos.x - color_len, pos.y - 0.5 * color_len));
+    ImGui::InvisibleButton(("##ColorControl-" + std::to_string(i)).c_str(), ImVec2(2.f * color_len, 2.f * color_len));
     // dark highlight
     ImGui::SetCursorScreenPos(ImVec2(pos.x - color_len, pos.y));
-    draw_list->AddCircleFilled(ImVec2(pos.x, pos.y + 0.5f * color_len),
-        0.5f * color_len,
-        ImGui::IsItemHovered() ? 0xFF051C33 : 0xFFBCBCBC);
+    draw_list->AddCircleFilled(ImVec2(pos.x, pos.y + 0.5f * color_len), 0.5f * color_len, ImGui::IsItemHovered() ? 0xFF051C33 : 0xFFBCBCBC);
     // delete color point
     if (ImGui::IsMouseDoubleClicked(1) && ImGui::IsItemHovered()) {
       if (i > 0 && i < tfn_c->size() - 1) {
@@ -225,8 +280,7 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(
       ImVec2 delta = ImGui::GetIO().MouseDelta;
       if (i > 0 && i < tfn_c->size() - 1) {
         (*tfn_c)[i].p += delta.x / size.x;
-        (*tfn_c)[i].p =
-            clamp((*tfn_c)[i].p, (*tfn_c)[i - 1].p, (*tfn_c)[i + 1].p);
+        (*tfn_c)[i].p = clamp((*tfn_c)[i].p, (*tfn_c)[i - 1].p, (*tfn_c)[i + 1].p);
       }
       tfn_changed = true;
     }
@@ -234,8 +288,7 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_ColorControlPoints(
   return vec4f();
 }
 
-tfn::vec4f TransferFunctionWidget::drawTfnEditor_OpacityControlPoints(
-    void *_draw_list,
+inline tfn::vec4f TransferFunctionWidget::drawTfnEditor_OpacityControlPoints(void *_draw_list,
     const tfn::vec3f &margin, /* left, right, spacing*/
     const tfn::vec2f &size,
     const tfn::vec4f &cursor,
@@ -244,20 +297,16 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_OpacityControlPoints(
   auto draw_list = (ImDrawList *)_draw_list;
   // draw circles
   for (int i = 0; i < tfn_o->size(); ++i) {
-    const ImVec2 pos(cursor.x + size.x * (*tfn_o)[i].p + margin.x,
-        cursor.y - size.y * (*tfn_o)[i].a - margin.z);
+    const ImVec2 pos(cursor.x + size.x * (*tfn_o)[i].p + margin.x, cursor.y - size.y * (*tfn_o)[i].a - margin.z);
     ImGui::SetCursorScreenPos(ImVec2(pos.x - opacity_len, pos.y - opacity_len));
-    ImGui::InvisibleButton(("##OpacityControl-" + std::to_string(i)).c_str(),
-        ImVec2(2.f * opacity_len, 2.f * opacity_len));
+    ImGui::InvisibleButton(("##OpacityControl-" + std::to_string(i)).c_str(), ImVec2(2.f * opacity_len, 2.f * opacity_len));
     ImGui::SetCursorScreenPos(ImVec2(cursor.x, cursor.y));
     // dark bounding box
     draw_list->AddCircleFilled(pos, opacity_len, 0xFF565656);
     // white background
     draw_list->AddCircleFilled(pos, 0.8f * opacity_len, 0xFFD8D8D8);
     // highlight
-    draw_list->AddCircleFilled(pos,
-        0.6f * opacity_len,
-        ImGui::IsItemHovered() ? 0xFF051c33 : 0xFFD8D8D8);
+    draw_list->AddCircleFilled(pos, 0.6f * opacity_len, ImGui::IsItemHovered() ? 0xFF051c33 : 0xFFD8D8D8);
     // delete opacity point
     if (ImGui::IsMouseDoubleClicked(1) && ImGui::IsItemHovered()) {
       if (i > 0 && i < tfn_o->size() - 1) {
@@ -270,8 +319,7 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_OpacityControlPoints(
       (*tfn_o)[i].a = clamp((*tfn_o)[i].a, 0.0f, 1.0f);
       if (i > 0 && i < tfn_o->size() - 1) {
         (*tfn_o)[i].p += delta.x / size.x;
-        (*tfn_o)[i].p =
-            clamp((*tfn_o)[i].p, (*tfn_o)[i - 1].p, (*tfn_o)[i + 1].p);
+        (*tfn_o)[i].p = clamp((*tfn_o)[i].p, (*tfn_o)[i - 1].p, (*tfn_o)[i + 1].p);
       }
       tfn_changed = true;
     }
@@ -279,8 +327,7 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_OpacityControlPoints(
   return vec4f();
 }
 
-tfn::vec4f TransferFunctionWidget::drawTfnEditor_InteractionBlocks(
-    void *_draw_list,
+inline tfn::vec4f TransferFunctionWidget::drawTfnEditor_InteractionBlocks(void *_draw_list,
     const tfn::vec3f &margin, /* left, right, spacing*/
     const tfn::vec2f &size,
     const tfn::vec4f &cursor,
@@ -293,12 +340,10 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_InteractionBlocks(
   const float scroll_y = ImGui::GetScrollY();
   auto draw_list = (ImDrawList *)_draw_list;
   ImGui::SetCursorScreenPos(ImVec2(cursor.x + margin.x, cursor.y - margin.z));
-  ImGui::InvisibleButton(
-      "##tfn_palette_color", ImVec2(size.x, 2.5 * color_len));
+  ImGui::InvisibleButton("##tfn_palette_color", ImVec2(size.x, 2.5 * color_len));
   // add color point
   if (tfn_edit && ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {
-    const float p = clamp(
-        (mouse_x - cursor.x - margin.x - scroll_x) / (float)size.x, 0.f, 1.f);
+    const float p = clamp((mouse_x - cursor.x - margin.x - scroll_x) / (float)size.x, 0.f, 1.f);
     const int ir = find_idx(*tfn_c, p);
     const int il = ir - 1;
     const float pr = (*tfn_c)[ir].p;
@@ -314,15 +359,12 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_InteractionBlocks(
     tfn_changed = true;
   }
   // draw background interaction
-  ImGui::SetCursorScreenPos(
-      ImVec2(cursor.x + margin.x, cursor.y - size.y - margin.z));
+  ImGui::SetCursorScreenPos(ImVec2(cursor.x + margin.x, cursor.y - size.y - margin.z));
   ImGui::InvisibleButton("##tfn_palette_opacity", ImVec2(size.x, size.y));
   // add opacity point
   if (ImGui::IsMouseDoubleClicked(0) && ImGui::IsItemHovered()) {
-    const float x = clamp(
-        (mouse_x - cursor.x - margin.x - scroll_x) / (float)size.x, 0.f, 1.f);
-    const float y = clamp(
-        -(mouse_y - cursor.y + margin.x - scroll_y) / (float)size.y, 0.f, 1.f);
+    const float x = clamp((mouse_x - cursor.x - margin.x - scroll_x) / (float)size.x, 0.f, 1.f);
+    const float y = clamp(-(mouse_y - cursor.y + margin.x - scroll_y) / (float)size.y, 0.f, 1.f);
     const int idx = find_idx(*tfn_o, x);
     OpacityPoint_Linear pt;
     pt.p = x, pt.a = y;
@@ -332,8 +374,7 @@ tfn::vec4f TransferFunctionWidget::drawTfnEditor_InteractionBlocks(
   return vec4f();
 }
 
-void TransferFunctionWidget::drawTfnEditor(
-    const float margin, const float height)
+inline void TransferFunctionWidget::drawTfnEditor(const float margin, const float height)
 {
   // style
   ImDrawList *draw_list = ImGui::GetWindowDrawList();
@@ -345,10 +386,7 @@ void TransferFunctionWidget::drawTfnEditor(
   // debug
   const tfn::vec3f m{margin, margin, margin};
   const tfn::vec2f s{width, height};
-  tfn::vec4f c = {canvas_x,
-      canvas_y,
-      ImGui::GetContentRegionAvail().x,
-      ImGui::GetContentRegionAvail().y};
+  tfn::vec4f c = {canvas_x, canvas_y, ImGui::GetContentRegionAvail().x, ImGui::GetContentRegionAvail().y};
   // draw preview texture
   c = drawTfnEditor_PreviewTexture(draw_list, m, s, c);
   canvas_y = c.y;
@@ -369,12 +407,11 @@ void TransferFunctionWidget::drawTfnEditor(
   ImGui::SetCursorScreenPos(ImVec2(canvas_x, canvas_y));
 }
 
-bool TransferFunctionWidget::drawUI(bool *p_open)
+inline bool TransferFunctionWidget::drawUI(bool *p_open)
 {
   // ImGui::ShowTestWindow();
   //------------ Start a Window -----------------------
-  ImGui::SetNextWindowSizeConstraints(
-      ImVec2(400, 250), ImVec2(FLT_MAX, FLT_MAX));
+  ImGui::SetNextWindowSizeConstraints(ImVec2(400, 250), ImVec2(FLT_MAX, FLT_MAX));
   if (!ImGui::Begin("Transfer Function Widget", p_open)) {
     ImGui::End();
     return false;
@@ -432,16 +469,12 @@ bool TransferFunctionWidget::drawUI(bool *p_open)
       }
     }
     // display transfer function value range
-    if (defaultRange[1] > defaultRange[0]) {
-      if (ImGui::DragFloat2(" value range",
-              valueRange.data(),
-              (defaultRange[1] - defaultRange[0]) / 1000.f,
-              defaultRange[0],
-              defaultRange[1])) {
+    if (defaultRange.y > defaultRange.x) {
+      if (ImGui::DragFloat2(" value range", (float *)&valueRange, (defaultRange.y - defaultRange.x) / 1000.f, defaultRange.x, defaultRange.y)) {
         tfn_changed = true;
       }
     } else {
-      if (ImGui::DragFloat2(" value range", valueRange.data())) {
+      if (ImGui::DragFloat2(" value range", (float *)&valueRange)) {
         tfn_changed = true;
       }
     }
@@ -455,21 +488,13 @@ bool TransferFunctionWidget::drawUI(bool *p_open)
   return true;
 }
 
-void renderTFNTexture(GLuint &tex, int width, int height)
+inline void renderTFNTexture(GLuint &tex, int width, int height)
 {
   GLint prevBinding = 0;
   glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevBinding);
   glGenTextures(1, &tex);
   glBindTexture(GL_TEXTURE_2D, tex);
-  glTexImage2D(GL_TEXTURE_2D,
-      0,
-      GL_RGBA8,
-      width,
-      height,
-      0,
-      GL_RGBA,
-      GL_UNSIGNED_BYTE,
-      0);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -479,7 +504,7 @@ void renderTFNTexture(GLuint &tex, int width, int height)
   }
 }
 
-void TransferFunctionWidget::render(size_t tfn_w, size_t tfn_h)
+inline void TransferFunctionWidget::render(size_t tfn_w, size_t tfn_h)
 {
   // Upload to GL if the transfer function has changed
   if (!tfn_palette) {
@@ -533,25 +558,17 @@ void TransferFunctionWidget::render(size_t tfn_w, size_t tfn_h)
     // Render palette again
     glBindTexture(GL_TEXTURE_2D, tfn_palette);
     // LOGICALLY we need to resize texture of texture is resized
-    glTexImage2D(GL_TEXTURE_2D,
-        0,
-        GL_RGBA8,
-        tfn_w,
-        tfn_h,
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        static_cast<const void *>(palette.data()));
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, tfn_w, tfn_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, static_cast<const void *>(palette.data()));
     // Restore previous binded texture
     if (prevBinding) {
       glBindTexture(GL_TEXTURE_2D, prevBinding);
     }
-    tfn_sample_set(colors, alpha, valueRange);
+    this->_setter_cb(colors, alpha, valueRange);
     tfn_changed = false;
   }
 }
 
-void TransferFunctionWidget::load(const std::string &fileName)
+inline void TransferFunctionWidget::load(const std::string &fileName)
 {
   tfn::TransferFunction loaded(fileName);
   tfn_readers.emplace_back(fileName);
@@ -589,7 +606,7 @@ void TransferFunctionWidget::load(const std::string &fileName)
   tfn_changed = true;
 }
 
-void tfn::TransferFunctionWidget::save(const std::string &fileName) const
+inline void tfn::TransferFunctionWidget::save(const std::string &fileName) const
 {
   // // For opacity we can store the associated data value and only have 1 line,
   // // so just save it out directly
@@ -640,3 +657,23 @@ void tfn::TransferFunctionWidget::save(const std::string &fileName) const
   // output.save(fileName);
   ;
 }
+
+inline void TransferFunctionWidget::setDefaultTfns()
+{
+  for (auto &ct : _predef_color_table_) {
+    tfn_c_list.emplace_back(ct.second.size() / 4);
+    for (size_t i = 0; i < ct.second.size() / 4; ++i) {
+      tfn_c_list.back()[i] = ColorPoint(ct.second[i * 4], ct.second[i * 4 + 1], ct.second[i * 4 + 2], ct.second[i * 4 + 3]);
+    }
+    tfn_o_list.emplace_back(5);
+    tfn_o_list.back()[0] = OpacityPoint_Linear(0.00f, 0.00f);
+    tfn_o_list.back()[1] = OpacityPoint_Linear(0.25f, 0.25f);
+    tfn_o_list.back()[2] = OpacityPoint_Linear(0.50f, 0.50f);
+    tfn_o_list.back()[3] = OpacityPoint_Linear(0.75f, 0.75f);
+    tfn_o_list.back()[4] = OpacityPoint_Linear(1.00f, 1.00f);
+    tfn_editable.push_back(ct.second.size() < 40);
+    tfn_names.push_back(ct.first);
+  }
+};
+
+} // namespace tfn

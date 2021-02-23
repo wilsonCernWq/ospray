@@ -4,7 +4,6 @@
 #pragma once
 
 #include "ArcballCamera.h"
-#include "tfn/TransferFunctionWidget.h"
 // glfw
 #include "GLFW/glfw3.h"
 // ospray
@@ -12,6 +11,17 @@
 #include "rkcommon/containers/TransactionalBuffer.h"
 // std
 #include <functional>
+
+namespace tfn {
+typedef rkcommon::math::vec2f vec2f;
+typedef rkcommon::math::vec2i vec2i;
+typedef rkcommon::math::vec3f vec3f;
+typedef rkcommon::math::vec3i vec3i;
+typedef rkcommon::math::vec4f vec4f;
+typedef rkcommon::math::vec4i vec4i;
+}
+#define TFN_MODULE_EXTERNAL_VECTOR_TYPES
+#include "tfn/tfn_widget.h"
 
 using namespace rkcommon::math;
 using namespace ospray;

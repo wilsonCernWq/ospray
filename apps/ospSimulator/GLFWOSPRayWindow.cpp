@@ -150,7 +150,7 @@ GLFWOSPRayWindow::GLFWOSPRayWindow(const vec2i &windowSize, bool denoiser)
       },
       tfnWidget([&](const tfn::list1f &_colors,
                     const tfn::list1f &_opacities,
-                    const tfn::range1f &range) {
+                    const tfn::vec2f &range) {
         this->tfnColorData.resize(_colors.size() / 3);
         for (int i = 0; i < _colors.size() / 3; ++i) {
           this->tfnColorData[i] =
