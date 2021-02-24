@@ -14,25 +14,33 @@ inline const T &clamp(const T &v, const T &lo, const T &hi)
   return (v < lo) ? lo : (hi < v ? hi : v);
 }
 
+// BUG when p == 1.0 ?
 template <typename T>
 inline int find_idx(const T &A, float p, int l = -1, int r = -1)
 {
+  assert(A.size() > 0);
   l = l == -1 ? 0 : l;
-  r = r == -1 ? A.size() - 1 : r;
-  int m = (r + l) / 2;
-  if (A[l].p > p) {
-    return l;
-  } else if (A[r].p <= p) {
-    return r + 1;
-  } else if ((m == l) || (m == r)) {
-    return m + 1;
-  } else {
-    if (A[m].p <= p) {
-      return find_idx(A, p, m, r);
+  r = r == -1 ? (int)(A.size() - 1) : r;
+  tfn::vec2i L{l, l + 1};
+  tfn::vec2i R{r - 1, r};
+  while (L.y <= R.x) { /* do not overlap */
+    tfn::vec2i M;
+    M.x = (R.x + L.x) / 2;
+    M.y = (R.y + L.y) / 2;
+    assert(M.y - M.x == 1);
+    if (A[M.y].p < p) {
+      L.x = M.x + 1;
+      L.y = M.y + 1;
+    } else if (p < A[M.x].p) {
+      R.x = M.x - 1;
+      R.y = M.y - 1;
     } else {
-      return find_idx(A, p, l, m);
+      return M.y;
     }
   }
+  assert(L.x == R.x);
+  assert(L.y == R.y);
+  return R.y;
 }
 
 inline float lerp(const float &l, const float &r, const float &pl, const float &pr, const float &p)

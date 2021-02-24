@@ -6,9 +6,9 @@
 
 #include "GLFW/glfw3.h"
 
-#include "default_maps.h"
+#include "default.h"
 #include "helper.h"
-#include "tfn_core.h"
+#include "core.h"
 
 #include <imconfig.h>
 #include <imgui.h>
@@ -192,7 +192,11 @@ inline tfn::vec4f TransferFunctionWidget::drawTfnEditor_PreviewTexture(void *_dr
     polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i].p * size.x, cursor.y + (1.f - (*tfn_o)[i].a) * size.y);
     polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i + 1].p * size.x + 1, cursor.y + (1.f - (*tfn_o)[i + 1].a) * size.y);
     polyline.emplace_back(cursor.x + margin.x + (*tfn_o)[i + 1].p * size.x + 1, cursor.y + size.y);
+#ifdef IMGUI_VERSION_NUM
+    draw_list->AddConvexPolyFilled(polyline.data(), polyline.size(), 0xFFD8D8D8/*, true*/);
+#else
     draw_list->AddConvexPolyFilled(polyline.data(), polyline.size(), 0xFFD8D8D8, true);
+#endif
   }
   tfn::vec4f new_cursor = {
       cursor.x,

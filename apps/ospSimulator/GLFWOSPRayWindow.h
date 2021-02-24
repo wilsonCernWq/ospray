@@ -21,7 +21,7 @@ typedef rkcommon::math::vec4f vec4f;
 typedef rkcommon::math::vec4i vec4i;
 }
 #define TFN_MODULE_EXTERNAL_VECTOR_TYPES
-#include "tfn/tfn_widget.h"
+#include "tfn/widget.h"
 
 using namespace rkcommon::math;
 using namespace ospray;
