@@ -512,10 +512,10 @@ inline void TransferFunctionWidget::render(size_t tfn_w, size_t tfn_h)
 {
   // Upload to GL if the transfer function has changed
   if (!tfn_palette) {
-    std::cout << "render" << std::endl;
+    // std::cout << "render" << std::endl;
     renderTFNTexture(tfn_palette, tfn_w, tfn_h);
   } else {
-    std::cerr << "not render" << std::endl;
+    // std::cerr << "not render" << std::endl;
   }
 
   // Update texture color
