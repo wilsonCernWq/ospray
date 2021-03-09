@@ -12,8 +12,6 @@ find_package(glfw3 REQUIRED)
 
 add_executable(ospSimulator
   ${OSPRAY_RESOURCE}
-  # tfn/TransferFunctionModule.cpp
-  # tfn/TransferFunctionWidget.cpp
   GLFWOSPRayWindow.cpp
   imgui_impl_glfw_gl3.cpp
   ospSimulator.cpp

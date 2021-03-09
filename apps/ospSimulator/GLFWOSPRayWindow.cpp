@@ -420,6 +420,12 @@ void GLFWOSPRayWindow::display()
 
     framebuffer.unmap(fb);
 
+    ++frameCounter;
+    /* HACK one way to forget about the first frame */
+    if (frameCounter == 1) {
+      framebuffer.resetAccumulation();
+    }
+
     commitOutstandingHandles();
 
     startNewOSPRayFrame();
@@ -626,8 +632,8 @@ void GLFWOSPRayWindow::commitOutstandingHandles()
   if (!handles.empty()) {
     for (auto &h : handles)
       ospCommit(h);
-    // TODO reset accumulation
     framebuffer.resetAccumulation();
+    frameCounter = 0;
   }
 }
 
@@ -636,7 +642,7 @@ void GLFWOSPRayWindow::refreshScene(bool resetCamera)
   auto builder = testing::newBuilder(scene);
   testing::setParam(builder, "rendererType", rendererTypeStr);
   testing::setParam(builder, "transferFunction", tfnObject);
-
+  testing::setParam(builder, "frameCounter", &frameCounter);
   testing::commit(builder);
 
   world = testing::buildWorld(builder);

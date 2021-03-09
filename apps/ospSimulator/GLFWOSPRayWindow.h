@@ -131,4 +131,7 @@ class GLFWOSPRayWindow
   std::vector<vec3f> tfnColorData;
   std::vector<float> tfnOpacityData;
   tfn::TransferFunctionWidget tfnWidget;
+
+  // frame accumulation counter
+  size_t frameCounter = 0;
 };
