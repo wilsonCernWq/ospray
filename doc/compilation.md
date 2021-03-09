@@ -43,7 +43,7 @@ before you can build OSPRay you need the following prerequisites:
     or newer is required. If Embree is not found by CMake its location
     can be hinted with the variable `embree_DIR`.
 -   OSPRay also heavily uses Intel [Open VKL](https://www.openvkl.org/),
-    installing version 0.12.0 or newer is required. If Open VKL is not
+    installing version 0.13.0 or newer is required. If Open VKL is not
     found by CMake its location can be hinted with the variable
     `openvkl_DIR`.
 -   OSPRay also provides an optional module implementing the `denosier`
@@ -73,7 +73,7 @@ Under Mac OS\ X these dependencies can be installed using
 
 Under Windows please directly use the appropriate installers for
 [CMake](https://cmake.org/download/),
-[TBB](https://github.com/01org/tbb/releases),
+[TBB](https://github.com/oneapi-src/oneTBB/releases),
 [ISPC](https://ispc.github.io/downloads.html) (for your Visual Studio
 version) and [Embree](https://github.com/embree/embree/releases/).
 

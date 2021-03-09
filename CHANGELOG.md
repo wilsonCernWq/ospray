@@ -1,6 +1,15 @@
 Version History
 ---------------
 
+### Changes in v2.6.0:
+
+-   Fix behavior of committing the framebuffer in distributed rendering
+    to match that of local rendering
+-   Fix build of MPI module on Windows
+-   OSPRay now requires minimum Open VKL v0.13.0 to support half
+    precision float (fp16) voxel data in strutured volumes (regular and
+    spherical)
+
 ### Changes in v2.5.0:
 
 -   Add native support for cones or cylinders with curves geometry of
@@ -9,25 +18,32 @@ Version History
     Embree's native implementation. Internal surfaces at joints are now
     correctly removed, leading to higher quality renderings with
     transparency, at the cost of intersection performance
--   Fix light leaking artifacts at poles of HDRI (and Sun-Sky) light
+-   SciVis renderer improvements:
+    -   Colored transparency, colored shadows
+    -   Light sources are visible including HDRI Light environment map
+-   The MPI module is now distributed as part of OSPRay in the modules
+    directory
+    -   The socket-based communication layer has been removed
+-   Add `intensityQuantity` parameter to light sources to control the
+    interpretation and conversion of the `intensity` into a radiative
+    quantity
+-   OSPRay now requires minimum Open VKL v0.12.0 to bring the following
+    improvements: 
+    -   Better default sampling rate for scaled volumes, improving
+        performance
+    -   Higher robustness for axis-aligned rays
 -   Removed limit on the number of volumes (both overlapped and separate)
     that a ray can intersect while rendering. Now it is limited by
     available memory only.
--   OSPRay now requires minimum Open VKL v0.12.0 to bring the following
-    improvements: 
-    - Better default sampling rate for scaled volumes, improving
-      performance
--   SciVis renderer improvements:
-    - Colored transparency, colored shadows
-    - Light sources are visible including HDRI Light environment map
--   The MPI module is now distributed as part of OSPRay in the modules
-    directory
-    - The socket-based communication layer has been removed
--   Add `intensityQuantity` parameter to light sources to control the
-    interpretation and convertion of the `intensity` into a radiative
-    quantity
+-   Move to OIDN v1.3.0 to bring the following improvements:
+    -   Improved denoising quality (sharpness of fine details, fewer
+        noisy artifacts)
+    -   Slightly improved performance and lower memory consumption
 -   Both geometric and volumetric models can now have their child
     geometry/volume objects rebound using an object parameter
+-   Fix light leaking artifacts at poles of HDRI (and Sun-Sky) light
+-   Add sRGB conversion to `ospExamples` such that the color of the
+    widget for `backgroundColor` actually matches 
 -   Dropping support for MSVC14, new minimum compiler on Windows is
     MSVC15 (Visual Studio 2017)
 
