@@ -61,7 +61,7 @@
       "environment": [
         {
           "name": "PATH",
-          "value": "${workspaceFolder}/build-deps/install/bin;${env:PATH}"
+          "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/redist/intel64/vc14;${env:PATH}"
         }
       ],
       "externalConsole": false
@@ -77,7 +77,7 @@
       "environment": [
         {
           "name": "PATH",
-          "value": "${workspaceFolder}/build-deps/install/bin;${env:PATH}"
+          "value": "${workspaceFolder}/build-deps/install/bin;${workspaceFolder}/build-deps/install/redist/intel64/vc14;${env:PATH}"
         }
       ],
       "externalConsole": false
