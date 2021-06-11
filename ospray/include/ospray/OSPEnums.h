@@ -5,7 +5,7 @@
 
 #pragma once
 
-// Log levels which can be set on a driver via "logLevel" parameter
+// Log levels which can be set on a device via "logLevel" parameter
 typedef enum
 #if __cplusplus >= 201103L
     : uint32_t
@@ -338,7 +338,8 @@ typedef enum
 #endif
 {
   OSP_VOLUME_FILTER_NEAREST = 0, // treating voxel cell as constant
-  OSP_VOLUME_FILTER_TRILINEAR = 100 // default trilinear interpolation
+  OSP_VOLUME_FILTER_TRILINEAR = 100, // default trilinear interpolation
+  OSP_VOLUME_FILTER_TRICUBIC = 200 // tricubic interpolation
 } OSPVolumeFilter;
 
 // OSPRay pixel filter types
@@ -364,5 +365,6 @@ typedef enum
   OSP_INTENSITY_QUANTITY_IRRADIANCE, // unit W/m^2
   OSP_INTENSITY_QUANTITY_INTENSITY, // radiant intensity, unit W/sr
   OSP_INTENSITY_QUANTITY_POWER, // radiant flux, unit W
+  OSP_INTENSITY_QUANTITY_SCALE, // linear scaling factor for the built-in type
   OSP_INTENSITY_QUANTITY_UNKNOWN
 } OSPIntensityQuantity;

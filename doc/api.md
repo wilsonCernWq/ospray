@@ -888,7 +888,8 @@ VDB volumes have the following parameters:
 
   int        filter            filter used for reconstructing the field, default
                                is `OSP_VOLUME_FILTER_TRILINEAR`, alternatively
-                               `OSP_VOLUME_FILTER_NEAREST`.
+                               `OSP_VOLUME_FILTER_NEAREST`, or
+                               `OSP_VOLUME_FILTER_TRICUBIC`.
 
   int        gradientFilter    filter used for reconstructing the field during
                                gradient computations, default same as `filter`
@@ -1420,6 +1421,9 @@ specific light source).
   OSP_INTENSITY_QUANTITY_IRRADIANCE   the amount of light arriving at a surface point,
                                       assuming the light is oriented towards to the
                                       surface, unit is W/m^2^
+                                      
+  OSP_INTENSITY_QUANTITY_SCALE        a linear scaling factor for light sources with a 
+                                      built-in quantity (e.g., `HDRI`, or `sunSky`). 
   ----------------------------------  ----------------------------------------------------
   : Types of radiative quantities used to interpret a light's `intensity` parameter.
 
@@ -1580,9 +1584,10 @@ shadows.
 
 The HDRI light is a textured light source surrounding the scene and
 illuminating it from infinity. It is created by passing the type string
-"`hdri`" to `ospNewLight`. The HDRI light only accepts
-`OSP_INTENSITY_QUANTITY_RADIANCE` as `intensityQuantity` parameter
-value. In addition to the [general parameters](#lights) the HDRI light
+"`hdri`" to `ospNewLight`. The values of the HDRI correspond to radiance
+and therfore the HDRI light only accepts `OSP_INTENSITY_QUANTITY_SCALE` 
+as `intensityQuantity` parameter value. 
+In addition to the [general parameters](#lights) the HDRI light
 supports the following special parameters:
 
   ------------ --------- --------------------------------------------------
@@ -1623,9 +1628,12 @@ a procedural `hdri` light for the sky. It is created by passing the type
 string "`sunSky`" to `ospNewLight`. The sun-sky light surrounds the
 scene and illuminates it from infinity and can be used for rendering
 outdoor scenes. The radiance values are calculated using the
-Hošek-Wilkie sky model and solar radiance function. The sun-sky light
-only accepts `OSP_INTENSITY_QUANTITY_RADIANCE` as `intensityQuantity`
-parameter value. In addition to the [general parameters](#lights) the
+Hošek-Wilkie sky model and solar radiance function. The underlying model
+of the sun-sky light returns radiance values and therfore the light
+only accepts `OSP_INTENSITY_QUANTITY_SCALE` as `intensityQuantity`
+parameter value. To recale the returned radiance of the sky model
+the default value for the `intensity` parameter is set to `0.025`.
+In addition to the [general parameters](#lights) the
 following special parameters are supported:
 
   --------- ---------------- ------------  -------------------------------------
@@ -2394,11 +2402,10 @@ thus individual flakes are not visible.
 
 The [path tracer] supports the Luminous material which emits light
 uniformly in all directions and which can thus be used to turn any
-geometric object into a light source^[If `geometryLights` is enabled in
-the [path tracer].]. It is created by passing the type string
-"`luminous`" to `ospNewMaterial`. The amount of constant radiance that
-is emitted is determined by combining the general parameters of lights:
-[`color` and `intensity`](#lights) (which essentially means that
+geometric object into a light source. It is created by passing the type 
+string "`luminous`" to `ospNewMaterial`. The amount of constant radiance 
+that is emitted is determined by combining the general parameters of 
+lights: [`color` and `intensity`](#lights) (which essentially means that
 parameter `intensityQuantity` is not needed because it is always
 `OSP_INTENSITY_QUANTITY_RADIANCE`).
 
@@ -3181,8 +3188,17 @@ regions) and merging them. See the
 [ospMPIDistributedTutorialPartiallyReplicatedData](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistributedTutorialPartiallyReplicatedData.cpp)
 for an example.
 
-Interaction With User Modules
-----------------------------
+#### Picking on Distributed Data in the MPI Distributed Device {-}
+
+Calling `ospPick` in the distributed device will find and return the
+closest global object at the screen position on the rank that owns that
+object. The other ranks will report no hit.
+Picking in the distributed device takes into account data clipping
+applied through the `regions` parameter to avoid picking ghost data.
+
+
+Interaction with User Modules
+-----------------------------
 
 The MPI Offload rendering mode trivially supports user modules, with the
 caveat that attempting to share data directly with the application
