@@ -107,6 +107,21 @@
         "xutility": "cpp",
         "resumable": "cpp",
         "*.ih": "cpp",
-        "*.isph": "cpp"
-    }
+        "*.isph": "cpp",
+        "csignal": "cpp",
+        "cwctype": "cpp",
+        "strstream": "cpp",
+        "bit": "cpp",
+        "*.tcc": "cpp",
+        "cfenv": "cpp",
+        "complex": "cpp",
+        "unordered_set": "cpp",
+        "string_view": "cpp",
+        "ranges": "cpp",
+        "stop_token": "cpp",
+        "typeindex": "cpp",
+        "valarray": "cpp",
+        "*.ipp": "cpp"
+    },
+    "cmake.configureOnOpen": false
 }

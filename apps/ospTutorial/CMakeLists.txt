@@ -20,7 +20,13 @@ add_executable(ospTutorialAsync ${OSPRAY_RESOURCE} ospTutorialAsync.c)
 target_link_libraries(ospTutorialAsync PRIVATE ospray)
 ospray_sign_target(ospTutorialAsync)
 
-install(TARGETS ospTutorial ospTutorialCpp ospTutorialAsync
+# scene graph version
+add_executable(ospTutorialSceneGraph ${OSPRAY_RESOURCE} ospTutorialSceneGraph.cpp)
+target_link_libraries(ospTutorialSceneGraph PRIVATE ospray)
+set_property(TARGET ospTutorialSceneGraph PROPERTY CXX_STANDARD 17)
+ospray_sign_target(ospTutorialSceneGraph)
+
+install(TARGETS ospTutorial ospTutorialCpp ospTutorialAsync ospTutorialSceneGraph
   DESTINATION ${CMAKE_INSTALL_BINDIR}
   COMPONENT apps
 )
