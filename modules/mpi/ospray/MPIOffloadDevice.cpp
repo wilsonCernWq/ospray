@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #ifndef _WIN32
@@ -46,7 +46,7 @@ using namespace rkcommon;
 /*! it's up to the proper init routine to decide which processes
   call this function and which ones don't. This function will not
   return. */
-void runWorker(bool useMPIFabric);
+void runWorker(bool useMPIFabric, MPIOffloadDevice *offloadDevice);
 
 ///////////////////////////////////////////////////////////////////////////
 // Misc helper functions //////////////////////////////////////////////////
@@ -146,7 +146,8 @@ static inline void setupWorker()
     - this fct is called from ospInit (with ranksBecomeWorkers=true) or
       from ospdMpiInit (w/ ranksBecomeWorkers = false)
 */
-void createMPI_RanksBecomeWorkers(int *ac, const char **av)
+void createMPI_RanksBecomeWorkers(
+    int *ac, const char **av, MPIOffloadDevice *offloadDevice)
 {
   mpi::init(ac, av, true);
 
@@ -166,13 +167,14 @@ void createMPI_RanksBecomeWorkers(int *ac, const char **av)
 
     // now, all workers will enter their worker loop (ie, they will *not*
     // return)
-    mpi::runWorker(true);
+    mpi::runWorker(true, offloadDevice);
     throw std::runtime_error("should never reach here!");
     /* no return here - 'runWorker' will never return */
   }
 }
 
-void createMPI_ListenForClient(int *ac, const char **av)
+void createMPI_ListenForClient(
+    int *ac, const char **av, MPIOffloadDevice *offloadDevice)
 {
   mpi::init(ac, av, true);
 
@@ -183,7 +185,7 @@ void createMPI_ListenForClient(int *ac, const char **av)
   worker.comm = world.comm;
   worker.makeIntraComm();
 
-  mpi::runWorker(false);
+  mpi::runWorker(false, offloadDevice);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -225,13 +227,13 @@ void MPIOffloadDevice::initializeDevice()
 
   initialized = true;
 
-  int _ac = 2;
-  const char *_av[] = {"ospray_mpi_worker", "--osp:mpi"};
+  int _ac = 1;
+  const char *_av[] = {"ospray_mpi_worker"};
 
   std::string mode = getParam<std::string>("mpiMode", "mpi");
 
   if (mode == "mpi") {
-    createMPI_RanksBecomeWorkers(&_ac, _av);
+    createMPI_RanksBecomeWorkers(&_ac, _av, this);
 
 #ifdef ENABLE_PROFILING
     char hostname[512] = {0};
@@ -404,14 +406,13 @@ OSPVolumetricModel MPIOffloadDevice::newVolumetricModel(OSPVolume volume)
 ///////////////////////////////////////////////////////////////////////////
 
 OSPMaterial MPIOffloadDevice::newMaterial(
-    const char *renderer_type, const char *material_type)
+    const char *, const char *material_type)
 {
   ObjectHandle handle = allocateHandle();
 
   sendWork(
       [&](networking::WriteStream &writer) {
-        writer << work::NEW_MATERIAL << handle.i64 << renderer_type
-               << material_type;
+        writer << work::NEW_MATERIAL << handle.i64 << material_type;
       },
       false);
 
@@ -520,23 +521,25 @@ OSPData MPIOffloadDevice::newSharedData(const void *sharedData,
 {
   ObjectHandle handle = allocateHandle();
 
-  ApplicationData appData;
-  appData.workerType = format;
+  Ref<ApplicationData> appData = new ApplicationData;
+  appData->workerType = format;
   if (mpicommon::isManagedObject(format)) {
     format = OSP_ULONG;
   }
-  appData.data = new Data(sharedData, format, numItems, byteStride);
+  appData->data = new Data(sharedData, format, numItems, byteStride);
   this->sharedData[handle.i64] = appData;
 
   sendWork(
       [&](networking::WriteStream &writer) {
         // Data on the workers is always compact, so we don't send the stride
-        writer << work::NEW_SHARED_DATA << handle.i64 << appData.workerType
+        writer << work::NEW_SHARED_DATA << handle.i64 << appData->workerType
                << numItems;
-        sendDataWork(writer, this->sharedData[handle.i64]);
+        sendDataWork(writer, *this->sharedData[handle.i64]);
       },
       false);
 
+  // Release the local ref to the appData, see issue about Ref<T>
+  appData->refDec();
   return (OSPData)(int64)handle;
 }
 
@@ -755,7 +758,7 @@ void MPIOffloadDevice::commit(OSPObject _object)
       [&](networking::WriteStream &writer) {
         writer << work::COMMIT << handle.i64;
         if (d != sharedData.end()) {
-          sendDataWork(writer, d->second);
+          sendDataWork(writer, *d->second);
         }
       },
       false);
@@ -782,13 +785,19 @@ void MPIOffloadDevice::release(OSPObject _object)
   // buffer we aren't actually sharing the pointer with the app anymore
   auto d = sharedData.find(handle.i64);
   if (d != sharedData.end()) {
-    if (d->second.releaseHazard) {
-      postStatusMsg(OSP_LOG_DEBUG)
-          << "#osp.mpi.app: ospRelease: data reference hazard exists, "
-          << " flushing pending sends";
-      fabric->flushBcastSends();
+    if (d->second->useCount() == 1) {
+      // Make sure there's no pending send referencing this data if we're going
+      // to delete it
+      if (d->second->releaseHazard) {
+        postStatusMsg(OSP_LOG_DEBUG)
+            << "#osp.mpi.app: ospRelease: data reference hazard exists, "
+            << " flushing pending sends";
+        fabric->flushBcastSends();
+      }
+      sharedData.erase(handle.i64);
+    } else {
+      d->second->refDec();
     }
-    sharedData.erase(handle.i64);
   }
 }
 
@@ -801,6 +810,12 @@ void MPIOffloadDevice::retain(OSPObject _obj)
         writer << work::RETAIN << handle.i64;
       },
       false);
+
+  // Increment the local shared data ref count so we match the app
+  auto d = sharedData.find(handle.i64);
+  if (d != sharedData.end()) {
+    d->second->refInc();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1043,7 +1058,7 @@ OSPPickResult MPIOffloadDevice::pick(OSPFrameBuffer fb,
       },
       true);
 
-  OSPPickResult result = {0};
+  OSPPickResult result;
   utility::ArrayView<uint8_t> view(
       reinterpret_cast<uint8_t *>(&result), sizeof(OSPPickResult));
   fabric->recv(view, rootWorkerRank());
@@ -1147,7 +1162,7 @@ int MPIOffloadDevice::rootWorkerRank() const
 
 ObjectHandle MPIOffloadDevice::allocateHandle() const
 {
-  return ObjectHandle();
+  return ObjectHandle::allocateLocalHandle();
 }
 
 } // namespace mpi

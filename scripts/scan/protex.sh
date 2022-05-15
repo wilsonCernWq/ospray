@@ -17,8 +17,9 @@ export _JAVA_OPTIONS=-Duser.home=$PROTEX_PATH/home
 cd $SRC_PATH
 
 # scan additional source
-cmake -DBUILD_OSPRAY_MODULE_MPI=ON scripts/superbuild
+cmake -DBUILD_OSPRAY_MODULE_MPI=ON -DBUILD_OSPRAY_ANARI=ON scripts/superbuild
 cmake --build . --target rkcommon-download
+cmake --build . --target anari-ospray-download
 rm -rf CMakeFiles
 
 

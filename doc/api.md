@@ -27,7 +27,7 @@ calling
 OSPRay parses (and removes) its known command line parameters from your
 application's `main` function. For an example see the [tutorial]. For
 possible error codes see section [Error Handling and Status Messages].
-It is important to note that the arguments passed to `ospInit()` are
+It is important to note that the arguments passed to `ospInit` are
 processed in order they are listed. The following parameters (which are
 prefixed by convention with "`--osp:`") are understood:
 
@@ -234,7 +234,7 @@ The following errors are currently used by OSPRay:
   OSP_INVALID_ARGUMENT   an invalid argument was specified
   OSP_INVALID_OPERATION  the operation is not allowed for the specified object
   OSP_OUT_OF_MEMORY      there is not enough memory to execute the command
-  OSP_UNSUPPORTED_CPU    the CPU is not supported (minimum ISA is SSE4.1)
+  OSP_UNSUPPORTED_CPU    the CPU is not supported (minimum ISA is SSE4.1 on x86_64 and NEON on ARM64)
   OSP_VERSION_MISMATCH   a module could not be loaded due to mismatching version
   ---------------------- -------------------------------------------------------
   : Possible error codes, i.e., valid named constants of type `OSPError`.
@@ -271,7 +271,7 @@ in order to register a callback function of type
 which OSPRay will use to emit status messages. By default, OSPRay uses a
 callback which does nothing, so any output desired by an application
 will require that a callback is provided. Note that callbacks for C++
-`std::cout` and `std::cerr` can be alternatively set through `ospInit()`
+`std::cout` and `std::cerr` can be alternatively set through `ospInit`
 or the `OSPRAY_LOG_OUTPUT` environment variable.
 
 Applications can clear either callback by passing `NULL` instead of an
@@ -298,7 +298,7 @@ exit), the OSPRay API should be finalized with
 
 This API call ensures that the current device is cleaned up
 appropriately. Due to static object allocation having non-deterministic
-ordering, it is recommended that applications call `ospShutdown()`
+ordering, it is recommended that applications call `ospShutdown`
 before the calling application process terminates.
 
 Objects
@@ -494,6 +494,9 @@ below.
   OSP_AFFINE[23]F            32\ bit single precision floating-point affine
                              transform (linear transform plus translation)
 
+  OSP_QUATF                  32\ bit single precision floating-point quaternion,
+                             in $(i, j, k, w)$ layout
+
   OSP_VOID_PTR               raw memory address (only found in module extensions)
   -------------------------- ---------------------------------------------------
   : Valid named constants for `OSPDataType`.
@@ -517,7 +520,7 @@ To allow for (partial) copies or updates of data arrays use
         uint64_t destinationIndex3 = 0);
 
 which will copy the whole^[The number of items to be copied is defined
-by the size of the source array] content of the `source` array into
+by the size of the source array.] content of the `source` array into
 `destination` at the given location `destinationIndex`. The
 `OSPDataType`s of the data objects must match. The region to be copied
 must be valid inside the destination, i.e., in all dimensions,
@@ -572,7 +575,6 @@ have a stride between voxels, specified through the
 supported, additional strides between scanlines (2D, `byteStride2`) and
 slices (3D, `byteStride3`) are not.
 
-
 The parameters understood by structured volumes are summarized in the
 table below.
 
@@ -586,21 +588,34 @@ table below.
                                                         in object-space
 
   OSPData data                                          the actual voxel 3D [data]
+  
+  bool    cellCentered                           false  whether the data is provided
+                                                        per cell (as opposed to per
+                                                        vertex)
 
   int     filter         `OSP_VOLUME_FILTER_TRILINEAR`  filter used for
                                                         reconstructing the field,
                                                         also allowed is
                                                         `OSP_VOLUME_FILTER_NEAREST`
+                                                        and
+                                                        `OSP_VOLUME_FILTER_TRICUBIC`
 
   int     gradientFilter              same as `filter`  filter used during
                                                         gradient computations
+
+  float   background                             `NaN`  value that is used when
+                                                        sampling an undefined region
+                                                        outside the volume domain
   ------- -------------- -----------------------------  --------------------------
   : Configuration parameters for structured regular volumes.
 
 The size of the volume is inferred from the size of the 3D array `data`,
 as is the type of the voxel values (currently supported are:
 `OSP_UCHAR`, `OSP_SHORT`, `OSP_USHORT`, `OSP_HALF`, `OSP_FLOAT`, and
-`OSP_DOUBLE`).
+`OSP_DOUBLE`). Data can be provided either per cell or per vertex (the
+default), selectable via the `cellCentered` parameter (which will also
+affect the computed bounding box).
+
 
 ### Structured Spherical Volume
 
@@ -626,7 +641,7 @@ summarized below.
                                                         units of $(r, \theta,
                                                         \phi)$; angles in degrees
 
-  OSPData  data                                         the actual voxel 3D [data]
+  OSPData data                                          the actual voxel 3D [data]
 
   int     filter         `OSP_VOLUME_FILTER_TRILINEAR`  filter used for
                                                         reconstructing the field,
@@ -635,6 +650,10 @@ summarized below.
 
   int     gradientFilter              same as `filter`  filter used during
                                                         gradient computations
+
+  float   background                             `NaN`  value that is used when
+                                                        sampling an undefined region
+                                                        outside the volume domain
   ------- -------------- -----------------------------  --------------------------
   : Configuration parameters for structured spherical volumes.
 
@@ -697,10 +716,13 @@ Note that cell widths are defined _per refinement level_, not per block.
                                                     `OSP_FLOAT` is supported as
                                                     `OSPDataType`
 
-  vec3f          gridOrigin            $(0, 0, 0)$  origin of the grid in world-space
+  vec3f          gridOrigin            $(0, 0, 0)$  origin of the grid
 
-  vec3f          gridSpacing           $(1, 1, 1)$  size of the grid cells in
-                                                    world-space
+  vec3f          gridSpacing           $(1, 1, 1)$  size of the grid cells
+
+  float          background                  `NaN`  value that is used when sampling
+                                                    an undefined region outside the
+                                                    volume domain
   -------------- --------------- -----------------  -----------------------------------
   : Configuration parameters for AMR volumes.
 
@@ -825,8 +847,9 @@ the `cell.type` parameter must be omitted).
   bool                precomputedNormals    false  whether to accelerate by precomputing,
                                                    at a cost of 12 bytes/face
 
-  int                   maxIteratorDepth        6  do not descend further than to this BVH
-                                                   depth during interval iteration
+  float               background            `NaN`  value that is used when sampling an
+                                                   undefined region outside the volume
+                                                   domain
   ------------------- ------------------ --------  ---------------------------------------
   : Configuration parameters for unstructured volumes.
 
@@ -865,10 +888,6 @@ VDB volumes have the following parameters:
   ---------- ----------------- -------------------------------------------------
   Type       Name              Description
   ---------- ----------------- -------------------------------------------------
-  int        maxIteratorDepth  do not descend further than to this depth during
-                               interval iteration, the maximum value and the
-                               default is 3
-
   int        maxSamplingDepth  do not descend further than to this depth during
                                sampling, the maximum value and the default is 3
 
@@ -893,6 +912,9 @@ VDB volumes have the following parameters:
 
   int        gradientFilter    filter used for reconstructing the field during
                                gradient computations, default same as `filter`
+
+  float      background        value that is used when sampling an undefined region
+                               outside the volume domain, default `NaN`
   ---------- ----------------- -------------------------------------------------
   : Configuration parameters for VDB volumes.
 
@@ -959,8 +981,6 @@ traversal, similar to the method in\ [1].
                                              time, but will make volume rendering
                                              less efficient.
 
-  int             maxIteratorDepth        6  do not descend further than to this BVH
-                                             depth during interval iteration
   -------- ----------------------- --------  ---------------------------------------
   : Configuration parameters for particle volumes.
 
@@ -1007,17 +1027,20 @@ the volume (and possible acceleration structures it contains) to
 rendering-specific parameters (where more than one set may exist
 concurrently). To create a volume instance, call
 
-    OSPVolumetricModel ospNewVolumetricModel(OSPVolume volume);
+    OSPVolumetricModel ospNewVolumetricModel(OSPVolume);
 
 The passed volume can be `NULL` as long as the volume to be used is
-passed as a parameter. If both a volume is specified on object creation and
-as a parameter, the parameter value is used. If the parameter value
+passed as a parameter. If both a volume is specified on object creation
+and as a parameter, the parameter value is used. If the parameter value
 is later removed, the volume object passed on object creation is again
 used.
 
   -------------------- ----------------- --------  --------------------------------------
   Type                 Name               Default  Description
   -------------------- ----------------- --------  --------------------------------------
+  OSPVolume            volume                      optional [volume] object this model
+                                                   references
+
   OSPTransferFunction  transferFunction            [transfer function] to use
 
   float                densityScale           1.0  makes volumes uniformly thinner or
@@ -1026,9 +1049,6 @@ used.
   float                anisotropy             0.0  anisotropy of the (Henyey-Greenstein)
                                                    phase function in [-1–1] ([path tracer]
                                                    only), default to isotropic scattering
-
-  OSPVolume            volume                      optional [volume] object this model
-                                                   references
   -------------------- ----------------- --------  ---------------------------------------
   : Parameters understood by VolumetricModel.
 
@@ -1050,14 +1070,17 @@ A mesh consisting of either triangles or quads is created by calling
 `ospNewGeometry` with type string "`mesh`". Once created, a mesh
 recognizes the following parameters:
 
-  Type                 Name             Description
-  -------------------- ---------------- -------------------------------------------------
-  vec3f[]              vertex.position  [data] array of vertex positions
-  vec3f[]              vertex.normal    [data] array of vertex normals
-  vec4f[] / vec3f[]    vertex.color     [data] array of vertex colors (linear RGBA/RGB)
-  vec2f[]              vertex.texcoord  [data] array of vertex texture coordinates
-  vec3ui[] / vec4ui[]  index            [data] array of (either triangle or quad) indices (into the vertex array(s))
-  -------------------- ---------------- -------------------------------------------------
+  Type                 Name                    Description
+  -------------------- ----------------------- -------------------------------------------------
+  vec3f[]              vertex.position         [data] array of vertex positions, overridden by `motion.*` arrays
+  vec3f[]              vertex.normal           [data] array of vertex normals, overridden by `motion.*` arrays
+  vec4f[] / vec3f[]    vertex.color            [data] array of vertex colors (linear RGBA/RGB)
+  vec2f[]              vertex.texcoord         [data] array of vertex texture coordinates
+  vec3ui[] / vec4ui[]  index                   [data] array of (either triangle or quad) indices (into the vertex array(s))
+  vec3f[][]            motion.vertex.position  [data] array of vertex position arrays (uniformly distributed keys for deformation motion blur)
+  vec3f[][]            motion.vertex.normal    [data] array of vertex normal arrays (uniformly distributed keys for deformation motion blur)
+  box1f                time                    time associated with first and last key in `motion.*` arrays (for deformation motion blur), default [0, 1] 
+  -------------------- ----------------------- -------------------------------------------------
   : Parameters defining a mesh geometry.
 
 The data type of index arrays differentiates between the underlying
@@ -1325,7 +1348,7 @@ GeometricModels. These take a geometry, which defines the surface
 representation, and applies either full-object or per-primitive color
 and material information. To create a geometric model, call
 
-    OSPGeometricModel ospNewGeometricModel(OSPGeometry geometry);
+    OSPGeometricModel ospNewGeometricModel(OSPGeometry);
 
 The passed geometry can be `NULL` as long as the geometry to be used is
 passed as a parameter. If both a geometry is specified on object creation
@@ -1350,6 +1373,8 @@ with normals oriented outside clips everything what's inside.
   ------------------------ -------------- ----------------------------------------------------
   Type                     Name           Description
   ------------------------ -------------- ----------------------------------------------------
+  OSPGeometry              geometry       optional [geometry] object this model references
+
   OSPMaterial / uint32     material       optional [material] applied to the geometry, may be
                                           an index into the `material` parameter on the
                                           [renderer] (if it exists)
@@ -1368,8 +1393,6 @@ with normals oriented outside clips everything what's inside.
                                           `color` and `material`
 
   bool                     invertNormals  inverts all shading normals (Ns), default false
-
-  OSPGeometry              geometry       optional [geometry] object this model references
   ------------------------ -------------- ----------------------------------------------------
   : Parameters understood by GeometricModel.
 
@@ -1390,7 +1413,7 @@ All light sources accept the following parameters:
 
   float     intensity                 1  intensity of the light (a factor)
 
-  uchar     intensityQuantity            `OSPIntensityQuantity` to set the radiative
+  uchar     intensityQuantity            `OSPIntensityQuantity` to set the radiometric
                                          quantity represented by `intensity`. The
                                          default value depends on the light source.
 
@@ -1399,7 +1422,7 @@ All light sources accept the following parameters:
   : Parameters accepted by all lights.
 
 In OSPRay the `intensity` parameter of a light source can correspond to
-different types of radiative quantities. The type of the value
+different types of radiometric quantities. The type of the value
 represented by a light's `intensity` parameter is set using
 `intensityQuantity`, which accepts values from the enum type
 `OSPIntensityQuantity`. The supported types of `OSPIntensityQuantity`
@@ -1421,11 +1444,50 @@ specific light source).
   OSP_INTENSITY_QUANTITY_IRRADIANCE   the amount of light arriving at a surface point,
                                       assuming the light is oriented towards to the
                                       surface, unit is W/m^2^
-                                      
+
   OSP_INTENSITY_QUANTITY_SCALE        a linear scaling factor for light sources with a 
-                                      built-in quantity (e.g., `HDRI`, or `sunSky`). 
+                                      built-in quantity (e.g., `HDRI`, or `sunSky`, or
+                                      when using `intensityDistribution`).
   ----------------------------------  ----------------------------------------------------
-  : Types of radiative quantities used to interpret a light's `intensity` parameter.
+  : Types of radiometric quantities used to interpret a light's `intensity` parameter.
+
+### Photometric Lights
+
+Measured light sources (IES, EULUMDAT, ...) are supported by the
+`sphere`, `spot`, and `quad` lights when setting an
+`intensityDistribution` [data] array to modulate the intensity per
+direction. The mapping is using the C-γ coordinate system (see also
+below figure): the values of the first (or only) dimension of
+`intensityDistribution` are uniformly mapped to γ in [0–π]; the first
+intensity value to 0, the last value to π, thus at least two values need
+to be present.
+
+![C-γ coordinate system for the mapping of `intensityDistribution` with
+photometric lights.][imgCGammaCoords]
+
+If the array has a second dimension then the intensities are not
+rotational symmetric around the main direction (where angle γ is zero),
+but are accordingly mapped to the C-halfplanes in [0–2π]; the first
+"row" of values to 0 and 2π, the other rows such that they have uniform
+distance to its neighbors. The orientation of the C0-plane is specified
+via `c0`.
+
+  ---------- --------------------- ---------------------------------------------
+  Type       Name                  Description
+  ---------- --------------------- ---------------------------------------------
+  float[]    intensityDistribution luminous intensity distribution for
+                                   photometric lights; can be 2D for asymmetric
+                                   illumination; values are assumed to be
+                                   uniformly distributed
+
+  vec3f      c0                    orientation, i.e., direction of the
+                                   C0-(half)plane (only needed if illumination
+                                   via `intensityDistribution` is asymmetric)
+  ---------- --------------------- ---------------------------------------------
+  : Special parameters for photometric lights.
+
+When using an `intensityDistribution` then the default and only valid
+value for `intensityQuantity` is `OSP_INTENSITY_QUANTITY_SCALE`.
 
 The following light types are supported by most OSPRay renderers.
 
@@ -1441,11 +1503,11 @@ parameter value. In addition to the [general parameters](#lights)
 understood by all lights the distant light supports the following
 special parameters:
 
-  Type      Name             Description
-  --------- ---------------- ---------------------------------------------
-  vec3f     direction        main emission direction of the distant light
-  float     angularDiameter  apparent size (angle in degree) of the light
-  --------- ---------------- ---------------------------------------------
+  Type      Name                  Default Description
+  --------- ---------------- ------------ ---------------------------------------------
+  vec3f     direction         $(0, 0, 1)$ main emission direction of the distant light
+  float     angularDiameter             0 apparent size (angle in degree) of the light
+  --------- ---------------- ------------ ---------------------------------------------
   : Special parameters accepted by the distant light.
 
 Setting the angular diameter to a value greater than zero will result in
@@ -1458,39 +1520,45 @@ The sphere light (or the special case point light) is a light emitting
 uniformly in all directions from the surface toward the outside. It does
 not emit any light toward the inside of the sphere. It is created by
 passing the type string "`sphere`" to `ospNewLight`. The point light
-supports `OSP_INTENSITY_QUANTITY_POWER`,
-`OSP_INTENSITY_QUANTITY_INTENSITY` (default) and
-`OSP_INTENSITY_QUANTITY_RADIANCE` as `intensityQuantity` parameter value.
-In addition to the [general parameters](#lights) understood by all
-lights the sphere light supports the following special parameters:
+supports only `OSP_INTENSITY_QUANTITY_SCALE` when
+`intensityDistribution` is set, or otherwise
+`OSP_INTENSITY_QUANTITY_POWER`, `OSP_INTENSITY_QUANTITY_INTENSITY` (then
+default) and `OSP_INTENSITY_QUANTITY_RADIANCE` as `intensityQuantity`
+parameter value. In addition to the [general parameters](#lights)
+understood by all lights and the [photometric
+parameters](#photometric-lights) the sphere light supports the following
+special parameters:
 
-  Type      Name      Description
-  --------- --------- -----------------------------------------------
-  vec3f     position  the center of the sphere light, in world-space
-  float     radius    the size of the sphere light
-  --------- --------- -----------------------------------------------
+  Type    Name            Default Description
+  ------- ---------- ------------ --------------------------------
+  vec3f   position    $(0, 0, 0)$ the center of the sphere light
+  float   radius                0 the size of the sphere light
+  vec3f   direction   $(0, 0, 1)$ main orientation of `intensityDistribution`
+  ------- ---------- ------------ --------------------------------
   : Special parameters accepted by the sphere light.
 
 Setting the radius to a value greater than zero will result in soft
 shadows when the renderer uses stochastic sampling (like the [path
 tracer]).
 
-### Spotlight / Photometric Light
+### Spotlight / Ring Light
 
 The spotlight is a light emitting into a cone of directions. It is
 created by passing the type string "`spot`" to `ospNewLight`. The
-spotlight supports `OSP_INTENSITY_QUANTITY_POWER`,
-`OSP_INTENSITY_QUANTITY_INTENSITY` (default) and
+spotlight 
+supports only `OSP_INTENSITY_QUANTITY_SCALE` when
+`intensityDistribution` is set, or otherwise
+`OSP_INTENSITY_QUANTITY_POWER`,
+`OSP_INTENSITY_QUANTITY_INTENSITY` (then default) and
 `OSP_INTENSITY_QUANTITY_RADIANCE` as `intensityQuantity` parameter
 value. In addition to the [general parameters](#lights) understood by
-all lights the spotlight supports the special parameters listed in the
-table.
+all lights and the [photometric parameters](#photometric-lights) the
+spotlight supports the special parameters listed in the table.
 
   ---------- --------------------- ----------- ---------------------------------
   Type       Name                      Default Description
   ---------- --------------------- ----------- ---------------------------------
-  vec3f      position              $(0, 0, 0)$ the center of the spotlight, in
-                                               world-space
+  vec3f      position              $(0, 0, 0)$ the center of the spotlight
 
   vec3f      direction             $(0, 0, 1)$ main emission direction of the
                                                spot
@@ -1513,18 +1581,6 @@ table.
   float      innerRadius                     0 in combination with
                                                `radius` turns the disk
                                                into a ring
-
-  float[]    intensityDistribution             luminous intensity distribution
-                                               for photometric lights; can be 2D
-                                               for asymmetric illumination;
-                                               values are assumed to be
-                                               uniformly distributed
-
-  vec3f      c0                                orientation, i.e., direction of
-                                               the C0-(half)plane (only needed
-                                               if illumination via
-                                               `intensityDistribution` is
-                                               asymmetric)
   ---------- --------------------- ----------- ---------------------------------
   : Special parameters accepted by the spotlight.
 
@@ -1535,71 +1591,80 @@ shadows when the renderer uses stochastic sampling (like the [path
 tracer]). Additionally setting the inner radius will result in a ring
 instead of a disk emitting the light.
 
-Measured light sources (IES, EULUMDAT, ...) are supported by providing
-an `intensityDistribution` [data] array to modulate the intensity per
-direction. The mapping is using the C-γ coordinate system (see also
-below figure): the values of the first (or only) dimension of
-`intensityDistribution` are uniformly mapped to γ in [0–π]; the first
-intensity value to 0, the last value to π, thus at least two values need
-to be present. If the array has a second dimension then the intensities
-are not rotational symmetric around `direction`, but are accordingly
-mapped to the C-halfplanes in [0–2π]; the first "row" of values to 0 and
-2π, the other rows such that they have uniform distance to its
-neighbors. The orientation of the C0-plane is specified via `c0`.
-A combination of using an `intensityDistribution` and
-`OSP_INTENSITY_QUANTITY_POWER` as `intensityQuantity` is not supported
-at the moment.
-
-![C-γ coordinate system for the mapping of `intensityDistribution` to
-the spotlight.][imgSpotCoords]
-
 ### Quad Light
 
 The quad^[actually a parallelogram] light is a planar, procedural area
 light source emitting uniformly on one side into the half-space. It is
 created by passing the type string "`quad`" to `ospNewLight`. The quad
-light supports `OSP_INTENSITY_QUANTITY_POWER`,
-`OSP_INTENSITY_QUANTITY_INTENSITY` and `OSP_INTENSITY_QUANTITY_RADIANCE`
-(default) as `intensityQuantity` parameter. In addition to the [general
-parameters](#lights) understood by all lights the quad light supports
-the following special parameters:
+light supports only `OSP_INTENSITY_QUANTITY_SCALE` when
+`intensityDistribution` is set, or otherwise
+`OSP_INTENSITY_QUANTITY_POWER`, `OSP_INTENSITY_QUANTITY_INTENSITY` and
+`OSP_INTENSITY_QUANTITY_RADIANCE` (then default) as `intensityQuantity`
+parameter. In addition to the [general parameters](#lights) understood
+by all lights and the [photometric parameters](#photometric-lights) the
+quad light supports the following special parameters:
 
-  Type   Name      Description
-  ------ --------- -----------------------------------------------------
-  vec3f  position  world-space position of one vertex of the quad light
-  vec3f  edge1     vector to one adjacent vertex
-  vec3f  edge2     vector to the other adjacent vertex
-  ------ --------- -----------------------------------------------------
+  Type   Name           Default Description
+  ------ --------- ------------ -----------------------------------------
+  vec3f  position   $(0, 0, 0)$ position of one vertex of the quad light
+  vec3f  edge1      $(1, 0, 0)$ vector to one adjacent vertex
+  vec3f  edge2      $(0, 1, 0)$ vector to the other adjacent vertex
+  ------ --------- ------------ -----------------------------------------
   : Special parameters accepted by the quad light.
 
 ![Defining a quad light which emits toward the reader.][imgQuadLight]
 
 The emission side is determined by the cross product of `edge1`×`edge2`.
+which is also the main emission direction for `intensityDistribution`.
 Note that only renderers that use stochastic sampling (like the path
 tracer) will compute soft shadows from the quad light. Other renderers
 will just sample the center of the quad light, which results in hard
 shadows.
+
+### Cylinder Light
+
+The cylinder light is a cylinderical, procedural area light source
+emitting uniformly outwardly into the space beyond the boundary. It is
+created by passing the type string "`cylinder`" to `ospNewLight`. The 
+cylinder light supports `OSP_INTENSITY_QUANTITY_POWER`,
+`OSP_INTENSITY_QUANTITY_INTENSITY` and `OSP_INTENSITY_QUANTITY_RADIANCE`
+(default) as `intensityQuantity` parameter. In addition to the [general
+parameters](#lights) understood by all lights the cylinder light supports
+the following special parameters:
+
+  Type    Name             Default Description
+  ------- ----------- ------------ --------------------------------------
+  vec3f   position0    $(0, 0, 0)$ position of the start of the cylinder
+  vec3f   position1    $(0, 0, 1)$ position of the end of the cylinder
+  float   radius                 1 radius of the cylinder
+  ------- ----------- ------------ --------------------------------------
+  : Special parameters accepted by the cylinder light.
+
+Note that only renderers that use stochastic sampling (like the path
+tracer) will compute soft shadows from the cylinder light. Other renderers
+will just sample the closest point on the cylinder light, which results in 
+hard shadows.
 
 ### HDRI Light
 
 The HDRI light is a textured light source surrounding the scene and
 illuminating it from infinity. It is created by passing the type string
 "`hdri`" to `ospNewLight`. The values of the HDRI correspond to radiance
-and therfore the HDRI light only accepts `OSP_INTENSITY_QUANTITY_SCALE` 
+and therefore the HDRI light only accepts `OSP_INTENSITY_QUANTITY_SCALE` 
 as `intensityQuantity` parameter value. 
 In addition to the [general parameters](#lights) the HDRI light
 supports the following special parameters:
 
-  ------------ --------- --------------------------------------------------
-  Type         Name      Description
-  ------------ --------- --------------------------------------------------
-  vec3f        up        up direction of the light in world-space
+  ------------ --------- ------------ --------------------------------------------------
+  Type         Name           Default Description
+  ------------ --------- ------------ --------------------------------------------------
+  vec3f        up         $(0, 1, 0)$ up direction of the light
 
-  vec3f        direction direction to which the center of the texture will
-                         be mapped to (analog to [panoramic camera])
+  vec3f        direction  $(0, 0, 1)$ direction to which the center of the texture will
+                                      be mapped to (analog to [panoramic camera])
 
-  OSPTexture   map       environment map in latitude / longitude format
-  ------------ --------- --------------------------------------------------
+  OSPTexture   map                    environment map in latitude / longitude format
+  ------------ --------- ------------ --------------------------------------------------
   : Special parameters accepted by the HDRI light.
 
 ![Orientation and Mapping of an HDRI Light.][imgHDRILight]
@@ -1629,9 +1694,9 @@ string "`sunSky`" to `ospNewLight`. The sun-sky light surrounds the
 scene and illuminates it from infinity and can be used for rendering
 outdoor scenes. The radiance values are calculated using the
 Hošek-Wilkie sky model and solar radiance function. The underlying model
-of the sun-sky light returns radiance values and therfore the light
+of the sun-sky light returns radiance values and therefore the light
 only accepts `OSP_INTENSITY_QUANTITY_SCALE` as `intensityQuantity`
-parameter value. To recale the returned radiance of the sky model
+parameter value. To rescale the returned radiance of the sky model
 the default value for the `intensity` parameter is set to `0.025`.
 In addition to the [general parameters](#lights) the
 following special parameters are supported:
@@ -1639,7 +1704,7 @@ following special parameters are supported:
   --------- ---------------- ------------  -------------------------------------
   Type      Name                  Default  Description
   --------- ---------------- ------------  -------------------------------------
-  vec3f     up                $(0, 1, 0)$  zenith of sky in world-space
+  vec3f     up                $(0, 1, 0)$  zenith of sky
 
   vec3f     direction        $(0, -1, 0)$  main emission direction of the sun
 
@@ -1671,30 +1736,30 @@ Scene Hierarchy
 
 ### Groups
 
-Groups in OSPRay represent collections of GeometricModels and
-VolumetricModels which share a common local-space coordinate system. To
+Groups in OSPRay represent collections of GeometricModels, VolumetricModels
+and Lights which share a common local-space coordinate system. To
 create a group call
 
     OSPGroup ospNewGroup();
 
-Groups take arrays of geometric models, volumetric models and clipping
-geometric models, but they are optional. In other words, there is no
-need to create empty arrays if there are no geometries or volumes in the
-group.
+Groups take arrays of geometric models, volumetric models, clipping
+geometric models and lights, but they are all optional. In other words,
+there is no need to create empty arrays if there are no geometries, volumes
+or lights in the group.
 
 By adding `OSPGeometricModel`s to the `clippingGeometry` array a
 clipping geometry feature is enabled. Geometries assigned to this
 parameter will be used as clipping geometries. Any supported geometry
-can be used for clipping. The only requirement is that it has to
-distinctly partition space into clipping and non-clipping one. These
-include: spheres, boxes, infinite planes, closed meshes, closed
-subdivisions and curves. All geometries and volumes assigned to
-`geometry` or `volume` will be clipped. Use of clipping geometry that is
-not closed (or infinite) will result in rendering artifacts. User can
-decide which part of space is clipped by changing shading normals
-orientation with the `invertNormals` flag of the [GeometricModel]. When
-more than single clipping geometry is defined all clipping areas will be
-"added" together – an union of these areas will be applied.
+can be used for clipping^[including spheres, boxes, infinite planes,
+closed meshes, closed subdivisions and curves], the only requirement is
+that it has to distinctly partition space into clipping and non-clipping
+one. The use of clipping geometry that is not closed or infinite could
+result in rendering artifacts. User can decide which part of space is
+clipped by changing shading normals orientation with the `invertNormals`
+flag of the [GeometricModel]. All geometries and volumes assigned to
+`geometry` or `volume` will be clipped. All clipping geometries from all
+groups and [Instances] will be combined together – a union of these
+areas will be applied to all other objects in the [world].
 
   -------------------- ---------------- ----------  --------------------------------------
   Type                 Name                Default  Description
@@ -1705,6 +1770,8 @@ more than single clipping geometry is defined all clipping areas will be
 
   OSPGeometricModel[]  clippingGeometry       NULL  [data] array of [GeometricModels]
                                                     used for clipping
+
+  OSPLight[]           light                  NULL  [data] array of [lights]
 
   bool                 dynamicScene          false  use RTC_SCENE_DYNAMIC flag (faster
                                                     BVH build, slower ray traversal),
@@ -1722,10 +1789,6 @@ more than single clipping geometry is defined all clipping areas will be
   -------------------- ---------------- ----------  ---------------------------------------
   : Parameters understood by groups.
 
-Note that groups only need to re re-committed if a geometry or volume
-changes (surface/scalar field representation). Appearance information
-on `OSPGeometricModel` and `OSPVolumetricModel` can be changed freely,
-as internal acceleration structures do not need to be reconstructed.
 
 ### Instances
 
@@ -1734,12 +1797,38 @@ via a transform. To create and instance call
 
     OSPInstance ospNewInstance(OSPGroup);
 
-  ------------ ------ ---------- --------------------------------------
-  Type         Name      Default Description
-  ------------ ------ ---------- --------------------------------------
-  affine3f     xfm      identity world-space transform for all attached
-                                 geometries and volumes
-  ------------ ------ ---------- --------------------------------------
+The passed group can be `NULL` as long as the group to be instanced is
+passed as a parameter. If both a group is specified on object creation
+and as a parameter, the parameter value is used. If the parameter value
+is later removed, the group object passed on object creation is again
+used.
+
+  ------------ ----------------- ---------- --------------------------------------------------------
+  Type         Name                 Default Description
+  ------------ ----------------- ---------- --------------------------------------------------------
+  OSPGroup     group                        optional [group] object to be instanced
+
+  affine3f     transform           identity world-space transform for all attached geometries and
+                                            volumes, overridden by `motion.*` arrays
+
+  affine3f[]   motion.transform             uniformly distributed world-space transforms
+
+  vec3f[]      motion.scale                 uniformly distributed world-space scale, overridden
+                                            by `motion.transform`
+
+  vec3f[]      motion.pivot                 uniformly distributed world-space translation which is
+                                            applied before `motion.rotation` (i.e., the rotation
+                                            center), overridden by `motion.transform`
+
+  quatf[]      motion.rotation              uniformly distributed world-space quaternion rotation,
+                                            overridden by `motion.transform`
+
+  vec3f[]      motion.translation           uniformly distributed world-space translation,
+                                            overridden by `motion.transform`
+
+  box1f        time                  [0, 1] time associated with first and last key in `motion.*`
+                                            arrays (for motion blur)
+  ------------ ----------------- ---------- --------------------------------------------------------
   : Parameters understood by instances.
 
 
@@ -1924,7 +2013,7 @@ renderers, the SciVis renderer supports the following parameters:
 
 Note that the intensity (and color) of AO is deduced from an [ambient
 light] in the `lights` array.^[If there are multiple ambient lights then
-their contribution is added] If `aoSamples` is zero (the default) then
+their contribution is added.] If `aoSamples` is zero (the default) then
 ambient lights cause ambient illumination (without occlusion).
 
 ### Ambient Occlusion Renderer
@@ -1995,7 +2084,9 @@ Materials describe how light interacts with surfaces, they give objects
 their distinctive look. To let the given renderer create a new material
 of given type `type` call
 
-    OSPMaterial ospNewMaterial(const char *renderer_type, const char *material_type);
+    OSPMaterial ospNewMaterial(const char *, const char *material_type);
+
+Please note that the first argument is ignored.
 
 The returned handle can then be used to assign the material to a given
 geometry with
@@ -2326,7 +2417,7 @@ the type string "`glass`" to `ospNewMaterial`. Its parameters are
 For convenience, the rather counter-intuitive physical attenuation
 coefficients will be calculated from the user inputs in such a way, that
 the `attenuationColor` will be the result when white light traveled
-trough a glass of thickness `attenuationDistance`.
+through a glass of thickness `attenuationDistance`.
 
 ![Rendering of a Glass material with orange
 attenuation.][imgMaterialGlass]
@@ -2503,13 +2594,13 @@ different transfer function than that of the sliced volume.
 All materials with textures also offer to manipulate the placement of
 these textures with the help of texture transformations. If so, this
 convention shall be used: the following parameters are prefixed with
-"`texture_name.`").
+"`texture_name.*`").
 
   Type      Name         Description
   --------- ------------ -------------------------------------------------
   linear2f  transform    linear transformation (rotation, scale)
   float     rotation     angle in degree, counterclockwise, around center
-  vec2f     scale        enlarge texture, relative to center (0.5, 0.5)
+  vec2f     scale        enlarge texture, relative to center $(0.5, 0.5)$
   vec2f     translation  move texture in positive direction (right/up)
   --------- ------------ -------------------------------------------------
   : Parameters to define 2D texture coordinate transformations.
@@ -2537,24 +2628,79 @@ To create a new camera of given type `type` use
 
 All cameras accept these parameters:
 
-  Type   Name        Description
-  ------ ----------- ------------------------------------------
-  vec3f  position    position of the camera in world-space
-  vec3f  direction   main viewing direction of the camera
-  vec3f  up          up direction of the camera
-  float  nearClip    near clipping distance
-  vec2f  imageStart  start of image region (lower left corner)
-  vec2f  imageEnd    end of image region (upper right corner)
-  ------ ----------- ------------------------------------------
+  ----------- ----------------------- ---------------------  ------------------------------------------
+  Type        Name                                  Default  Description
+  ----------- ----------------------- ---------------------  ------------------------------------------
+  vec3f       position                          $(0, 0, 0)$  position of the camera
+
+  vec3f       direction                         $(0, 0, 1)$  main viewing direction of the camera
+
+  vec3f       up                                $(0, 1, 0)$  up direction of the camera
+
+  affine3f    transform                            identity  additional world-space transform, overridden
+                                                             by `motion.*` arrays
+
+  float       nearClip                               10^-6^  near clipping distance
+
+  vec2f       imageStart                           $(0, 0)$  start of image region (lower left corner)
+
+  vec2f       imageEnd                             $(1, 1)$  end of image region (upper right corner)
+
+  affine3f[]  motion.transform                               additional uniformly distributed world-space
+                                                             transforms
+
+  vec3f[]     motion.scale                                   additional uniformly distributed world-space
+                                                             scale, overridden by `motion.transform`
+
+  vec3f[]     motion.pivot                                   additional uniformly distributed world-space
+                                                             translation which is applied before
+                                                             `motion.rotation` (i.e., the rotation
+                                                             center), overridden by `motion.transform`
+
+  quatf[]     motion.rotation                                additional uniformly distributed world-space
+                                                             quaternion rotation, overridden by
+                                                             `motion.transform`
+
+  vec3f[]     motion.translation                             additional uniformly distributed world-space
+                                                             translation, overridden by `motion.transform`
+
+  box1f       time                                   [0, 1]  time associated with first and last key in
+                                                             `motion.*` arrays
+
+  box1f       shutter                            [0.5, 0.5]  start and end of shutter time (for motion
+                                                             blur), in [0, 1]
+
+  uchar       shutterType              `OSP_SHUTTER_GLOBAL`  `OSPShutterType` for motion blur, also
+                                                             allowed are:
+
+                                                             `OSP_SHUTTER_ROLLING_RIGHT`
+
+                                                             `OSP_SHUTTER_ROLLING_LEFT`
+
+                                                             `OSP_SHUTTER_ROLLING_DOWN`
+
+                                                             `OSP_SHUTTER_ROLLING_UP`
+
+  float       rollingShutterDuration                      0  for a rolling shutter (see `shutterType`)
+                                                             the "open" time per line, in [0,
+                                                             `shutter`.upper-`shutter`.lower]
+  ----------- ----------------------- ---------------------  ------------------------------------------
   : Parameters accepted by all cameras.
 
-The camera is placed and oriented in the world with `position`, `direction`
-and `up`. OSPRay uses a right-handed coordinate system. The region of the
-camera sensor that is rendered to the image can be specified in normalized
+The camera is placed and oriented in the world with `position`,
+`direction` and `up`. Additionally, an extra transformation `transform`
+can be specified, which will only be applied to 3D vectors (i.e.
+`position`, `direction` and `up`), but does *not* affect any sizes
+(e.g., `nearClip`, `apertureRadius`, or `height`). The same holds for
+the array of transformations `motion.transform` to achieve camera motion
+blur (in combination with `time` and `shutter`).
+
+OSPRay uses a right-handed coordinate system. The region of the camera
+sensor that is rendered to the image can be specified in normalized
 screen-space coordinates with `imageStart` (lower left corner) and
-`imageEnd` (upper right corner). This can be used, for example, to crop the
-image, to achieve asymmetrical view frusta, or to horizontally flip the
-image to view scenes which are specified in a left-handed coordinate
+`imageEnd` (upper right corner). This can be used, for example, to crop
+the image, to achieve asymmetrical view frusta, or to horizontally flip
+the image to view scenes which are specified in a left-handed coordinate
 system. Note that values outside the default range of [0–1] are valid,
 which is useful to easily realize overscan or film gate, or to emulate a
 shifted sensor.
@@ -2563,45 +2709,43 @@ shifted sensor.
 
 The perspective camera implements a simple thin lens camera for
 perspective rendering, supporting optionally depth of field and stereo
-rendering, but no motion blur. It is created by passing the type string
-"`perspective`" to `ospNewCamera`. In addition to the [general
+rendering (with the [path tracer]). It is created by passing the type
+string "`perspective`" to `ospNewCamera`. In addition to the [general
 parameters](#cameras) understood by all cameras the perspective camera
 supports the special parameters listed in the table below.
 
-  ----- ---------------------- -----------------------------------------
-  Type  Name                   Description
-  ----- ---------------------- -----------------------------------------
-  float fovy                   the field of view (angle in degree) of
-                               the frame's height
+  ----- ----------------------- -----------------  -----------------------------------------
+  Type  Name                              Default  Description
+  ----- ----------------------- -----------------  -----------------------------------------
+  float fovy                                   60  the field of view (angle in degree) of
+                                                   the frame's height
 
-  float aspect                 ratio of width by height of the frame
-                               (and image region)
+  float aspect                                  1  ratio of width by height of the frame
+                                                   (and image region)
 
-  float apertureRadius         size of the aperture, controls the depth
-                               of field
+  float apertureRadius                          0  size of the aperture, controls the depth
+                                                   of field
 
-  float focusDistance          distance at where the image is sharpest
-                               when depth of field is enabled
+  float focusDistance                           1  distance at where the image is sharpest
+                                                   when depth of field is enabled
 
-  bool  architectural          vertical edges are projected to be
-                               parallel
+  bool  architectural                       false  vertical edges are projected to be
+                                                   parallel
 
-  uchar stereoMode             `OSPStereoMode` for stereo rendering,
-                               possible values are:
+  uchar stereoMode              `OSP_STEREO_NONE`  `OSPStereoMode` for stereo rendering,
+                                                   also allowed are:
 
-                               `OSP_STEREO_NONE` (default)
+                                                   `OSP_STEREO_LEFT`
 
-                               `OSP_STEREO_LEFT`
+                                                   `OSP_STEREO_RIGHT`
 
-                               `OSP_STEREO_RIGHT`
+                                                   `OSP_STEREO_SIDE_BY_SIDE`
 
-                               `OSP_STEREO_SIDE_BY_SIDE`
+                                                   `OSP_STEREO_TOP_BOTTOM` (left eye at top half)
 
-                               `OSP_STEREO_TOP_BOTTOM` (left eye at top half)
-
-  float interpupillaryDistance distance between left and right eye when
-                               stereo is enabled, default 0.0635
-  ----- ---------------------- -----------------------------------------
+  float interpupillaryDistance             0.0635  distance between left and right eye when
+                                                   stereo is enabled
+  ----- ----------------------- -----------------  -----------------------------------------
   : Additional parameters accepted by the perspective camera.
 
 Note that when computing the `aspect` ratio a potentially set image region
@@ -2632,11 +2776,10 @@ edges.][imgCameraArchitectural]
 #### Orthographic Camera
 
 The orthographic camera implements a simple camera with orthographic
-projection, without support for depth of field or motion blur. It is
-created by passing the type string  "`orthographic`" to `ospNewCamera`.
-In addition to the [general parameters](#cameras) understood by all
-cameras the orthographic camera supports the following special
-parameters:
+projection, without support for depth. It is created by passing the type
+string  "`orthographic`" to `ospNewCamera`. In addition to the [general
+parameters](#cameras) understood by all cameras the orthographic camera
+supports the following special parameters:
 
   Type   Name    Description
   ------ ------- ------------------------------------------------------------
@@ -2753,7 +2896,7 @@ values of `OSPFrameBufferChannel` listed in the table below.
   OSP_FB_DEPTH     euclidean distance to the camera (_not_ to the image plane), as linear 32\ bit float; for multiple samples per pixel their minimum is taken
   OSP_FB_ACCUM     accumulation buffer for progressive refinement
   OSP_FB_VARIANCE  for estimation of the current noise level if OSP_FB_ACCUM is also present, see [rendering]
-  OSP_FB_NORMAL    accumulated world-space normal of the first hit, as vec3f
+  OSP_FB_NORMAL    accumulated world-space normal of the first non-specular hit, as vec3f
   OSP_FB_ALBEDO    accumulated material albedo (color without illumination) at the first hit, as vec3f
   ---------------- -----------------------------------------------------------
   : Framebuffer channels constants (of type `OSPFrameBufferChannel`),
@@ -2840,27 +2983,27 @@ Color Encoding System (ACES). The tone mapper is created by passing the type
 string "`tonemapper`" to `ospNewImageOperation`. The tone mapping curve can be
 customized using the parameters listed in the table below.
 
-  ----- ---------  --------    -----------------------------------------
-  Type  Name       Default     Description
-  ----- ---------  --------    -----------------------------------------
-  float exposure   1.0         amount of light per unit area
+  ------ ---------- ---------  -----------------------------------------
+  Type   Name         Default  Description
+  ------ ---------- ---------  -----------------------------------------
+  float  exposure         1.0  amount of light per unit area
 
-  float contrast   1.6773      contrast (toe of the curve); typically is
+  float  contrast      1.6773  contrast (toe of the curve); typically is
                                in [1–2]
 
-  float shoulder   0.9714      highlight compression (shoulder of the
+  float  shoulder      0.9714  highlight compression (shoulder of the
                                curve); typically is in [0.9–1]
 
-  float midIn      0.18        mid-level anchor input; default is 18%
+  float  midIn           0.18  mid-level anchor input; default is 18%
                                gray
 
-  float midOut     0.18        mid-level anchor output; default is 18%
+  float  midOut          0.18  mid-level anchor output; default is 18%
                                gray
 
-  float hdrMax     11.0785     maximum HDR input that is not clipped
+  float  hdrMax       11.0785  maximum HDR input that is not clipped
 
-  bool  acesColor  true        apply the ACES color transforms
-  ----- ---------  --------    -----------------------------------------
+  bool   acesColor       true  apply the ACES color transforms
+  ------ ---------- ---------  -----------------------------------------
   : Parameters accepted by the tone mapper.
 
 To use the popular "Uncharted 2" filmic tone mapping curve instead, set the
@@ -2956,7 +3099,7 @@ Applications can query whether particular events are complete with
     int ospIsReady(OSPFuture, OSPSyncEvent = OSP_TASK_FINISHED);
 
 As the given running task runs (as tracked by the `OSPFuture`),
-applications can query a boolean [0,1] result if the passed event has
+applications can query a boolean [0, 1] result if the passed event has
 been completed.
 
 Applications can query how long an async task ran with
@@ -2968,13 +3111,6 @@ is still running, this will block until the task is completed. This is useful
 for applications to query exactly how long an asynchronous task executed without
 the overhead of measuring both task execution + synchronization by the calling
 application.
-
-### Asynchronously Rendering and ospCommit()
-
-The use of either `ospRenderFrame` or `ospRenderFrame` requires
-that all objects in the scene being rendered have been committed before
-rendering occurs. If a call to `ospCommit()` happens while a frame is
-rendered, the result is undefined behavior and should be avoided.
 
 ### Synchronous Rendering
 
@@ -2990,6 +3126,13 @@ This version is the equivalent of:
     return ospGetVariance(fb)
 
 This version is closest to `ospRenderFrame` from OSPRay v1.x.
+
+### Rendering and ospCommit
+
+The use of either `ospRenderFrame` or `ospRenderFrameBlocking` requires
+that all objects in the scene being rendered have been committed before
+rendering occurs. If a call to `ospCommit` happens while a frame is
+rendered, the result is undefined behavior and should be avoided.
 
 Distributed Rendering with MPI
 ==============================
@@ -3066,7 +3209,7 @@ through the command line, the following parameters can be set:
 
   uint     commandBufferSize         512\ MiB  Set the max command buffer size
                                                to allow. Units are in MiB. Max
-                                               size is 1.8GiB
+                                               size is 1.8\ GiB
 
   uint     maxInlineDataSize          32\ MiB  Set the max size of an OSPData
                                                which can be inline'd into the
@@ -3083,12 +3226,21 @@ The `maxCommandBufferEntries`, `commandBufferSize`, and
 `OSPRAY_MPI_COMMAND_BUFFER_SIZE`, and `OSPRAY_MPI_MAX_INLINE_DATA_SIZE`,
 respectively.
 
+The `mpiOffload` device uses a dynamic load balancer by default. If you
+wish to use a static load balancer you can do so by setting the
+`OSPRAY_STATIC_BALANCER` environment variable to 1.
+
+The `mpiOffload` device does not support multiple init/shutdown cycles.
+Thus, to run `ospBenchmark` for this device make sure to exclude the
+init/shutdown test by passing `--benchmark_filter=-ospInit_ospShutdown`
+through the command line.
+
 MPI Distributed Rendering
 -------------------------
 
 While MPI Offload rendering is used to transparently distribute
 rendering work without requiring modification to the application, MPI
-Distributed rendering is targetted at use of OSPRay within MPI-parallel
+Distributed rendering is targeted at use of OSPRay within MPI-parallel
 applications. The MPI distributed device can be selected by loading the
 `mpi` module, and manually creating and using an instance of the
 `mpiDistributed` device:
@@ -3155,7 +3307,7 @@ shipping data out to the workers. When a parallel file system is
 available, this can improve data load times. Image-parallel rendering is
 selected by specifying the same data on each rank, and using any of the
 existing local renderers (e.g., `scivis`, `pathtracer`). See
-[ospMPIDistributedTutorialReplicatedData](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistributedTutorialReplicatedData.cpp)
+[ospMPIDistribTutorialReplicated](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistribTutorialReplicated.cpp)
 for an example.
 
 ### Data Parallel Rendering in the MPI Distributed Device
@@ -3175,8 +3327,8 @@ occlusion, each rank's data can overlap. To clip these non-owned overlap
 regions out a set of regions (the `region` parameter) can pass as a
 parameter to the `OSPWorld` being rendered. Each rank can specify one or
 more non-overlapping `box3f`'s which bound the portions of its local
-data which it is reponsible for rendering. See the
-[ospMPIDistributedTutorialStructuredVolume](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistributedTutorialStructuredVolume.cpp)
+data which it is responsible for rendering. See the
+[ospMPIDistribTutorialVolume](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistribTutorialVolume.cpp)
 for an example.
 
 Finally, the MPI distributed device also supports hybrid-parallel
@@ -3185,7 +3337,7 @@ each shared piece of data the rendering work will be assigned
 image-parallel among the ranks. Partially-shared regions are determined
 by finding those ranks specifying data with the same bounds (matching
 regions) and merging them. See the
-[ospMPIDistributedTutorialPartiallyReplicatedData](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistributedTutorialPartiallyReplicatedData.cpp)
+[ospMPIDistribTutorialPartialRepl](https://github.com/ospray/ospray/blob/master/modules/mpi/tutorials/ospMPIDistribTutorialPartialRepl.cpp)
 for an example.
 
 #### Picking on Distributed Data in the MPI Distributed Device {-}
@@ -3210,3 +3362,22 @@ copied over the network to the workers.
 The MPI Distributed device also supports user modules, as all that is
 required for compositing the distributed data are the bounds of each
 rank's local data.
+
+MultiDevice Rendering
+==============================
+
+The multidevice module is an experimental OSPRay device type that renders
+images by delegating off pixel tiles to a number of internal delegate OSPRay
+devices. Multidevice is in still in an development stage and is currently
+limited to automatically creating ISPCDevice delegates.
+
+If you wish to try it set the OSPRAY_NUM_SUBDEVICES environmental variable to
+the number of subdevices you want to create and tell OSPRay to both load the
+multidevice extension and create a multidevice for rendering instead of the
+default ISPCDevice.
+
+One example in a bash like shell is as follows:
+
+```sh
+OSPRAY_NUM_SUBDEVICES=6 ./ospTutorial --osp:load-modules=multidevice --osp:device=multidevice
+```

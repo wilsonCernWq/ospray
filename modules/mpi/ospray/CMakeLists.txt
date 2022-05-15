@@ -1,4 +1,4 @@
-## Copyright 2009-2021 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 ## Options ##
@@ -29,10 +29,10 @@ ispc_target_add_sources(ospray_module_mpi
   MPIDistributedDevice.ispc
   ModuleInit.cpp
   common/DistributedWorld.cpp
-  common/DistributedWorld.ispc
 
   common/OSPWork.cpp
   common/Messaging.cpp
+  common/DynamicLoadBalancer.cpp
 
   fb/DistributedFrameBuffer.cpp
   fb/DistributedFrameBuffer.ispc
@@ -50,12 +50,11 @@ ispc_target_add_sources(ospray_module_mpi
 
 target_link_libraries(ospray_module_mpi
   PRIVATE
-    snappy
+    Snappy::snappy
     rkcommon::rkcommon
     ospray_mpi_common
     ospray_pico_bench
-    ospray_sdk
-    ospray_module_ispc
+    ospray_module_cpu
 )
 
 target_include_directories(ospray_module_mpi

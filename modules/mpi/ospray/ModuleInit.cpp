@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "MPIDistributedDevice.h"
@@ -16,7 +16,7 @@ extern "C" OSPError OSPRAY_DLLEXPORT ospray_module_init_mpi(
   if (status == OSP_NO_ERROR) {
     // Run the ISPC module's initialization function as well to register local
     // types
-    status = ospLoadModule("ispc");
+    status = ospLoadModule("cpu");
   }
 
   if (status == OSP_NO_ERROR) {

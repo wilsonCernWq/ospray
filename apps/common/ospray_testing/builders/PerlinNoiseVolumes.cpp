@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Builder.h"
@@ -279,7 +279,7 @@ cpp::World PerlinNoiseVolumes::buildWorld() const
     const vec3f position = groupBounds.size() * vec3f(i.x, i.y, i.z)
         - 0.5f * vec3f(totalSize.x, 0.0f, totalSize.z) + rndT;
     cpp::Instance instance(group);
-    instance.setParam("xfm", affine3f::translate(position));
+    instance.setParam("transform", affine3f::translate(position));
     instance.commit();
     instances.push_back(instance);
     sceneBounds.extend(groupBounds + position);

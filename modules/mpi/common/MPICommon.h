@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -139,7 +139,7 @@ struct UserMemMessage : public Message
   }
 
   /* set data to null to keep the parent from deleting it */
-  virtual ~UserMemMessage()
+  virtual ~UserMemMessage() override
   {
     data = nullptr;
   }

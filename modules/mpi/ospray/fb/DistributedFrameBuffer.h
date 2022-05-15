@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -8,6 +8,7 @@
 #include "../common/Messaging.h"
 #include "DistributedFrameBuffer_TileMessages.h"
 #include "fb/LocalFB.h"
+#include "fb/SparseFB.h"
 #include "render/Renderer.h"
 #include "rkcommon/containers/AlignedVector.h"
 
@@ -16,12 +17,13 @@ struct TileDesc;
 struct TileOperation;
 struct LiveTileOperation;
 
-class DistributedTileError : public TileError
+class DistributedTileError : public TaskError
 {
   mpicommon::Group group;
 
  public:
   DistributedTileError(const vec2i &numTiles, mpicommon::Group group);
+
   // broadcast tileErrorBuffer to all workers in this group
   void sync();
 };
@@ -34,14 +36,17 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
       ColorBufferFormat,
       const uint32 channels);
 
+  ~DistributedFrameBuffer() override;
+
   // ==================================================================
   // framebuffer / device interface
   // ==================================================================
 
-  const void *mapBuffer(OSPFrameBufferChannel channel) override;
-  void unmap(const void *mappedMem) override;
-
   void commit() override;
+
+  const void *mapBuffer(OSPFrameBufferChannel channel) override;
+
+  void unmap(const void *mappedMem) override;
 
   /*! \brief clear (the specified channels of) this frame buffer
 
@@ -56,25 +61,48 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
   // framebuffer-renderer/loadbalancer interface
   // ==================================================================
 
+  // Return the number of render tasks in the x and y direction
+  // This is the kernel launch dims to render the image
+  vec2i getNumRenderTasks() const override;
+
+  uint32_t getTotalRenderTasks() const override;
+
+  vec2i getGlobalNumTiles() const;
+
+  uint32_t getGlobalTotalTiles() const;
+
+  /* Get render task IDs will return the render task IDs for layer 0,
+   * the tiles owned by the DFB for compositing.
+   */
+  utility::ArrayView<uint32_t> getRenderTaskIDs() override;
+
+  // Task error is not valid for the DFB, as error is tracked at a per-tile
+  // level. Use tileError to get rendering error
+  float taskError(const uint32_t taskID) const override;
+
+  float tileError(const uint32_t tileID);
+
   /*! framebuffer-renderer/loadbalancer interface: loadbalancer
       calls this function whenever a local node has finished a tile,
       and wants the (distributed) frame buffer to process it */
-  void setTile(ospray::Tile &tile) override;
+  void setTile(const ispc::Tile &tile);
 
   void startNewFrame(const float errorThreshold);
+
   void closeCurrentFrame();
 
   void waitUntilFinished();
 
-  int32 accumID(const vec2i &) override;
-  float tileError(const vec2i &tile) override;
   void endFrame(const float errorThreshold, const Camera *camera) override;
 
   void setTileOperation(
       std::shared_ptr<TileOperation> tileOp, const Renderer *renderer);
+
   std::shared_ptr<TileOperation> getTileOperation();
+
   const Renderer *getLastRenderer() const;
 
+  mpicommon::Group getMPIGroup();
   // ==================================================================
   // interface for maml messaging, enables communication between
   // different instances of same object
@@ -93,14 +121,17 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
 
   size_t ownerIDFromTileID(size_t tileID) const;
 
- private:
-  std::vector<char> tileGatherBuffer;
-  std::vector<char> compressedResults;
-  // Locations of the compressed tiles in the tileGatherBuffer
-  std::vector<uint32_t> tileBufferOffsets;
-  uint32_t nextTileWrite;
-  std::mutex finalTileBufferMutex;
+  void setSparseFBLayerCount(size_t numLayers);
 
+  size_t getSparseLayerCount() const;
+
+  SparseFrameBuffer *getSparseFBLayer(size_t l);
+
+  void cancelFrame() override;
+
+  float getCurrentProgress() const override;
+
+ private:
   friend struct LiveTileOperation;
 
   // ==================================================================
@@ -109,7 +140,7 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
 
   /*! this function gets called whenever one of our tiles is done
       writing/compositing/blending/etc; i.e., as soon as we know
-      that all the ingredient tile datas for that tile have been
+      that all the ingredient tile data for that tile have been
       received from the client(s) that generated them. By the time
       the tile gets called we do know that 'accum' field of the tile
       has been set; it is this function's job to make sure we
@@ -160,8 +191,24 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
   // conflicts with other framebuffers
   mpicommon::Group mpiGroup;
 
-  // Holds accumID per tile, for adaptive accumulation
-  rkcommon::containers::AlignedVector<uint32_t> tileAccumID;
+  // Total number of tiles that the framebuffer is divided into, including those
+  // not owned by this sparsefb
+  vec2i totalTiles;
+
+  // Total number of render tasks that the framebuffer is divided into,
+  // including those not owned by this sparsefb
+  vec2i numRenderTasks;
+
+  std::vector<char> tileGatherBuffer;
+
+  std::vector<char> compressedResults;
+
+  // Locations of the compressed tiles in the tileGatherBuffer
+  std::vector<uint32_t> tileBufferOffsets;
+
+  uint32_t nextTileWrite{0};
+
+  std::mutex finalTileBufferMutex;
 
   /*! holds error per tile and adaptive regions, for variance estimation /
       stopping */
@@ -172,17 +219,26 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
       master if the master does not have a color buffer */
   std::unique_ptr<LocalFrameBuffer> localFBonMaster;
 
+  /* SparseFrameBuffer layers in the DFB, layer 0 stores the tiles owned by DFB
+   * for compositing, and layers 1-N are those added by the renderer. For
+   * renderers whose local rendering work is dynamic/data-dependent (e.g.,
+   * data-parallel rendering), layers can be allocated and resized as needed to
+   * avoid having to reallocate the set of SparseFrameBuffer(s) needed each
+   * frame.
+   */
+  std::vector<std::shared_ptr<SparseFrameBuffer>> layers;
+
   /*! #tiles we've (already) sent to / received by the master this frame
       (used to track when current node is done with this frame - we are done
       exactly once we've completed sending / receiving the last tile to / by
       the master) */
-  size_t numTilesCompletedThisFrame;
+  size_t numTilesCompletedThisFrame{0};
 
   /*! The total number of tiles completed by all workers during this frame,
       to track progress for the user's progress callback. NOTE: This is
       not the numTilesCompletedThisFrame , which tracks how many tiles
       this rank has finished of the ones it's responsible for completing */
-  size_t globalTilesCompletedThisFrame;
+  size_t globalTilesCompletedThisFrame{0};
 
   /*! The number of tiles the master is expecting to receive from each rank */
   std::vector<int> numTilesExpected;
@@ -212,14 +268,16 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
 
   //! set to true when the frame becomes 'active', and write tile
   //! messages can be consumed.
-  std::atomic<bool> frameIsActive;
+  std::atomic<bool> frameIsActive{false};
 
   /*! set to true when the framebuffer is done for the given
       frame */
-  bool frameIsDone;
+  bool frameIsDone{false};
 
-  int renderingProgressTiles;
+  int renderingProgressTiles{0};
   std::chrono::steady_clock::time_point lastProgressReport;
+
+  std::atomic<float> frameProgress{0.f};
 
   //! condition that gets triggered when the frame is done
   std::condition_variable frameDoneCond;

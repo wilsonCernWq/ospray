@@ -1,4 +1,4 @@
-## Copyright 2009-2021 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 macro(ospray_create_mpi_tutorial tutorial_name)
@@ -24,45 +24,45 @@ if (TARGET glfw)
 endif()
 
 # build ospTutorial, for demonstration and API testing
-add_executable(ospMPIDistributedTutorial
-  ${OSPRAY_RESOURCE} ospMPIDistributedTutorial.c)
+add_executable(ospMPIDistribTutorial
+  ${OSPRAY_RESOURCE} ospMPIDistribTutorial.c)
 
-target_link_libraries(ospMPIDistributedTutorial PRIVATE
+target_link_libraries(ospMPIDistribTutorial PRIVATE
   ospray
   ${MPI_C_LIBRARIES})
 
-target_include_directories(ospMPIDistributedTutorial PRIVATE
+target_include_directories(ospMPIDistribTutorial PRIVATE
   $<BUILD_INTERFACE:${MPI_C_INCLUDE_PATH}>)
 
-ospray_sign_target(ospMPIDistributedTutorial)
+ospray_sign_target(ospMPIDistribTutorial)
 
 # C++ version
-add_executable(ospMPIDistributedTutorialCpp
-  ${OSPRAY_RESOURCE} ospMPIDistributedTutorial.cpp)
+add_executable(ospMPIDistribTutorialCpp
+  ${OSPRAY_RESOURCE} ospMPIDistribTutorial.cpp)
 
-target_link_libraries(ospMPIDistributedTutorialCpp PRIVATE
+target_link_libraries(ospMPIDistribTutorialCpp PRIVATE
   ospray
   rkcommon::rkcommon
   MPI::MPI_CXX
 )
 
-target_compile_definitions(ospMPIDistributedTutorialCpp PRIVATE
-    -DOSPRAY_CPP_RKCOMMON_TYPES)
+target_compile_definitions(ospMPIDistribTutorialCpp PRIVATE
+  -DOSPRAY_CPP_RKCOMMON_TYPES)
 
-ospray_sign_target(ospMPIDistributedTutorialCpp)
+ospray_sign_target(ospMPIDistribTutorialCpp)
 
 # async version
-add_executable(ospMPIDistributedTutorialAsync
-  ${OSPRAY_RESOURCE} ospMPIDistributedTutorialAsync.c)
+add_executable(ospMPIDistribTutorialAsync
+  ${OSPRAY_RESOURCE} ospMPIDistribTutorialAsync.c)
 
-target_link_libraries(ospMPIDistributedTutorialAsync PRIVATE
+target_link_libraries(ospMPIDistribTutorialAsync PRIVATE
   ospray
   ${MPI_C_LIBRARIES})
 
-target_include_directories(ospMPIDistributedTutorialAsync PRIVATE
+target_include_directories(ospMPIDistribTutorialAsync PRIVATE
   $<BUILD_INTERFACE:${MPI_C_INCLUDE_PATH}>)
 
-ospray_sign_target(ospMPIDistributedTutorialAsync)
+ospray_sign_target(ospMPIDistribTutorialAsync)
 
 # MPI Tutorial utilities library
 add_library(mpi_tutorial_common STATIC
@@ -83,33 +83,41 @@ target_link_libraries(mpi_tutorial_common PUBLIC
   MPI::MPI_CXX
 )
 
-
 target_compile_definitions(mpi_tutorial_common PUBLIC -DOSPRAY_CPP_RKCOMMON_TYPES)
 
-ospray_create_mpi_tutorial(ospMPIDistributedTutorialSpheres
-  ospMPIDistributedTutorialSpheres.cpp
+ospray_create_mpi_tutorial(ospMPIDistribTutorialSpheres
+  ospMPIDistribTutorialSpheres.cpp
 )
 
-ospray_sign_target(ospMPIDistributedTutorialSpheres)
+ospray_sign_target(ospMPIDistribTutorialSpheres)
 
-ospray_create_mpi_tutorial(ospMPIDistributedTutorialStructuredVolume
-  ospMPIDistributedTutorialStructuredVolume.cpp
+ospray_create_mpi_tutorial(ospMPIDistribTutorialVolume
+  ospMPIDistribTutorialVolume.cpp
 )
 
-ospray_sign_target(ospMPIDistributedTutorialStructuredVolume)
+ospray_sign_target(ospMPIDistribTutorialVolume)
 
-ospray_create_mpi_tutorial(ospMPIDistributedTutorialPartiallyReplicatedData
-  ospMPIDistributedTutorialPartiallyReplicatedData.cpp
+ospray_create_mpi_tutorial(ospMPIDistribTutorialPartialRepl
+  ospMPIDistribTutorialPartialRepl.cpp
 )
 
-ospray_sign_target(ospMPIDistributedTutorialPartiallyReplicatedData)
+ospray_sign_target(ospMPIDistribTutorialPartialRepl)
 
-ospray_create_mpi_tutorial(ospMPIDistributedTutorialReplicatedData
-  ospMPIDistributedTutorialReplicatedData.cpp
+ospray_create_mpi_tutorial(ospMPIDistribTutorialReplicated
+  ospMPIDistribTutorialReplicated.cpp
 )
-ospray_sign_target(ospMPIDistributedTutorialReplicatedData)
+ospray_sign_target(ospMPIDistribTutorialReplicated)
 
-target_link_libraries(ospMPIDistributedTutorialReplicatedData PUBLIC
+target_link_libraries(ospMPIDistribTutorialReplicated PUBLIC
+  ospray_testing
+)
+
+ospray_create_mpi_tutorial(ospMPIDistributedExamples
+    ospMPIDistributedExamples.cpp
+)
+ospray_sign_target(ospMPIDistributedExamples)
+
+target_link_libraries(ospMPIDistributedExamples PUBLIC
   ospray_testing
 )
 

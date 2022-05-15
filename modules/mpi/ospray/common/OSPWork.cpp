@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include <vector>
@@ -61,7 +61,7 @@ Data *OSPState::getSharedDataHandle(int64_t handle) const
 {
   auto fnd = appSharedData.find(handle);
   if (fnd != appSharedData.end()) {
-    return fnd->second;
+    return fnd->second.ptr;
   }
   return nullptr;
 }
@@ -152,9 +152,9 @@ void newMaterial(
     OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
 {
   int64_t handle = 0;
-  std::string type, rendererType;
-  cmdBuf >> handle >> rendererType >> type;
-  state.objects[handle] = ospNewMaterial(rendererType.c_str(), type.c_str());
+  std::string type;
+  cmdBuf >> handle >> type;
+  state.objects[handle] = ospNewMaterial(nullptr, type.c_str());
 }
 
 void newLight(
@@ -188,7 +188,7 @@ void dataTransfer(OSPState &state,
 
 Data *retrieveData(OSPState &state,
     networking::BufferReader &cmdBuf,
-    networking::Fabric &fabric,
+    networking::Fabric &,
     const OSPDataType type,
     const vec3ul numItems,
     Data *outputData)
@@ -211,12 +211,15 @@ Data *retrieveData(OSPState &state,
     auto data = state.dataTransfers.front();
     state.dataTransfers.pop();
 
-    if (outputData) {
+    if (!outputData) {
+      outputData = data;
+    } else {
       // All data on the workers is compact, with the compaction done by the
       // app rank before sending
       std::memcpy(outputData->data(), data->data(), nbytes);
-    } else {
-      outputData = data;
+
+      // Release the temporary data transfer object
+      data->refDec();
     }
   }
 
@@ -251,13 +254,22 @@ void newSharedData(OSPState &state,
 
   auto data = retrieveData(state, cmdBuf, fabric, format, numItems, nullptr);
 
-  state.objects[handle] = (OSPData)data;
+  // gives an opportunity to pass off to internal device(s)
+  auto forsubs = ospNewSharedData(
+      data->data(), format, numItems.x, 0, numItems.y, 0, numItems.z, 0);
+  auto subscopy = ospNewData(format, numItems.x, numItems.y, numItems.z);
+  ospCopyData(forsubs, subscopy);
+  ospCommit(subscopy);
+  ospRelease(forsubs);
+  state.objects[handle] = (OSPData)subscopy;
   state.appSharedData[handle] = data;
+
+  // Need to release the local scope's ref count, see issue about Ref<T>
+  data->refDec();
 }
 
-void newData(OSPState &state,
-    networking::BufferReader &cmdBuf,
-    networking::Fabric &fabric)
+void newData(
+    OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
 {
   int64_t handle = 0;
   OSPDataType format;
@@ -268,9 +280,8 @@ void newData(OSPState &state,
       ospNewData(format, numItems.x, numItems.y, numItems.z);
 }
 
-void copyData(OSPState &state,
-    networking::BufferReader &cmdBuf,
-    networking::Fabric &fabric)
+void copyData(
+    OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
 {
   int64_t sourceHandle = 0;
   int64_t destinationHandle = 0;
@@ -322,6 +333,21 @@ void commit(OSPState &state,
   Data *d = state.getSharedDataHandle(handle);
   if (d) {
     retrieveData(state, cmdBuf, fabric, d->type, d->numItems, d);
+
+    auto subscopy = (OSPData)state.objects[handle];
+
+    // gives an opportunity to pass off to internal device(s)
+    auto forsubs = ospNewSharedData(d->data(),
+        d->type,
+        d->numItems.x,
+        0,
+        d->numItems.y,
+        0,
+        d->numItems.z,
+        0);
+    ospCopyData(forsubs, subscopy);
+    ospCommit(subscopy);
+    ospRelease(forsubs);
   }
 
   ospCommit(state.objects[handle]);
@@ -336,26 +362,30 @@ void release(
   // Note: we keep the handle in the state.objects list as it may be referenced
   // by other objects in the scene as a parameter or data.
 
-  // Check if we can release a referenced framebuffer info
+  // Check if we should release a framebuffer info for this object
   {
     auto fnd = state.framebuffers.find(handle);
     if (fnd != state.framebuffers.end()) {
-      OSPObject obj = state.objects[handle];
-      ManagedObject *m = lookupDistributedObject<ManagedObject>(obj);
-      // Framebuffers are given an extra ref count by the worker so that
-      // we can track the lifetime of their framebuffer info. Use count == 1
-      // means only the worker rank has a reference to the object
-      if (m->useCount() == 1) {
-        ospRelease(state.objects[handle]);
+      if (fnd->second->useCount() == 1) {
         state.framebuffers.erase(fnd);
+      } else {
+        fnd->second->refDec();
       }
     }
   }
 
-  if (state.getSharedDataHandle(handle)) {
-    state.appSharedData.erase(handle);
+  // Check if we should release a shared data info for this object
+  {
+    auto fnd = state.appSharedData.find(handle);
+    if (fnd != state.appSharedData.end()) {
+      if (fnd->second->useCount() == 1) {
+        state.appSharedData.erase(fnd);
+      } else {
+        fnd->second->refDec();
+      }
+    }
   }
-}
+} // namespace work
 
 void retain(
     OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
@@ -363,10 +393,26 @@ void retain(
   int64_t handle = 0;
   cmdBuf >> handle;
   ospRetain(state.objects[handle]);
+
+  // Mirror the app's ref count for framebuffer info
+  {
+    auto fnd = state.framebuffers.find(handle);
+    if (fnd != state.framebuffers.end()) {
+      fnd->second->refInc();
+    }
+  }
+
+  // Mirror the app's ref count for shared data transfer buffers
+  {
+    auto fnd = state.appSharedData.find(handle);
+    if (fnd != state.appSharedData.end()) {
+      fnd->second->refInc();
+    }
+  }
 }
 
 void loadModule(
-    OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
+    OSPState &, networking::BufferReader &cmdBuf, networking::Fabric &)
 {
   std::string module;
   cmdBuf >> module;
@@ -383,11 +429,12 @@ void createFramebuffer(
   cmdBuf >> handle >> size >> format >> channels;
   state.objects[handle] =
       ospNewFrameBuffer(size.x, size.y, (OSPFrameBufferFormat)format, channels);
-  state.framebuffers[handle] =
-      FrameBufferInfo(size, (OSPFrameBufferFormat)format, channels);
 
-  // Offload device keeps +1 ref for tracking the lifetime of the framebuffer
-  ospRetain(state.objects[handle]);
+  Ref<FrameBufferInfo> fbInfo =
+      new FrameBufferInfo(size, (OSPFrameBufferFormat)format, channels);
+  state.framebuffers[handle] = fbInfo;
+  // Release the local scope ref (see open issue about Ref<T>)
+  fbInfo->refDec();
 }
 
 void mapFramebuffer(OSPState &state,
@@ -402,8 +449,8 @@ void mapFramebuffer(OSPState &state,
   if (mpicommon::worker.rank == 0) {
     using namespace utility;
 
-    const FrameBufferInfo &fbInfo = state.framebuffers[handle];
-    uint64_t nbytes = fbInfo.pixelSize(channel) * fbInfo.getNumPixels();
+    const FrameBufferInfo *fbInfo = state.framebuffers[handle].ptr;
+    uint64_t nbytes = fbInfo->pixelSize(channel) * fbInfo->getNumPixels();
 
     auto bytesView = std::make_shared<OwnedArray<uint8_t>>(
         reinterpret_cast<uint8_t *>(&nbytes), sizeof(nbytes));
@@ -636,13 +683,6 @@ void removeParam(
   ospRemoveParam(state.objects[handle], param.c_str());
 }
 
-void setLoadBalancer(
-    OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
-{
-  NOT_IMPLEMENTED;
-  // TODO: We only have one load balancer now
-}
-
 void pick(OSPState &state,
     networking::BufferReader &cmdBuf,
     networking::Fabric &fabric)
@@ -655,7 +695,7 @@ void pick(OSPState &state,
   cmdBuf >> fbHandle >> rendererHandle >> cameraHandle >> worldHandle
       >> screenPos;
 
-  OSPPickResult res = {0};
+  OSPPickResult res;
   ospPick(&res,
       state.getObject<OSPFrameBuffer>(fbHandle),
       state.getObject<OSPRenderer>(rendererHandle),
@@ -724,9 +764,8 @@ void futureWait(OSPState &state,
   }
 }
 
-void futureCancel(OSPState &state,
-    networking::BufferReader &cmdBuf,
-    networking::Fabric &fabric)
+void futureCancel(
+    OSPState &state, networking::BufferReader &cmdBuf, networking::Fabric &)
 {
   int64_t handle = 0;
   cmdBuf >> handle;
@@ -858,9 +897,6 @@ void dispatchWork(TAG t,
   case REMOVE_PARAM:
     removeParam(state, cmdBuf, fabric);
     break;
-  case SET_LOAD_BALANCER:
-    setLoadBalancer(state, cmdBuf, fabric);
-    break;
   case PICK:
     pick(state, cmdBuf, fabric);
     break;
@@ -885,7 +921,6 @@ void dispatchWork(TAG t,
   case NONE:
   default:
     throw std::runtime_error("Invalid work tag!");
-    break;
   }
 }
 
@@ -950,8 +985,6 @@ const char *tagName(work::TAG t)
     return "SET_PARAM";
   case REMOVE_PARAM:
     return "REMOVE_PARAM";
-  case SET_LOAD_BALANCER:
-    return "SET_LOAD_BALANCER";
   case PICK:
     return "PICK";
   case GET_BOUNDS:

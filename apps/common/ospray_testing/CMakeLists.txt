@@ -1,4 +1,4 @@
-## Copyright 2009-2020 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 include(GenerateExportHeader)
@@ -27,6 +27,8 @@ add_library(ospray_testing SHARED
   builders/VdbVolume.cpp
   builders/RawVolume.cpp
   builders/Transparency.cpp
+  builders/Instancing.cpp
+
   # regression test scenes
   builders/test_pt_glass.cpp
   builders/test_pt_luminous.cpp

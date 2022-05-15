@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -46,7 +46,7 @@ struct MPIOffloadDevice : public api::Device
   // Model Meta-Data //////////////////////////////////////////////////////
 
   OSPMaterial newMaterial(
-      const char *renderer_type, const char *material_type) override;
+      const char * /*ignored*/, const char *material_type) override;
 
   OSPTransferFunction newTransferFunction(const char *type) override;
 
@@ -144,7 +144,7 @@ struct MPIOffloadDevice : public api::Device
    * local data objects see them as OSP_ULONG types, while the worker type
    * is the true managed object type
    */
-  struct ApplicationData
+  struct ApplicationData : RefCountedObject
   {
     Data *data = nullptr;
     // We can't tell the local Data object that the contained type
@@ -175,7 +175,7 @@ struct MPIOffloadDevice : public api::Device
 
   std::unordered_map<int64_t, FrameBufferMapping> framebufferMappings;
 
-  std::unordered_map<int64_t, ApplicationData> sharedData;
+  std::unordered_map<int64_t, Ref<ApplicationData>> sharedData;
 
   std::unordered_set<int64_t> futures;
 

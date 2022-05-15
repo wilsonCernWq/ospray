@@ -1,4 +1,4 @@
-## Copyright 2009-2021 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 set(COMPONENT_NAME oidn)
@@ -33,6 +33,8 @@ if (BUILD_OIDN_FROM_SOURCE)
       $<$<BOOL:${DOWNLOAD_ISPC}>:-DISPC_EXECUTABLE=${ISPC_PATH}>
       -DCMAKE_BUILD_TYPE=${DEPENDENCIES_BUILD_TYPE}
       -DOIDN_APPS=OFF
+      -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}
     BUILD_COMMAND ${DEFAULT_BUILD_COMMAND}
     BUILD_ALWAYS ${ALWAYS_REBUILD}
   )
@@ -43,6 +45,7 @@ if (BUILD_OIDN_FROM_SOURCE)
   if (DOWNLOAD_ISPC)
     ExternalProject_Add_StepDependencies(${COMPONENT_NAME} configure ispc)
   endif()
+
 else()
 
   if (OIDN_HASH)

@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -8,7 +8,8 @@
 #include "common/Managed.h"
 #include "common/ObjectHandle.h"
 #include "openvkl/openvkl.h"
-#include "ospray/render/LoadBalancer.h"
+#include "render/DistributedLoadBalancer.h"
+#include "render/LoadBalancer.h"
 
 namespace ospray {
 namespace mpi {
@@ -102,7 +103,7 @@ struct MPIDistributedDevice : public api::Device
 
   /*! have given renderer create a new material */
   OSPMaterial newMaterial(
-      const char *renderer_type, const char *material_type) override;
+      const char * /*ignored*/, const char *material_type) override;
 
   /*! create a new camera object (out of list of registered cameras) */
   OSPCamera newCamera(const char *type) override;
@@ -152,13 +153,12 @@ struct MPIDistributedDevice : public api::Device
       OSPFrameBuffer, OSPRenderer, OSPCamera, OSPWorld, const vec2f &) override;
 
  private:
+  ObjectHandle allocateHandle();
+
   bool initialized{false};
   bool shouldFinalizeMPI{false};
 
-  std::shared_ptr<TiledLoadBalancer> loadBalancer;
-
-  RTCDevice embreeDevice = nullptr;
-  VKLDevice vklDevice = nullptr;
+  std::shared_ptr<Device> internalDevice = nullptr;
 };
 
 } // namespace mpi

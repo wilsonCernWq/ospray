@@ -1,4 +1,4 @@
-## Copyright 2009-2021 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 add_library(ospray_mpi_common STATIC
@@ -13,11 +13,10 @@ add_library(ospray_mpi_common STATIC
 
 target_link_libraries(ospray_mpi_common
   PRIVATE
-    snappy
+    Snappy::snappy
   PUBLIC
     rkcommon::rkcommon
-    ospray_sdk
-    ospray_module_ispc
+    ospray_module_cpu
     MPI::MPI_CXX
 )
 

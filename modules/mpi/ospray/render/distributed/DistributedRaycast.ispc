@@ -1,39 +1,22 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include "../../common/DistributedWorld.ih"
-#include "DistributedRenderer.ih"
 #include "common/Instance.ih"
 #include "common/World.ih"
-#include "rkcommon/math/box.ih"
 #include "math/random.ih"
 #include "math/sampling.ih"
 #include "openvkl/openvkl.isph"
-#include "render/scivis/SciVisMaterial.ih"
+#include "render/materials/OBJ.ih"
 #include "render/scivis/surfaces.ih"
 #include "render/scivis/volumes.ih"
 #include "render/util.ih"
-
-struct DistributedRaycastRenderer
-{
-  DistributedRenderer super;
-  int aoSamples;
-  float aoRadius;
-  bool shadowsEnabled;
-  float volumeSamplingRate;
-};
-
-struct RegionInfo
-{
-  int numRegions;
-  int currentRegion;
-  bool computeVisibility;
-  // TODO: If the IDs are not "array indices" this gets a bit goofed up
-  // We should probably just remap the IDs when we move to generating them for
-  // the user
-  Region *uniform regions;
-  bool *uniform regionVisible;
-};
+#include "rkcommon/math/box.ih"
+#include "volume/VolumetricModel.ih"
+// c++ shared
+#include "../../common/DistributedWorldShared.h"
+#include "DistributedRaycastShared.h"
+#include "fb/FrameBufferShared.h"
+#include "fb/SparseFBShared.h"
 
 // The distributed raycast renderer uses its own volume interval integration
 // because we want to apply the jitter before offsetting our step size to stay
@@ -46,7 +29,7 @@ vec4f DRR_integrateVolumeInterval(const ScreenSample &sample,
   VolumetricModel *varying volModel = interval.volumetricModel;
 
   Ray transformedRay = ray;
-  transformRay(transformedRay, interval.rcp_xfm);
+  transformRay(transformedRay, interval.instance->rcp_xfm);
 
   uniform unsigned int8 intervalIteratorBuffer[VKL_MAX_INTERVAL_ITERATOR_SIZE];
 
@@ -56,12 +39,13 @@ vec4f DRR_integrateVolumeInterval(const ScreenSample &sample,
     Volume *uniform volume = vm->volume;
     TransferFunction *uniform tf = vm->transferFunction;
 
+    float time = 0.5f;
     VKLIntervalIterator intervalIterator =
-        vklInitIntervalIteratorV(volume->vklSampler,
+        vklInitIntervalIteratorV(vm->vklIntervalContext,
             (varying vkl_vec3f *)&transformedRay.org,
             (varying vkl_vec3f *)&transformedRay.dir,
             (varying vkl_range1f *)&interval.interval,
-            vm->vklValueSelector,
+            &time,
             intervalIteratorBuffer);
 
     VKLInterval interval;
@@ -160,10 +144,10 @@ vec4f DRR_shadeSurface(const DistributedRaycastRenderer *uniform self,
 
   vec3f surfaceColor = make_vec3f(dg.color);
   float opacity = 1.f;
-  const SciVisMaterial *mat = (const SciVisMaterial *)dg.material;
+  const OBJ *mat = (const OBJ *)dg.material;
   if (mat) {
     foreach_unique (m in mat) {
-      surfaceColor = m->Kd;
+      surfaceColor = surfaceColor * m->Kd;
       opacity = m->d;
       if (valid(m->KdMap)) {
         vec4f kdFromMap = get4f(m->KdMap, dg);
@@ -213,7 +197,7 @@ vec4f DRR_shadeSurface(const DistributedRaycastRenderer *uniform self,
           }
 
           Ray shadowRay;
-          setRay(shadowRay, P, light.dir, 0.0f, light.dist, ray.time);
+          setRay(shadowRay, P, light.dir, 0.0f, light.dist, 0.5f);
           if (!isOccluded(model, shadowRay)
               && !(ghostModel && isOccluded(ghostModel, shadowRay)))
           {
@@ -230,9 +214,9 @@ vec4f DRR_shadeSurface(const DistributedRaycastRenderer *uniform self,
 }
 
 void DRR_renderRegionSample(DistributedRenderer *uniform _self,
-    FrameBuffer *uniform fb,
+    SparseFB *uniform fb,
     DistributedWorld *uniform world,
-    const Region *uniform region,
+    const box3f *uniform region,
     const vec2f &regionInterval,
     void *uniform perFrameData,
     varying ScreenSample &sample)
@@ -281,8 +265,8 @@ void DRR_renderRegionSample(DistributedRenderer *uniform _self,
           geomRay,
           DG_NG | DG_NS | DG_NORMALIZE | DG_FACEFORWARD | DG_COLOR
               | DG_TEXCOORD);
-      surfaceColor =
-          DRR_shadeSurface(self, fb, world, sample.sampleID, geomRay, dg);
+      surfaceColor = DRR_shadeSurface(
+          self, &fb->super, world, sample.sampleID, geomRay, dg);
     }
 
     // Always just integrate the volume when it comes in front of the geometry
@@ -356,30 +340,7 @@ void DRR_renderRegionSample(DistributedRenderer *uniform _self,
 
 // Exported functions /////////////////////////////////////////////////////////
 
-export void *uniform DistributedRaycastRenderer_create(void *uniform cppE)
+export void *uniform DRR_renderRegionSample_addr()
 {
-  DistributedRaycastRenderer *uniform self =
-      uniform new uniform DistributedRaycastRenderer;
-
-  DistributedRenderer_Constructor(&self->super, cppE);
-  self->super.renderRegionSample = DRR_renderRegionSample;
-  self->aoSamples = 0;
-  self->shadowsEnabled = false;
-
-  return self;
-}
-
-export void DistributedRaycastRenderer_set(void *uniform _self,
-    const uniform int aoSamples,
-    const uniform float aoRadius,
-    const uniform bool shadowsEnabled,
-    const uniform float volumeSamplingRate)
-{
-  DistributedRaycastRenderer *uniform self =
-      (DistributedRaycastRenderer * uniform) _self;
-
-  self->aoSamples = aoSamples;
-  self->aoRadius = aoRadius;
-  self->shadowsEnabled = shadowsEnabled;
-  self->volumeSamplingRate = volumeSamplingRate;
+  return DRR_renderRegionSample;
 }

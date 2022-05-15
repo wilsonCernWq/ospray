@@ -1,4 +1,4 @@
-// Copyright 2016-2021 Intel Corporation
+// Copyright 2016 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "Collectives.h"
@@ -205,7 +205,7 @@ void Bcast::start()
 
 bool Bcast::finished()
 {
-  const int ndone = std::accumulate(
+  const size_t ndone = std::accumulate(
       requests.begin(), requests.end(), 0, [](const int &n, MPI_Request &r) {
         int d = 0;
         MPI_CALL(Test(&r, &d, MPI_STATUS_IGNORE));

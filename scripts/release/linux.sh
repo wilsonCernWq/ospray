@@ -1,5 +1,5 @@
 #!/bin/bash
-## Copyright 2014-2021 Intel Corporation
+## Copyright 2014 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 #### Helper functions ####
@@ -76,6 +76,7 @@ cmake \
   -D BUILD_EMBREE_FROM_SOURCE=OFF \
   -D BUILD_OIDN=ON \
   -D BUILD_OIDN_FROM_SOURCE=OFF \
+  -D BUILD_OSPRAY_MODULE_MPI=ON \
   -D INSTALL_IN_SEPARATE_DIRECTORIES=OFF \
   ../scripts/superbuild
 
@@ -91,12 +92,8 @@ cd build_release
 # Clean out build directory to be sure we are doing a fresh build
 rm -rf *
 
-# Setup environment variables for dependencies
-export rkcommon_DIR=$DEP_DIR
-export embree_DIR=$DEP_DIR
-export glfw3_DIR=$DEP_DIR
-export openvkl_DIR=$DEP_DIR
-export OpenImageDenoise_DIR=$DEP_DIR
+# Setup environment for dependencies
+export CMAKE_PREFIX_PATH=$DEP_DIR
 
 # set release settings
 cmake -L \
@@ -122,12 +119,12 @@ check_symbols libospray.so GLIBC   2 17 0
 check_symbols libospray.so GLIBCXX 3 4 19
 check_symbols libospray.so CXXABI  1 3 7
 
-check_symbols libospray_module_ispc.so GLIBC   2 17 0
-check_symbols libospray_module_ispc.so GLIBCXX 3 4 19
-check_symbols libospray_module_ispc.so CXXABI  1 3 7
+check_symbols libospray_module_cpu.so GLIBC   2 17 0
+check_symbols libospray_module_cpu.so GLIBCXX 3 4 19
+check_symbols libospray_module_cpu.so CXXABI  1 3 7
 
 check_lib_dependency_error libospray.so libimf.so
-check_lib_dependency_error libospray_module_ispc.so libimf.so
+check_lib_dependency_error libospray_module_cpu.so libimf.so
 
 check_symbols libospray_module_mpi.so GLIBC   2 17 0
 check_symbols libospray_module_mpi.so GLIBCXX 3 4 19

@@ -1,51 +1,63 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "DistributedRenderer.h"
+#include "../../common/DistributedWorld.h"
+#include "common/Instance.h"
+#include "geometry/GeometricModel.h"
+// ispc exports
 #include "render/distributed/DistributedRenderer_ispc.h"
 
 namespace ospray {
 namespace mpi {
 
 DistributedRenderer::DistributedRenderer() : mpiGroup(mpicommon::worker.dup())
-{}
-
-void DistributedRenderer::computeRegionVisibility(DistributedFrameBuffer *fb,
-    Camera *camera,
-    DistributedWorld *world,
-    bool *regionVisible,
-    void *perFrameData,
-    Tile &tile,
-    size_t jobID) const
 {
-  // TODO this needs an exported function
-  ispc::DistributedRenderer_computeRegionVisibility(getIE(),
-      fb->getIE(),
-      camera->getIE(),
-      world->getIE(),
-      regionVisible,
-      perFrameData,
-      (ispc::Tile &)tile,
-      jobID);
+  getSh()->computeRegionVisibility =
+      ispc::DR_default_computeRegionVisibility_addr();
+  getSh()->renderRegionSample = ispc::DR_default_renderRegionSample_addr();
+  getSh()->renderRegionToTile = ispc::DR_default_renderRegionToTile_addr();
 }
 
-void DistributedRenderer::renderRegionToTile(DistributedFrameBuffer *fb,
+DistributedRenderer::~DistributedRenderer()
+{
+  MPI_Comm_free(&mpiGroup.comm);
+}
+
+void DistributedRenderer::computeRegionVisibility(SparseFrameBuffer *fb,
     Camera *camera,
     DistributedWorld *world,
-    const Region &region,
+    uint8_t *regionVisible,
     void *perFrameData,
-    Tile &tile,
-    size_t jobID) const
+    const utility::ArrayView<uint32_t> &taskIDs) const
+{
+  // TODO this needs an exported function
+  ispc::DistributedRenderer_computeRegionVisibility(getSh(),
+      fb->getSh(),
+      camera->getSh(),
+      world->getSh(),
+      regionVisible,
+      perFrameData,
+      taskIDs.data(),
+      taskIDs.size());
+}
+
+void DistributedRenderer::renderRegionTasks(SparseFrameBuffer *fb,
+    Camera *camera,
+    DistributedWorld *world,
+    const box3f &region,
+    void *perFrameData,
+    const utility::ArrayView<uint32_t> &taskIDs) const
 {
   // TODO: exported fcn
-  ispc::DistributedRenderer_renderRegionToTile(getIE(),
-      fb->getIE(),
-      camera->getIE(),
-      world->getIE(),
+  ispc::DistributedRenderer_renderRegionToTile(getSh(),
+      fb->getSh(),
+      camera->getSh(),
+      world->getSh(),
       &region,
       perFrameData,
-      (ispc::Tile &)tile,
-      jobID);
+      taskIDs.data(),
+      taskIDs.size());
 }
 
 OSPPickResult DistributedRenderer::pick(
@@ -63,10 +75,10 @@ OSPPickResult DistributedRenderer::pick(
   int primID = -1;
   float depth = 1e20f;
 
-  ispc::DistributedRenderer_pick(getIE(),
-      fb->getIE(),
-      camera->getIE(),
-      world->getIE(),
+  ispc::DistributedRenderer_pick(getSh(),
+      fb->getSh(),
+      camera->getSh(),
+      world->getSh(),
       (const ispc::vec2f &)screenPos,
       (ispc::vec3f &)res.worldPosition[0],
       instID,

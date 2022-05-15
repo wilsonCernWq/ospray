@@ -6,8 +6,10 @@
 [doc/ospray2_porting_guide.md]: https://www.ospray.org/ospray2_porting_guide.html
 
 [camera]: documentation.html#cameras
+[geometry]: documentation.html#geometries
 [volume]: documentation.html#volumes
 [curves]: documentation.html#curves
+[group]: documentation.html#groups
 [world]: documentation.html#world
 [data]: documentation.html#data
 [GeometricModel]: documentation.html#geometricmodels
@@ -22,5 +24,6 @@
 
 [example applications]: tutorials.html#tutorials
 [tutorial]: tutorials.html#osptutorial
+[ospExamples]: tutorials.html#ospexamples
 [report bugs]: index.html#ospray-support-and-contact
 

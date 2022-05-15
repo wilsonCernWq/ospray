@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "DistributedFrameBuffer.h"
@@ -29,15 +29,18 @@ using DFB = DistributedFrameBuffer;
 
 DistributedTileError::DistributedTileError(
     const vec2i &numTiles, mpicommon::Group group)
-    : TileError(numTiles), group(group)
+    : TaskError(numTiles), group(group)
 {}
 
 void DistributedTileError::sync()
 {
-  if (tiles <= 0)
+  if (taskErrorBuffer.empty()) {
     return;
+  }
 
-  mpicommon::bcast(tileErrorBuffer, tiles, MPI_FLOAT, 0, group.comm).wait();
+  mpicommon::bcast(
+      taskErrorBuffer.data(), taskErrorBuffer.size(), MPI_FLOAT, 0, group.comm)
+      .wait();
 }
 
 // DistributedFrameBuffer definitions ///////////////////////////////////////
@@ -54,23 +57,23 @@ DFB::DistributedFrameBuffer(const vec2i &numPixels,
     : MessageHandler(myId),
       FrameBuffer(numPixels, colorBufferFormat, channels),
       mpiGroup(mpicommon::worker.dup()),
-      tileErrorRegion(hasVarianceBuffer ? getNumTiles() : vec2i(0), mpiGroup),
+      totalTiles(divRoundUp(size, vec2i(TILE_SIZE))),
+      numRenderTasks((totalTiles * TILE_SIZE) / getRenderTaskSize()),
+      tileErrorRegion(hasVarianceBuffer ? totalTiles : vec2i(0), mpiGroup),
       localFBonMaster(nullptr),
       frameIsActive(false),
       frameIsDone(false)
 {
-  this->ispcEquivalent = ispc::DFB_create(this);
-  ispc::DFB_set(getIE(), numPixels.x, numPixels.y, colorBufferFormat);
-
-  // TODO: accumID is eventually only needed on master once static
-  // loadbalancing is removed
-  tileAccumID.resize(getTotalTiles(), 0);
-
   if (mpicommon::IamTheMaster() && colorBufferFormat != OSP_FB_NONE) {
     localFBonMaster = rkcommon::make_unique<LocalFrameBuffer>(numPixels,
         colorBufferFormat,
         channels & ~(OSP_FB_ACCUM | OSP_FB_VARIANCE));
   }
+}
+
+DFB::~DistributedFrameBuffer()
+{
+  MPI_Comm_free(&mpiGroup.comm);
 }
 
 void DFB::commit()
@@ -81,7 +84,7 @@ void DFB::commit()
   if (imageOpData) {
     FrameBufferView fbv(localFBonMaster ? localFBonMaster.get()
                                         : static_cast<FrameBuffer *>(this),
-        colorBufferFormat,
+        getSh()->colorBufferFormat,
         localFBonMaster ? localFBonMaster->colorBuffer.data() : nullptr,
         localFBonMaster ? localFBonMaster->depthBuffer.data() : nullptr,
         localFBonMaster ? localFBonMaster->normalBuffer.data() : nullptr,
@@ -92,9 +95,13 @@ void DFB::commit()
         imageOps.push_back(i->attach(fbv));
     });
   }
-  findFirstFrameOperation();
+  prepareImageOps();
 }
 
+mpicommon::Group DFB::getMPIGroup()
+{
+  return mpiGroup;
+}
 void DFB::startNewFrame(const float errorThreshold)
 {
   {
@@ -102,11 +109,13 @@ void DFB::startNewFrame(const float errorThreshold)
     nextTileWrite = 0;
     tileBufferOffsets.clear();
   }
-  if (colorBufferFormat != OSP_FB_NONE) {
+  if (getSh()->colorBufferFormat != OSP_FB_NONE) {
     // Allocate a conservative upper bound of space which we'd need to
     // store the compressed tiles
-    const size_t uncompressedSize = masterMsgSize(
-        colorBufferFormat, hasDepthBuffer, hasNormalBuffer, hasAlbedoBuffer);
+    const size_t uncompressedSize = masterMsgSize(getSh()->colorBufferFormat,
+        hasDepthBuffer,
+        hasNormalBuffer,
+        hasAlbedoBuffer);
     const size_t compressedSize = snappy::MaxCompressedLength(uncompressedSize);
     tileGatherBuffer.resize(myTiles.size() * compressedSize, 0);
   }
@@ -120,6 +129,8 @@ void DFB::startNewFrame(const float errorThreshold)
           "Attempt to start frame on already started frame!");
     }
 
+    frameProgress = 0.f;
+
     FrameBuffer::beginFrame();
 
     std::for_each(imageOps.begin(),
@@ -131,7 +142,7 @@ void DFB::startNewFrame(const float errorThreshold)
 
     tileErrorRegion.sync();
 
-    if (colorBufferFormat == OSP_FB_NONE) {
+    if (getSh()->colorBufferFormat == OSP_FB_NONE) {
       std::lock_guard<std::mutex> errsLock(tileErrorsMutex);
       tileIDs.clear();
       tileErrors.clear();
@@ -144,6 +155,10 @@ void DFB::startNewFrame(const float errorThreshold)
     for (auto &tile : myTiles)
       tile->newFrame();
 
+    for (auto &l : layers) {
+      l->beginFrame();
+    }
+
     if (mpicommon::IamTheMaster()) {
       numTilesExpected.resize(mpicommon::workerSize(), 0);
       std::fill(numTilesExpected.begin(), numTilesExpected.end(), 0);
@@ -151,12 +166,8 @@ void DFB::startNewFrame(const float errorThreshold)
 
     globalTilesCompletedThisFrame = 0;
     numTilesCompletedThisFrame = 0;
-    for (int t = 0; t < getTotalTiles(); t++) {
-      const uint32_t nx = static_cast<uint32_t>(getNumTiles().x);
-      const uint32_t ty = t / nx;
-      const uint32_t tx = t - ty * nx;
-      const vec2i tileID(tx, ty);
-      if (hasAccumBuffer && tileError(tileID) <= errorThreshold) {
+    for (uint32_t t = 0; t < getGlobalTotalTiles(); t++) {
+      if (hasAccumBuffer && tileError(t) <= errorThreshold) {
         if (allTiles[t]->mine()) {
           numTilesCompletedThisFrame++;
         }
@@ -189,7 +200,7 @@ bool DFB::isFrameComplete(const size_t numTiles)
     ProgressMessage *msgData = reinterpret_cast<ProgressMessage *>(msg->data);
     msgData->command = PROGRESS_MESSAGE;
     msgData->numCompleted = renderingProgressTiles;
-    msgData->frameID = frameID;
+    msgData->frameID = getSh()->frameID;
     mpi::messaging::sendTo(mpicommon::masterRank(), myId, msg);
 
     renderingProgressTiles = 0;
@@ -204,26 +215,95 @@ size_t DFB::ownerIDFromTileID(size_t tileID) const
   return tileID % mpicommon::workerSize();
 }
 
+void DistributedFrameBuffer::setSparseFBLayerCount(size_t numLayers)
+{
+  // Layer 0 is the base owned tiles layer created by the DFB, so we'll always
+  // have numLayers + 1 layers
+  layers.resize(numLayers + 1, nullptr);
+  // The sparse layers don't do accumulation and variance calculation because
+  // this needs data from all ranks rendering a given tile
+  const int channelFlags =
+      getChannelFlags() & ~(OSP_FB_ACCUM | OSP_FB_VARIANCE);
+  const bool sparseFbTrackAccumIDs = getChannelFlags() & OSP_FB_ACCUM;
+  // Allocate any new layers that have been added to the DFB
+  for (size_t i = 1; i < layers.size(); ++i) {
+    if (!layers[i]) {
+      layers[i] = rkcommon::make_unique<SparseFrameBuffer>(
+          size, getColorBufferFormat(), channelFlags, sparseFbTrackAccumIDs);
+    }
+  }
+}
+
+size_t DistributedFrameBuffer::getSparseLayerCount() const
+{
+  return layers.size();
+}
+
+SparseFrameBuffer *DistributedFrameBuffer::getSparseFBLayer(size_t l)
+{
+  return layers[l].get();
+}
+
+void DFB::cancelFrame()
+{
+  FrameBuffer::cancelFrame();
+
+  // Propagate the frame cancellation to the sparse fb layers as well
+  for (auto &l : layers) {
+    l->cancelFrame();
+  }
+}
+
+float DFB::getCurrentProgress() const
+{
+  if (stagesCompleted == OSP_FRAME_FINISHED) {
+    return 1.f;
+  }
+  return frameProgress;
+}
+
 void DFB::createTiles()
 {
   allTiles.clear();
   myTiles.clear();
 
-  size_t tileID = 0;
-  vec2i numPixels = getNumPixels();
-  for (int y = 0; y < numPixels.y; y += TILE_SIZE) {
-    for (int x = 0; x < numPixels.x; x += TILE_SIZE, tileID++) {
+  const vec2i totalTiles = divRoundUp(size, vec2i(TILE_SIZE));
+  std::vector<uint32_t> myTileIDs;
+  for (int y = 0; y < totalTiles.y; ++y) {
+    for (int x = 0; x < totalTiles.x; ++x) {
+      size_t tileID = size_t(x) + size_t(totalTiles.x) * size_t(y);
       const size_t ownerID = ownerIDFromTileID(tileID);
-      const vec2i tileStart(x, y);
+      const vec2i tileStart(x * TILE_SIZE, y * TILE_SIZE);
       if (ownerID == size_t(mpicommon::workerRank())) {
         auto td = tileOperation->makeTile(this, tileStart, tileID, ownerID);
         myTiles.push_back(td.get());
         allTiles.push_back(std::move(td));
+        myTileIDs.push_back(tileID);
       } else {
         allTiles.push_back(make_unique<TileDesc>(tileStart, tileID, ownerID));
       }
     }
   }
+
+  // Allocate the sparse fb for the tiles we own
+  uint32 channels = OSP_FB_DEPTH;
+  // Accum and variance are not done in the sparse FB for the DFB
+  if (hasNormalBuf()) {
+    channels |= OSP_FB_NORMAL;
+  }
+  if (hasAlbedoBuf()) {
+    channels |= OSP_FB_ALBEDO;
+  }
+
+  const bool sparseFbTrackAccumIDs = getChannelFlags() & OSP_FB_ACCUM;
+  if (layers.empty()) {
+    layers.push_back(rkcommon::make_unique<SparseFrameBuffer>(
+        size, OSP_FB_NONE, channels, myTileIDs, sparseFbTrackAccumIDs));
+  } else {
+    layers[0]->setTiles(myTileIDs);
+    layers[0]->clear();
+  }
+  layers[0]->commit();
 }
 
 void DFB::setTileOperation(
@@ -292,8 +372,6 @@ void DFB::waitUntilFinished()
             << elapsedTimeMs(start, end) << "ms\n";
 #endif
 
-  // Report that we're 100% done and do a final check for cancellation
-  reportProgress(1.0f);
   setCompletedEvent(OSP_WORLD_RENDERED);
 
   if (frameCancelled()) {
@@ -303,7 +381,7 @@ void DFB::waitUntilFinished()
 #ifdef ENABLE_PROFILING
   start = ProfilingPoint();
 #endif
-  if (colorBufferFormat != OSP_FB_NONE) {
+  if (getSh()->colorBufferFormat != OSP_FB_NONE) {
     gatherFinalTiles();
   } else if (hasVarianceBuffer) {
     gatherFinalErrors();
@@ -317,7 +395,7 @@ void DFB::waitUntilFinished()
 
 void DFB::processMessage(WriteTileMessage *msg)
 {
-  ospray::Tile tile;
+  ispc::Tile tile;
   unpackWriteTileMessage(msg, tile, hasNormalBuffer || hasAlbedoBuffer);
 
   auto *tileDesc = this->getTileDescFor(tile.region.lower);
@@ -330,8 +408,9 @@ void DistributedFrameBuffer::processMessage(MasterTileMessage_FB<ColorT> *msg)
 {
   if (hasVarianceBuffer) {
     const vec2i tileID = msg->coords / TILE_SIZE;
-    if (msg->error < (float)inf)
+    if (msg->error < (float)inf) {
       tileErrorRegion.update(tileID, msg->error);
+    }
   }
 
   vec2i numPixels = getNumPixels();
@@ -377,24 +456,16 @@ void DistributedFrameBuffer::processMessage(MasterTileMessage_FB<ColorT> *msg)
 
 void DFB::tileIsFinished(LiveTileOperation *tile)
 {
-  if (!imageOps.empty()) {
-    std::for_each(imageOps.begin(),
-        imageOps.begin() + firstFrameOperation,
-        [&](std::unique_ptr<LiveImageOp> &iop) {
-          LiveTileOp *top = dynamic_cast<LiveTileOp *>(iop.get());
-          if (top) {
-            top->process(tile->finished);
-          }
-          // TODO: For now, frame operations must be last
-          // in the pipeline
-        });
+  // Run any pixel operations we have for this tile
+  if (!pixelOpShs.empty()) {
+    ispc::DFB_runPixelOpsForTile(getSh(), (ispc::Tile *)&tile->finished);
   }
 
   // Write the final colors into the color buffer
   // normalize and write final color, and compute error
-  if (colorBufferFormat != OSP_FB_NONE) {
+  if (getSh()->colorBufferFormat != OSP_FB_NONE) {
     auto DFB_writeTile = &ispc::DFB_writeTile_RGBA32F;
-    switch (colorBufferFormat) {
+    switch (getSh()->colorBufferFormat) {
     case OSP_FB_RGBA8:
       DFB_writeTile = &ispc::DFB_writeTile_RGBA8;
       break;
@@ -408,7 +479,7 @@ void DFB::tileIsFinished(LiveTileOperation *tile)
   }
 
   auto msg = [&] {
-    MasterTileMessageBuilder msg(colorBufferFormat,
+    MasterTileMessageBuilder msg(getSh()->colorBufferFormat,
         hasDepthBuffer,
         hasNormalBuffer,
         hasAlbedoBuffer,
@@ -422,7 +493,7 @@ void DFB::tileIsFinished(LiveTileOperation *tile)
   };
 
   // TODO still send normal & albedo?
-  if (colorBufferFormat == OSP_FB_NONE) {
+  if (getSh()->colorBufferFormat == OSP_FB_NONE) {
     std::lock_guard<std::mutex> lock(tileErrorsMutex);
     tileIDs.push_back(tile->begin / TILE_SIZE);
     tileErrors.push_back(tile->error);
@@ -454,8 +525,7 @@ void DFB::tileIsFinished(LiveTileOperation *tile)
 void DFB::updateProgress(ProgressMessage *msg)
 {
   globalTilesCompletedThisFrame += msg->numCompleted;
-  const float progress = globalTilesCompletedThisFrame / (float)getTotalTiles();
-  reportProgress(progress);
+  frameProgress = globalTilesCompletedThisFrame / (float)getGlobalTotalTiles();
 }
 
 size_t DFB::numMyTiles() const
@@ -470,7 +540,7 @@ TileDesc *DFB::getTileDescFor(const vec2i &coords) const
 
 size_t DFB::getTileIDof(const vec2i &c) const
 {
-  return (c.x / TILE_SIZE) + (c.y / TILE_SIZE) * numTiles.x;
+  return (c.x / TILE_SIZE) + (c.y / TILE_SIZE) * totalTiles.x;
 }
 
 std::string DFB::toString() const
@@ -501,7 +571,7 @@ void DFB::incoming(const std::shared_ptr<mpicommon::Message> &message)
     std::lock_guard<std::mutex> lock(mutex);
     if (!frameIsActive) {
       throw std::runtime_error(
-          "Somehow recieved a tile message when frame inactive!?");
+          "Somehow received a tile message when frame inactive!?");
     }
   }
 
@@ -535,8 +605,10 @@ void DFB::gatherFinalTiles()
   ProfilingPoint preGatherComputeStart;
 #endif
 
-  const size_t tileSize = masterMsgSize(
-      colorBufferFormat, hasDepthBuffer, hasNormalBuffer, hasAlbedoBuffer);
+  const size_t tileSize = masterMsgSize(getSh()->colorBufferFormat,
+      hasDepthBuffer,
+      hasNormalBuffer,
+      hasAlbedoBuffer);
 
   const int totalTilesExpected =
       std::accumulate(numTilesExpected.begin(), numTilesExpected.end(), 0);
@@ -736,7 +808,7 @@ void DFB::closeCurrentFrame()
 
 //! write given tile data into the frame buffer, sending to remote owner if
 //! required
-void DFB::setTile(ospray::Tile &tile)
+void DFB::setTile(const ispc::Tile &tile)
 {
   auto *tileDesc = this->getTileDescFor(tile.region.lower);
 
@@ -757,8 +829,7 @@ void DFB::setTile(ospray::Tile &tile)
 
 void DFB::clear()
 {
-  frameID = -1; // we increment at the start of the frame
-  std::fill(tileAccumID.begin(), tileAccumID.end(), 0);
+  getSh()->frameID = -1; // we increment at the start of the frame
 
   if (hasAccumBuffer) {
     tileErrorRegion.clear();
@@ -766,27 +837,48 @@ void DFB::clear()
   if (localFBonMaster) {
     localFBonMaster->clear();
   }
-}
-
-int32 DFB::accumID(const vec2i &tile)
-{
-  if (!hasAccumBuffer) {
-    return 0;
+  for (auto &l : layers) {
+    l->clear();
   }
-  return tileAccumID[tile.y * numTiles.x + tile.x];
 }
 
-float DFB::tileError(const vec2i &tile)
+vec2i DFB::getNumRenderTasks() const
 {
-  return tileErrorRegion[tile];
+  return numRenderTasks;
+}
+
+uint32_t DFB::getTotalRenderTasks() const
+{
+  return numRenderTasks.product();
+}
+
+vec2i DFB::getGlobalNumTiles() const
+{
+  return totalTiles;
+}
+
+uint32_t DFB::getGlobalTotalTiles() const
+{
+  return totalTiles.product();
+}
+
+utility::ArrayView<uint32_t> DFB::getRenderTaskIDs()
+{
+  return layers[0]->getRenderTaskIDs();
+}
+
+float DFB::taskError(const uint32_t) const
+{
+  NOT_IMPLEMENTED;
+}
+
+float DFB::tileError(const uint32_t tileID)
+{
+  return tileErrorRegion[tileID];
 }
 
 void DFB::endFrame(const float errorThreshold, const Camera *camera)
 {
-  // TODO: FrameOperations should just be run on the master process for now,
-  // but in the offload device the master process doesn't get any OSPData
-  // or pixel ops or etc. created, just the handles. So it doesn't even
-  // know about the frame operation to run
   if (localFBonMaster && !imageOps.empty()
       && firstFrameOperation < imageOps.size()) {
     std::for_each(imageOps.begin() + firstFrameOperation,
@@ -807,12 +899,8 @@ void DFB::endFrame(const float errorThreshold, const Camera *camera)
   if (mpicommon::IamTheMaster()) {
     frameVariance = tileErrorRegion.refine(errorThreshold);
   }
-
-  if (hasAccumBuffer) {
-    std::transform(tileAccumID.begin(),
-        tileAccumID.end(),
-        tileAccumID.begin(),
-        [](const uint32_t &x) { return x + 1; });
+  for (auto &l : layers) {
+    l->endFrame(errorThreshold, camera);
   }
 
   setCompletedEvent(OSP_FRAME_FINISHED);

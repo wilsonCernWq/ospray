@@ -1,81 +1,34 @@
-// Copyright 2009-2020 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #include "DistributedWorld.h"
 #include <algorithm>
 #include <iterator>
-#include "DistributedWorld.h"
 #include "MPICommon.h"
 #include "Messaging.h"
-#include "api/ISPCDevice.h"
+#include "ISPCDevice.h"
 #include "common/Data.h"
-#include "common/DistributedWorld_ispc.h"
 
 namespace ospray {
 namespace mpi {
 
 using namespace rkcommon;
 
-void RegionScreenBounds::extend(const vec3f &p)
-{
-  if (p.z < 0) {
-    bounds = box2f(vec2f(0), vec2f(1));
-  } else {
-    bounds.extend(vec2f(p.x * sign(p.z), p.y * sign(p.z)));
-    bounds.lower.x = clamp(bounds.lower.x);
-    bounds.upper.x = clamp(bounds.upper.x);
-    bounds.lower.y = clamp(bounds.lower.y);
-    bounds.upper.y = clamp(bounds.upper.y);
-  }
-}
-
-Region::Region(const box3f &bounds, int id) : bounds(bounds), id(id) {}
-
-RegionScreenBounds Region::project(const Camera *camera) const
-{
-  RegionScreenBounds screen;
-  for (int k = 0; k < 2; ++k) {
-    vec3f pt;
-    pt.z = k == 0 ? bounds.lower.z : bounds.upper.z;
-
-    for (int j = 0; j < 2; ++j) {
-      pt.y = j == 0 ? bounds.lower.y : bounds.upper.y;
-
-      for (int i = 0; i < 2; ++i) {
-        pt.x = i == 0 ? bounds.lower.x : bounds.upper.x;
-
-        ProjectedPoint proj = camera->projectPoint(pt);
-        screen.extend(proj.screenPos);
-        screen.depth = std::max(length(pt - camera->pos), screen.depth);
-      }
-    }
-  }
-  return screen;
-}
-
-bool Region::operator==(const Region &b) const
-{
-  // TODO: Do we want users to specify the ID explitly? Or should we just
-  // assume that two objects with the same bounds have the same id?
-  return id == b.id;
-}
-
-bool Region::operator<(const Region &b) const
-{
-  return id < b.id;
-}
-
 DistributedWorld::DistributedWorld() : mpiGroup(mpicommon::worker.dup())
 {
   managedObjectType = OSP_WORLD;
-  this->ispcEquivalent = ispc::DistributedWorld_create(this);
+}
+
+DistributedWorld::~DistributedWorld()
+{
+  MPI_Comm_free(&mpiGroup.comm);
 }
 
 box3f DistributedWorld::getBounds() const
 {
   box3f bounds;
-  for (const auto &r : allRegions) {
-    bounds.extend(r.bounds);
+  for (const auto &b : allRegions) {
+    bounds.extend(b);
   }
   return bounds;
 }
@@ -89,7 +42,10 @@ void DistributedWorld::commit()
 {
   World::commit();
 
+  allRegions.clear();
   myRegions.clear();
+  myRegionIds.clear();
+  regionOwners.clear();
 
   localRegions = getParamDataT<box3f>("region");
   if (localRegions) {
@@ -101,16 +57,18 @@ void DistributedWorld::commit()
     // either for data-parallel rendering or to switch to replicated
     // rendering
     box3f localBounds;
-    if (embreeSceneHandleGeometries) {
+    if (getSh()->super.embreeSceneHandleGeometries) {
       box4f b;
-      rtcGetSceneBounds(embreeSceneHandleGeometries, (RTCBounds *)&b);
+      rtcGetSceneBounds(
+          getSh()->super.embreeSceneHandleGeometries, (RTCBounds *)&b);
       localBounds.extend(box3f(vec3f(b.lower.x, b.lower.y, b.lower.z),
           vec3f(b.upper.x, b.upper.y, b.upper.z)));
     }
 
-    if (embreeSceneHandleVolumes) {
+    if (getSh()->super.embreeSceneHandleVolumes) {
       box4f b;
-      rtcGetSceneBounds(embreeSceneHandleVolumes, (RTCBounds *)&b);
+      rtcGetSceneBounds(
+          getSh()->super.embreeSceneHandleVolumes, (RTCBounds *)&b);
       localBounds.extend(box3f(vec3f(b.lower.x, b.lower.y, b.lower.z),
           vec3f(b.upper.x, b.upper.y, b.upper.z)));
     }
@@ -121,22 +79,46 @@ void DistributedWorld::commit()
   // to the others to build the distributed world
   std::sort(
       myRegions.begin(), myRegions.end(), [](const box3f &a, const box3f &b) {
-        std::less<vec3f> op;
-        return op(a.lower, b.lower)
-            || (a.lower == b.lower && op(a.upper, b.upper));
+        return a.lower < b.lower || (a.lower == b.lower && a.upper < b.upper);
       });
   auto last = std::unique(myRegions.begin(), myRegions.end());
   myRegions.erase(last, myRegions.end());
 
   exchangeRegions();
 
-  ispc::DistributedWorld_set(getIE(), allRegions.data(), allRegions.size());
+  if (regionScene) {
+    rtcReleaseScene(regionScene);
+    regionScene = nullptr;
+  }
+
+  if (allRegions.size() > 0) {
+    // Setup the boxes geometry which we'll use to leverage Embree for
+    // accurately determining region visibility
+    Data *allRegionsData = new Data(allRegions.data(),
+        OSP_BOX3F,
+        vec3ul(allRegions.size(), 1, 1),
+        vec3l(0));
+    regionGeometry = new Boxes();
+    regionGeometry->setParam("box", (ManagedObject *)allRegionsData);
+    regionGeometry->setDevice(embreeDevice);
+    regionGeometry->commit();
+
+    regionScene = rtcNewScene(embreeDevice);
+    rtcAttachGeometry(regionScene, regionGeometry->getEmbreeGeometry());
+    rtcSetSceneFlags(regionScene, RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION);
+    rtcCommitScene(regionScene);
+
+    regionGeometry->refDec();
+    allRegionsData->refDec();
+  }
+
+  getSh()->regions = allRegions.data();
+  getSh()->numRegions = allRegions.size();
+  getSh()->regionScene = regionScene;
 }
 
 void DistributedWorld::exchangeRegions()
 {
-  allRegions.clear();
-
   // Exchange regions between the ranks in world to find which other
   // ranks may be sharing a region with this one, and the other regions
   // to expect to be rendered for each tile
@@ -154,11 +136,11 @@ void DistributedWorld::exchangeRegions()
       for (const auto &b : myRegions) {
         auto fnd = std::find_if(allRegions.begin(),
             allRegions.end(),
-            [&](const Region &r) { return r.bounds == b; });
+            [&](const box3f &r) { return r == b; });
         int id = -1;
         if (fnd == allRegions.end()) {
           id = allRegions.size();
-          allRegions.push_back(Region(b, id));
+          allRegions.push_back(b);
         } else {
           id = std::distance(allRegions.begin(), fnd);
         }
@@ -183,11 +165,11 @@ void DistributedWorld::exchangeRegions()
       for (const auto &b : recv) {
         auto fnd = std::find_if(allRegions.begin(),
             allRegions.end(),
-            [&](const Region &r) { return r.bounds == b; });
+            [&](const box3f &r) { return r == b; });
         int id = -1;
         if (fnd == allRegions.end()) {
           id = allRegions.size();
-          allRegions.push_back(Region(b, id));
+          allRegions.push_back(b);
         } else {
           id = std::distance(allRegions.begin(), fnd);
         }
@@ -196,43 +178,30 @@ void DistributedWorld::exchangeRegions()
     }
   }
 
-#ifndef __APPLE__
-  // TODO WILL: Remove this eventually? It may be useful for users to debug
-  // their code when setting regions. Maybe fix build on Apple? Why did
-  // it fail to compile?
   if (logLevel() >= OSP_LOG_DEBUG) {
+    StatusMsgStream debugLog;
     for (int i = 0; i < mpiGroup.size; ++i) {
       if (i == mpiGroup.rank) {
-        postStatusMsg(OSP_LOG_DEBUG)
-            << "Rank " << mpiGroup.rank << ": All regions in world {";
+        debugLog << "Rank " << mpiGroup.rank << ": All regions in world {\n";
         for (const auto &b : allRegions) {
-          postStatusMsg(OSP_LOG_DEBUG) << "\t" << b << ",";
+          debugLog << "\t" << b << ",\n";
         }
-        postStatusMsg(OSP_LOG_DEBUG) << "}\n";
+        debugLog << "}\n\n";
 
-        postStatusMsg(OSP_LOG_DEBUG) << "Ownership Information: {";
+        debugLog << "Ownership Information: {\n";
         for (const auto &r : regionOwners) {
-          postStatusMsg(OSP_LOG_DEBUG) << "(" << r.first << ": [";
+          debugLog << "(" << r.first << ": [";
           for (const auto &i : r.second) {
-            postStatusMsg(OSP_LOG_DEBUG) << i << ", ";
+            debugLog << i << ", ";
           }
-          postStatusMsg(OSP_LOG_DEBUG) << "])";
+          debugLog << "])\n";
         }
-        postStatusMsg(OSP_LOG_DEBUG) << "\n" << std::flush;
+        debugLog << "\n";
       }
       mpicommon::barrier(mpiGroup.comm).wait();
     }
   }
-#endif
 }
 
 } // namespace mpi
 } // namespace ospray
-
-using namespace ospray::mpi;
-
-std::ostream &operator<<(std::ostream &os, const Region &r)
-{
-  os << "Region { id = " << r.id << ", bounds = " << r.bounds << " }";
-  return os;
-}

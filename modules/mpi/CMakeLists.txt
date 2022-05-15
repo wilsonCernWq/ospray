@@ -1,19 +1,11 @@
-## Copyright 2009-2021 Intel Corporation
+## Copyright 2009 Intel Corporation
 ## SPDX-License-Identifier: Apache-2.0
 
 cmake_dependent_option(
   OSPRAY_MODULE_MPI
-  "Build the MPI module (Requires ISPC module)"
+  "Build the MPI module"
   OFF
-  OSPRAY_ENABLE_MODULES
-  OFF
-)
-
-cmake_dependent_option(
-  OSPRAY_MPI_BUILD_TUTORIALS
-  "Enable MPI module sample apps"
-  ON
-  "OSPRAY_MODULE_MPI;OSPRAY_ENABLE_APPS"
+  OSPRAY_MODULE_CPU
   OFF
 )
 
@@ -37,13 +29,18 @@ if(NOT TARGET MPI::MPI_CXX) # pre CMake 3.9
   set_property(TARGET MPI::MPI_CXX PROPERTY INTERFACE_LINK_LIBRARIES ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES})
 endif()
 
+find_package(Snappy REQUIRED)
+
 rkcommon_configure_build_type()
 
 add_subdirectory(common)
 add_subdirectory(external)
 add_subdirectory(ospray)
 
-if (OSPRAY_MPI_BUILD_TUTORIALS)
+if (OSPRAY_ENABLE_APPS_EXAMPLES)
   add_subdirectory(tutorials)
 endif()
 
+if (OSPRAY_ENABLE_APPS_TESTING)
+    add_subdirectory(testing)
+endif()

@@ -1,4 +1,4 @@
-// Copyright 2009-2021 Intel Corporation
+// Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
@@ -52,7 +52,7 @@ typedef int ssize_t;
 #define OSPRAY_CORE_INTERFACE OSPRAY_INTERFACE
 
 #ifdef _WIN32
-#ifdef ospray_module_ispc_EXPORTS
+#ifdef ospray_module_cpu_EXPORTS
 #define OSPRAY_MODULE_ISPC_INTERFACE __declspec(dllexport)
 #else
 #define OSPRAY_MODULE_ISPC_INTERFACE __declspec(dllimport)
