@@ -3,15 +3,15 @@
   // for the documentation about the tasks.json format
   "version": "2.0.0",
   "tasks": [
-    /* create the 'build-deps' directory for all platforms */
+    /* create the 'build-deps-${input:configuration}' directory for all platforms */
     {
       "label": "Build Dependencies (Make Dependency Directory)",
       "type": "shell",
       "windows": {
-        "command": "if (-not (Test-Path 'build-deps')) { mkdir 'build-deps' }"
+        "command": "if (-not (Test-Path 'build/${input:configuration}/deps')) { mkdir 'build/${input:configuration}/deps' }"
       },
       "linux": {
-        "command": "mkdir -p 'build-deps'",
+        "command": "mkdir -p 'build/${input:configuration}/deps'",
       },
       "options": {
         "cwd": "${workspaceFolder}"
@@ -28,10 +28,10 @@
       },
       "linux": {
         // ignore cleaning
-        "command": "rm -fr ${workspaceFolder}/build-deps/*"
+        "command": "rm -fr ${workspaceFolder}/build/${input:configuration}/deps/*"
       },
       "options": {
-        "cwd": "${workspaceFolder}/build-deps"
+        "cwd": "${workspaceFolder}/build/${input:configuration}/deps"
       },
       "problemMatcher": []
     },
@@ -55,7 +55,7 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build-deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps"
         ]
       },
       "linux": {
@@ -68,7 +68,7 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build-deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps"
         ],
       },
       "problemMatcher": []
@@ -94,7 +94,7 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build-deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps"
         ]
       },
       "linux": {
@@ -108,7 +108,7 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build-deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps"
         ],
       },
       "problemMatcher": []
@@ -125,11 +125,11 @@
       },
       "args": [
         "--build",
-        "${workspaceFolder}/build-deps",
+        "${workspaceFolder}/build/${input:configuration}/deps",
         "--config",
         "${input:configuration}",
-        // "--parallel",
-        // "20"
+        "--parallel",
+        "20"
       ],
       "problemMatcher": []
     },
@@ -138,10 +138,13 @@
       /* Creating a Clean OSPRay Build */
       "label": "Build Dependencies (Default)",
       "type": "shell",
+      "command": "echo",
+      "args": [
+        "${input:configuration}"
+      ],
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Dependency Directory)",
-        // "Build Dependencies (Clean Dependency Directory)",
         "Build Dependencies (Internal - CMake Configure - Default)",
         "Build Dependencies (Internal - CMake Build)"
       ],
@@ -151,16 +154,40 @@
       /* Creating a Clean OSPRay Build */
       "label": "Build Dependencies (OpenVKL)",
       "type": "shell",
+      "command": "echo",
+      "args": [
+        "${input:configuration}"
+      ],
       "dependsOrder": "sequence",
       "dependsOn": [
         "Build Dependencies (Make Dependency Directory)",
-        // "Build Dependencies (Clean Dependency Directory)",
         "Build Dependencies (Internal - CMake Configure - OpenVKL)",
         "Build Dependencies (Internal - CMake Build)"
       ],
       "problemMatcher": []
     },
-    /* rebuild customized OpenVKL */
+    /* Build customized OpenVKL */
+    {
+      "label": "Build OpenVKL",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "linux": {
+        "command": "cmake",
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/build/${input:configuration}/deps/openvkl/build",
+        "--config",
+        "${input:configuration}",
+        "--target",
+        "install",
+        "--parallel",
+        "20"
+      ],
+      "problemMatcher": []
+    },
     {
       "label": "Rebuild OpenVKL",
       "type": "shell",
@@ -172,13 +199,14 @@
       },
       "args": [
         "--build",
-        "${workspaceFolder}/build-deps/openvkl/build",
+        "${workspaceFolder}/build/${input:configuration}/deps/openvkl/build",
         "--config",
         "${input:configuration}",
         "--target",
         "install",
-        // "--parallel",
-        // "20"
+        "--parallel",
+        "20",
+        "--clean-first"
       ],
       "problemMatcher": []
     }
