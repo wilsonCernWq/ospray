@@ -426,7 +426,7 @@ can be represented in OSPRay; valid constants are listed in the table
 below.
 
   -------------------------- ---------------------------------------------------
-  Type/Name                  Description
+  Type / Name                Description
   -------------------------- ---------------------------------------------------
   OSP_DEVICE                 API device object reference
 
@@ -905,6 +905,21 @@ VDB volumes have the following parameters:
                                of voxels for the `level`. Only `OSP_FLOAT` is
                                supported as field `OSPDataType`.
 
+  OSPData    nodesPackedDense  optionally provided instead of `node.data`, a
+                               single array of all dense node data in a
+                               contiguous zyx layout, provided in the same order
+                               as the corresponding `node.*` parameters
+
+  OSPData    nodesPackedTile   optionally provided instead of `node.data`, a
+                               single array of all tile node data in a
+                               contiguous layout, provided in the same order as
+                               the corresponding `node.*` parameters
+
+  uint32[]   node.format       for each input node, whether it is of format
+                               `OSP_VOLUME_FORMAT_DENSE_ZYX` (and thus stored in
+                               `nodesPackedDense`), or `OSP_VOLUME_FORMAT_TILE`
+                               (stored in `nodesPackedTile`)
+
   int        filter            filter used for reconstructing the field, default
                                is `OSP_VOLUME_FILTER_TRILINEAR`, alternatively
                                `OSP_VOLUME_FILTER_NEAREST`, or
@@ -913,10 +928,14 @@ VDB volumes have the following parameters:
   int        gradientFilter    filter used for reconstructing the field during
                                gradient computations, default same as `filter`
 
-  float      background        value that is used when sampling an undefined region
-                               outside the volume domain, default `NaN`
+  float      background        value that is used when sampling an undefined
+                               region outside the volume domain, default `NaN`
   ---------- ----------------- -------------------------------------------------
   : Configuration parameters for VDB volumes.
+
+The `nodesPackedDense` and `nodesPackedTile` together with `node.format`
+parameters may be provided instead of `node.data`; this packed data
+layout may provide better performance.
 
 
 1. Museth, K. VDB: High-Resolution Sparse Volumes with Dynamic Topology.
@@ -1013,7 +1032,7 @@ to `ospNewTransferFunction` and it is controlled by these parameters:
   ------------ ----------- ----------------------------------------------
   vec3f[]      color       [data] array of colors (linear RGB)
   float[]      opacity     [data] array of opacities
-  vec2f        valueRange  domain (scalar range) this function maps from
+  box1f        value       domain (scalar range) this function maps from
   ------------ ----------- ----------------------------------------------
   : Parameters accepted by the linear transfer function.
 
@@ -1049,6 +1068,8 @@ used.
   float                anisotropy             0.0  anisotropy of the (Henyey-Greenstein)
                                                    phase function in [-1–1] ([path tracer]
                                                    only), default to isotropic scattering
+
+  uint32               id                     -1u  optional user ID, for [framebuffer] channel `OSP_FB_ID_OBJECT`
   -------------------- ----------------- --------  ---------------------------------------
   : Parameters understood by VolumetricModel.
 
@@ -1073,12 +1094,16 @@ recognizes the following parameters:
   Type                 Name                    Description
   -------------------- ----------------------- -------------------------------------------------
   vec3f[]              vertex.position         [data] array of vertex positions, overridden by `motion.*` arrays
-  vec3f[]              vertex.normal           [data] array of vertex normals, overridden by `motion.*` arrays
-  vec4f[] / vec3f[]    vertex.color            [data] array of vertex colors (linear RGBA/RGB)
-  vec2f[]              vertex.texcoord         [data] array of vertex texture coordinates
+  vec3f[]              normal                  [data] array of face-varying normals, overridden by `motion.*` arrays
+  vec3f[]              vertex.normal           [data] array of vertex-varying normals, overridden by `motion.*` arrays
+  vec4f[] / vec3f[]    color                   [data] array of face-varying colors (linear RGBA/RGB)
+  vec4f[] / vec3f[]    vertex.color            [data] array of vertex-varying colors (linear RGBA/RGB)
+  vec2f[]              texcoord                [data] array of face-varying texture coordinates
+  vec2f[]              vertex.texcoord         [data] array of vertex-varying texture coordinates
   vec3ui[] / vec4ui[]  index                   [data] array of (either triangle or quad) indices (into the vertex array(s))
   vec3f[][]            motion.vertex.position  [data] array of vertex position arrays (uniformly distributed keys for deformation motion blur)
-  vec3f[][]            motion.vertex.normal    [data] array of vertex normal arrays (uniformly distributed keys for deformation motion blur)
+  vec3f[][]            motion.normal           [data] array of face-varying normal arrays (uniformly distributed keys for deformation motion blur)
+  vec3f[][]            motion.vertex.normal    [data] array of vertex-varying normal arrays (uniformly distributed keys for deformation motion blur)
   box1f                time                    time associated with first and last key in `motion.*` arrays (for deformation motion blur), default [0, 1] 
   -------------------- ----------------------- -------------------------------------------------
   : Parameters defining a mesh geometry.
@@ -1104,10 +1129,16 @@ the following parameters:
   ------- ------------------- --------------------------------------------------
   vec3f[] vertex.position     [data] array of vertex positions
 
-  vec4f[] vertex.color        optional [data] array of vertex colors (linear
+  vec4f[] color               optional [data] array of face-varying colors (linear
                               RGBA)
 
-  vec2f[] vertex.texcoord     optional [data] array of vertex texture
+  vec4f[] vertex.color        optional [data] array of vertex-varying colors (linear
+                              RGBA)
+
+  vec2f[] texcoord            optional [data] array of vertex-varying texture
+                              coordinates
+
+  vec2f[] vertex.texcoord     optional [data] array of vertex-varying texture
                               coordinates
 
   float   level               global level of tessellation, default 5
@@ -1370,30 +1401,26 @@ normal vectors orientation one can control whether inside or outside of
 the clipping geometry is being removed. For example, a clipping geometry
 with normals oriented outside clips everything what's inside.
 
-  ------------------------ -------------- ----------------------------------------------------
-  Type                     Name           Description
-  ------------------------ -------------- ----------------------------------------------------
-  OSPGeometry              geometry       optional [geometry] object this model references
+  ----------------------------------------------- ------------- ----------------------------------------------------
+  Type                                            Name          Description
+  ----------------------------------------------- ------------- ----------------------------------------------------
+  OSPGeometry                                     geometry      optional [geometry] object this model references
 
-  OSPMaterial / uint32     material       optional [material] applied to the geometry, may be
-                                          an index into the `material` parameter on the
-                                          [renderer] (if it exists)
+  OSPMaterial / OSPMaterial[] / uint32 / uint32[] material      optional ([data] array of per-primitive) [material],
+                                                                may be an index into the `material` parameter on
+                                                                the renderer (if it exists)
 
-  vec4f                    color          optional color assigned to the geometry (linear
-                                          RGBA)
+  vec4f / vec4f[]                                 color         optional ([data] array of per-primitive) color
+                                                                assigned to the geometry (linear RGBA)
 
-  OSPMaterial[] / uint32[] material       optional [data] array of (per-primitive) materials,
-                                          may be an index into the `material` parameter on
-                                          the renderer (if it exists)
+  uint8[]                                         index         optional [data] array of per-primitive indices into
+                                                                `color` and `material`
 
-  vec4f[]                  color          optional [data] array of (per-primitive) colors
-                                          (linear RGBA)
+  bool                                            invertNormals inverts all shading normals (Ns), default false
 
-  uint8[]                  index          optional [data] array of per-primitive indices into
-                                          `color` and `material`
-
-  bool                     invertNormals  inverts all shading normals (Ns), default false
-  ------------------------ -------------- ----------------------------------------------------
+  uint32                                          id            optional user ID, for [framebuffer] channel
+                                                                `OSP_FB_ID_OBJECT`, default -1u
+  ----------------------------------------------- ------------- ----------------------------------------------------
   : Parameters understood by GeometricModel.
 
 
@@ -1773,11 +1800,10 @@ areas will be applied to all other objects in the [world].
 
   OSPLight[]           light                  NULL  [data] array of [lights]
 
-  bool                 dynamicScene          false  use RTC_SCENE_DYNAMIC flag (faster
-                                                    BVH build, slower ray traversal),
-                                                    otherwise uses RTC_SCENE_STATIC flag
-                                                    (faster ray traversal, slightly
-                                                    slower BVH build)
+  bool                 dynamicScene          false  tell Embree to use faster BVH build
+                                                    (slower ray traversal), otherwise
+                                                    optimized for faster ray traversal
+                                                    (slightly slower BVH build)
 
   bool                 compactMode           false  tell Embree to use a more compact BVH
                                                     in memory by trading ray traversal
@@ -1828,6 +1854,8 @@ used.
 
   box1f        time                  [0, 1] time associated with first and last key in `motion.*`
                                             arrays (for motion blur)
+
+  uint32       id                       -1u optional user ID, for [framebuffer] channel `OSP_FB_ID_INSTANCE`
   ------------ ----------------- ---------- --------------------------------------------------------
   : Parameters understood by instances.
 
@@ -1873,11 +1901,10 @@ feature/performance trade-offs (similar to groups).
   OSPLight[]    light                NULL  [data] array with handles of the
                                            [lights]
 
-  bool          dynamicScene        false  use RTC_SCENE_DYNAMIC flag (faster
-                                           BVH build, slower ray traversal),
-                                           otherwise uses RTC_SCENE_STATIC flag
-                                           (faster ray traversal, slightly
-                                           slower BVH build)
+  bool          dynamicScene        false  tell Embree to use faster BVH build
+                                           (slower ray traversal), otherwise
+                                           optimized for faster ray traversal
+                                           (slightly slower BVH build)
 
   bool          compactMode         false  tell Embree to use a more compact BVH
                                            in memory by trading ray traversal
@@ -2118,11 +2145,11 @@ In particular when using the path tracer it is important to adhere to
 the principle of energy conservation, i.e., that the amount of light
 reflected by a surface is not larger than the light arriving. Therefore
 the path tracer issues a warning and renormalizes the color parameters
-if the sum of `Kd`, `Ks`, and `Tf` is larger than one in any color
+if the sum of `kd`, `ks`, and `tf` is larger than one in any color
 channel. Similarly important to mention is that almost all materials of
 the real world reflect at most only about 80% of the incoming light. So
 even for a white sheet of paper or white wall paint do better not set
-`Kd` larger than 0.8; otherwise rendering times are unnecessary long and
+`kd` larger than 0.8; otherwise rendering times are unnecessary long and
 the contrast in the final images is low (for example, the corners of a
 white room would hardly be discernible, as can be seen in the figure
 below).
@@ -2133,11 +2160,11 @@ higher overall contrast. Note that exposure has been adjusted to achieve
 similar brightness levels.][imgDiffuseRooms]
 
 If present, the color component of [geometries] is also used for the
-diffuse color `Kd` and the alpha component is also used for the opacity
+diffuse color `kd` and the alpha component is also used for the opacity
 `d`.
 
 Normal mapping can simulate small geometric features via the texture
-`map_Bump`. The normals $n$ in the normal map are with respect to the
+`map_bump`. The normals $n$ in the normal map are with respect to the
 local tangential shading coordinate system and are encoded as $½(n+1)$,
 thus a texel $(0.5, 0.5, 1)$^[respectively $(127, 127, 255)$ for 8\ bit
 textures and $(32767, 32767, 65535)$ for 16\ bit textures] represents
@@ -2153,17 +2180,17 @@ normal map vertically or invert its green channel.
 ![Normal map representing an exalted square pyramidal
 frustum.][imgNormalMap]
 
-Note that `Tf` colored transparency is implemented in the SciVis and
-the path tracer but normal mapping with `map_Bump` is currently supported
+Note that `tf` colored transparency is implemented in the SciVis and
+the path tracer but normal mapping with `map_bump` is currently supported
 in the path tracer only.
 
-All parameters (except `Tf`) can be textured by passing a [texture]
+All parameters (except `tf`) can be textured by passing a [texture]
 handle, prefixed with "`map_`". The fetched texels are multiplied by the
 respective parameter value. If only the texture is given (but not the
 corresponding parameter), only the texture is used (the default value of
-the parameter is *not* multiplied). The color textures `map_Kd` and
-`map_Ks` are typically in one of the sRGB gamma encoded formats, whereas
-textures `map_Ns` and `map_d` are usually in a linear format (and only
+the parameter is *not* multiplied). The color textures `map_kd` and
+`map_ks` are typically in one of the sRGB gamma encoded formats, whereas
+textures `map_ns` and `map_d` are usually in a linear format (and only
 the first component is used). Additionally, all textures support
 [texture transformations].
 
@@ -2890,15 +2917,18 @@ The parameter `frameBufferChannels` specifies which channels the
 framebuffer holds, and can be combined together by bitwise OR from the
 values of `OSPFrameBufferChannel` listed in the table below.
 
-  Name             Description
-  ---------------- -----------------------------------------------------------
-  OSP_FB_COLOR     RGB color including alpha
-  OSP_FB_DEPTH     euclidean distance to the camera (_not_ to the image plane), as linear 32\ bit float; for multiple samples per pixel their minimum is taken
-  OSP_FB_ACCUM     accumulation buffer for progressive refinement
-  OSP_FB_VARIANCE  for estimation of the current noise level if OSP_FB_ACCUM is also present, see [rendering]
-  OSP_FB_NORMAL    accumulated world-space normal of the first non-specular hit, as vec3f
-  OSP_FB_ALBEDO    accumulated material albedo (color without illumination) at the first hit, as vec3f
-  ---------------- -----------------------------------------------------------
+  Name                Description
+  ------------------- ----------------------------------------------------------
+  OSP_FB_COLOR        RGB color including alpha
+  OSP_FB_DEPTH        euclidean distance to the camera (_not_ to the image plane), as linear 32\ bit float; for multiple samples per pixel their minimum is taken
+  OSP_FB_ACCUM        accumulation buffer for progressive refinement
+  OSP_FB_VARIANCE     for estimation of the current noise level if OSP_FB_ACCUM is also present, see [rendering]
+  OSP_FB_NORMAL       accumulated world-space normal of the first non-specular hit, as vec3f
+  OSP_FB_ALBEDO       accumulated material albedo (color without illumination) at the first hit, as vec3f
+  OSP_FB_ID_PRIMITIVE primitive index of the first hit, as uint32
+  OSP_FB_ID_OBJECT    geometric/volumetric model `id`, if specified, or index in [group] of first hit, as uint32
+  OSP_FB_ID_INSTANCE  user defined [instance] `id`, if specified, or instance index of first hit, as uint32
+  ------------------- ----------------------------------------------------------
   : Framebuffer channels constants (of type `OSPFrameBufferChannel`),
   naming optional information the framebuffer can store. These values
   can be combined by bitwise OR when passed to `ospNewFrameBuffer`.

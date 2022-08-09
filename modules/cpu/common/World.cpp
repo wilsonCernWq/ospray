@@ -5,13 +5,18 @@
 #include "World.h"
 #include "Instance.h"
 #include "lights/Light.h"
+#include "render/pathtracer/PathTracerData.h"
+#include "render/scivis/SciVisData.h"
 
 namespace ospray {
 
 // Embree helper functions ///////////////////////////////////////////////////
 
-static void addGeometryInstance(
-    RTCScene &scene, RTCScene instScene, Instance *inst, RTCDevice embreeDevice)
+static void addGeometryInstance(RTCScene &scene,
+    RTCScene instScene,
+    Instance *inst,
+    RTCDevice embreeDevice,
+    unsigned int id)
 {
   if (!embreeDevice)
     throw std::runtime_error("invalid Embree device");
@@ -25,7 +30,7 @@ static void addGeometryInstance(
   rtcSetGeometryInstancedScene(eInst, instScene);
   inst->setEmbreeGeom(eInst);
 
-  rtcAttachGeometry(scene, eInst);
+  rtcAttachGeometryByID(scene, eInst, id);
   rtcReleaseGeometry(eInst);
 }
 
@@ -45,21 +50,10 @@ World::~World()
   freeAndNullifyEmbreeScene(getSh()->embreeSceneHandleGeometries);
   freeAndNullifyEmbreeScene(getSh()->embreeSceneHandleVolumes);
   freeAndNullifyEmbreeScene(getSh()->embreeSceneHandleClippers);
-
-  // Release instances arrays
-  BufferSharedDelete(getSh()->geometriesInst);
-  BufferSharedDelete(getSh()->volumesInst);
-  BufferSharedDelete(getSh()->clippersInst);
-  getSh()->geometriesInst = nullptr;
-  getSh()->volumesInst = nullptr;
-  getSh()->clippersInst = nullptr;
-
-  // Release renderers data
-  getSh()->scivisData.destroy();
-  getSh()->pathtracerData.destroy();
 }
 
-World::World()
+World::World(api::ISPCDevice &device)
+    : AddStructShared(device.getIspcrtDevice(), device)
 {
   managedObjectType = OSP_WORLD;
 }
@@ -79,17 +73,20 @@ void World::commit()
   freeAndNullifyEmbreeScene(esVol);
   freeAndNullifyEmbreeScene(esClip);
 
-  scivisDataValid = false;
-  pathtracerDataValid = false;
+  scivisData = nullptr;
+  pathtracerData = nullptr;
 
   instances = getParamDataT<Instance *>("instance");
   lights = getParamDataT<Light *>("light");
 
   auto numInstances = instances ? instances->size() : 0;
 
-  int sceneFlags = 0;
-  sceneFlags |=
-      (getParam<bool>("dynamicScene", false) ? RTC_SCENE_FLAG_DYNAMIC : 0);
+  int sceneFlags = RTC_SCENE_FLAG_NONE;
+  RTCBuildQuality buildQuality = RTC_BUILD_QUALITY_HIGH;
+  if (getParam<bool>("dynamicScene", false)) {
+    sceneFlags |= RTC_SCENE_FLAG_DYNAMIC;
+    buildQuality = RTC_BUILD_QUALITY_LOW;
+  }
   sceneFlags |=
       (getParam<bool>("compactMode", false) ? RTC_SCENE_FLAG_COMPACT : 0);
   sceneFlags |=
@@ -100,77 +97,54 @@ void World::commit()
       << "Committing world, which has " << numInstances << " instances and "
       << (lights ? lights->size() : 0) << " lights";
 
-  BufferSharedDelete(getSh()->geometriesInst);
-  BufferSharedDelete(getSh()->volumesInst);
-  BufferSharedDelete(getSh()->clippersInst);
-  getSh()->volumesInst = nullptr;
-  getSh()->geometriesInst = nullptr;
-  getSh()->clippersInst = nullptr;
-
-  // Calculate number of each instance type
-  getSh()->numGeometriesInst = 0;
-  getSh()->numVolumesInst = 0;
-  getSh()->numClippersInst = 0;
+  instanceArray = nullptr;
   getSh()->numInvertedClippers = 0;
+
+  RTCDevice embreeDevice = getISPCDevice().getEmbreeDevice();
   if (instances) {
-    for (auto &&inst : *instances) {
-      if (inst->group->sceneGeometries)
-        getSh()->numGeometriesInst++;
-      if (inst->group->sceneVolumes)
-        getSh()->numVolumesInst++;
-      if (inst->group->sceneClippers) {
-        getSh()->numClippersInst++;
+    for (auto &&inst : *instances)
+      if (inst->group->sceneClippers)
         getSh()->numInvertedClippers += inst->group->numInvertedClippers;
-      }
-    }
-  }
 
-  // Create shared buffers for instance pointers
-  if (getSh()->numGeometriesInst)
-    getSh()->geometriesInst = (ispc::Instance **)BufferSharedCreate(
-        sizeof(ispc::Instance *) * getSh()->numGeometriesInst);
-  if (getSh()->numVolumesInst)
-    getSh()->volumesInst = (ispc::Instance **)BufferSharedCreate(
-        sizeof(ispc::Instance *) * getSh()->numVolumesInst);
-  if (getSh()->numClippersInst)
-    getSh()->clippersInst = (ispc::Instance **)BufferSharedCreate(
-        sizeof(ispc::Instance *) * getSh()->numClippersInst);
+    // Create shared buffers for instance pointers
+    instanceArray = make_buffer_shared_unique<ispc::Instance *>(
+        getISPCDevice().getIspcrtDevice(),
+        sizeof(ispc::Instance *) * numInstances);
+    getSh()->instances = instanceArray->sharedPtr();
 
-  // Populate shared buffer with instance pointers,
-  // create Embree instances
-  if (instances) {
-    unsigned int gId = 0, vId = 0, cId = 0;
+    // Populate shared buffer with instance pointers,
+    // create Embree instances
+    unsigned int id = 0;
     for (auto &&inst : *instances) {
-      if (inst->group->sceneGeometries) {
-        getSh()->geometriesInst[gId++] = inst->getSh();
+      getSh()->instances[id] = inst->getSh();
+      if (inst->group->sceneGeometries)
         addGeometryInstance(
-            esGeom, inst->group->sceneGeometries, inst, embreeDevice);
-      }
-      if (inst->group->sceneVolumes) {
-        getSh()->volumesInst[vId++] = inst->getSh();
+            esGeom, inst->group->sceneGeometries, inst, embreeDevice, id);
+      if (inst->group->sceneVolumes)
         addGeometryInstance(
-            esVol, inst->group->sceneVolumes, inst, embreeDevice);
-      }
-      if (inst->group->sceneClippers) {
-        getSh()->clippersInst[cId++] = inst->getSh();
+            esVol, inst->group->sceneVolumes, inst, embreeDevice, id);
+      if (inst->group->sceneClippers)
         addGeometryInstance(
-            esClip, inst->group->sceneClippers, inst, embreeDevice);
-      }
+            esClip, inst->group->sceneClippers, inst, embreeDevice, id);
+      id++;
     }
   }
 
   if (esGeom) {
     rtcSetSceneFlags(esGeom, static_cast<RTCSceneFlags>(sceneFlags));
+    rtcSetSceneBuildQuality(esGeom, buildQuality);
     rtcCommitScene(esGeom);
   }
   if (esVol) {
     rtcSetSceneFlags(esVol, static_cast<RTCSceneFlags>(sceneFlags));
+    rtcSetSceneBuildQuality(esVol, buildQuality);
     rtcCommitScene(esVol);
   }
   if (esClip) {
     rtcSetSceneFlags(esClip,
         static_cast<RTCSceneFlags>(
             sceneFlags | RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION));
+    rtcSetSceneBuildQuality(esClip, buildQuality);
     rtcCommitScene(esClip);
   }
 }
@@ -192,11 +166,6 @@ box3f World::getBounds() const
   }
 
   return sceneBounds;
-}
-
-void World::setDevice(RTCDevice device)
-{
-  embreeDevice = device;
 }
 
 OSPTYPEFOR_DEFINITION(World *);

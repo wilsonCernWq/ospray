@@ -15,35 +15,25 @@ struct Instance;
 
 struct World
 {
-  Instance **geometriesInst;
-  int32 numGeometriesInst;
-
-  Instance **volumesInst;
-  int32 numVolumesInst;
-
-  Instance **clippersInst;
-  int32 numClippersInst;
+  Instance **instances;
   int32 numInvertedClippers;
 
   RTCScene embreeSceneHandleGeometries;
   RTCScene embreeSceneHandleVolumes;
   RTCScene embreeSceneHandleClippers;
 
-  SciVisData scivisData;
-  PathtracerData pathtracerData;
+  SciVisData *scivisData;
+  PathTracerData *pathtracerData;
 
 #ifdef __cplusplus
   World()
-      : geometriesInst(nullptr),
-        numGeometriesInst(0),
-        volumesInst(nullptr),
-        numVolumesInst(0),
-        clippersInst(nullptr),
-        numClippersInst(0),
+      : instances(nullptr),
         numInvertedClippers(0),
         embreeSceneHandleGeometries(nullptr),
         embreeSceneHandleVolumes(nullptr),
-        embreeSceneHandleClippers(nullptr)
+        embreeSceneHandleClippers(nullptr),
+        scivisData(nullptr),
+        pathtracerData(nullptr)
   {}
 };
 } // namespace ispc

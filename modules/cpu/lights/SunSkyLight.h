@@ -36,10 +36,10 @@ inline vec3f xyzToRgb(const vec3f &c)
 
 struct OSPRAY_SDK_INTERFACE SunSkyLight : public Light
 {
-  SunSkyLight();
+  SunSkyLight(api::ISPCDevice &device);
   virtual ~SunSkyLight() override;
   virtual uint32_t getShCount() const override;
-  virtual ispc::Light *createSh(
+  virtual ISPCRTMemoryView createSh(
       uint32_t index, const ispc::Instance *instance = nullptr) const override;
   virtual std::string toString() const override;
   virtual void commit() override;

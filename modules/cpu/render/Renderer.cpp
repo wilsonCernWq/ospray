@@ -6,7 +6,6 @@
 #include "LoadBalancer.h"
 #include "Material.h"
 #include "common/Instance.h"
-#include "common/Util.h"
 #include "geometry/GeometricModel.h"
 #include "pf/PixelFilter.h"
 // ispc exports
@@ -15,11 +14,10 @@
 
 namespace ospray {
 
-static FactoryMap<Renderer> g_renderersMap;
-
 // Renderer definitions ///////////////////////////////////////////////////////
 
-Renderer::Renderer()
+Renderer::Renderer(api::ISPCDevice &device)
+    : AddStructShared(device.getIspcrtDevice(), device)
 {
   managedObjectType = OSP_RENDERER;
   pixelFilter = nullptr;
@@ -55,38 +53,31 @@ void Renderer::commit()
       "backgroundColor", vec3f(getParam<float>("backgroundColor", 0.f)));
   bgColor = getParam<vec4f>("backgroundColor", vec4f(bgColor3, 0.f));
 
+  // Handle materials assigned to renderer
+  materialArray = nullptr;
+  getSh()->material = nullptr;
   materialData = getParamDataT<Material *>("material");
-
-  setupPixelFilter();
-
-  if (materialData)
-    ispcMaterialPtrs = createArrayOfSh<ispc::Material>(*materialData);
-  else
-    ispcMaterialPtrs.clear();
+  if (materialData) {
+    materialArray = make_buffer_shared_unique<ispc::Material *>(
+        getISPCDevice().getIspcrtDevice(),
+        createArrayOfSh<ispc::Material>(*materialData));
+    getSh()->numMaterials = materialArray->size();
+    getSh()->material = materialArray->sharedPtr();
+  }
 
   getSh()->spp = spp;
   getSh()->maxDepth = maxDepth;
   getSh()->minContribution = minContribution;
   getSh()->bgColor = bgColor;
   getSh()->backplate = backplate ? backplate->getSh() : nullptr;
-  getSh()->numMaterials = ispcMaterialPtrs.size();
-  getSh()->material = ispcMaterialPtrs.data();
   getSh()->maxDepthTexture =
       maxDepthTexture ? maxDepthTexture->getSh() : nullptr;
+
+  setupPixelFilter();
   getSh()->pixelFilter =
       (ispc::PixelFilter *)(pixelFilter ? pixelFilter->getIE() : nullptr);
 
   ispc::precomputeZOrder();
-}
-
-Renderer *Renderer::createInstance(const char *type)
-{
-  return createInstanceHelper(type, g_renderersMap[type]);
-}
-
-void Renderer::registerType(const char *type, FactoryFcn<Renderer> f)
-{
-  g_renderersMap[type] = f;
 }
 
 void Renderer::renderTasks(FrameBuffer *fb,
@@ -111,11 +102,11 @@ OSPPickResult Renderer::pick(
 
   res.instance = nullptr;
   res.model = nullptr;
-  res.primID = -1;
+  res.primID = RTC_INVALID_GEOMETRY_ID;
 
-  int instID = -1;
-  int geomID = -1;
-  int primID = -1;
+  int instID = RTC_INVALID_GEOMETRY_ID;
+  int geomID = RTC_INVALID_GEOMETRY_ID;
+  int primID = RTC_INVALID_GEOMETRY_ID;
 
   ispc::Renderer_pick(getSh(),
       fb->getSh(),

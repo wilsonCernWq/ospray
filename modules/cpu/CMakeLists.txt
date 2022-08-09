@@ -21,6 +21,7 @@ endif()
 set(OSPRAY_ISPC_DEVICE_SOURCES
   ${OSPRAY_RESOURCE}
 
+  ModuleInit.cpp
   ispc_tasksys.cpp
 
   ISPCDevice.h
@@ -153,7 +154,6 @@ set(OSPRAY_ISPC_DEVICE_SOURCES
   render/pathtracer/PathTracerData.cpp
   render/pathtracer/PathSampler.ispc
   render/pathtracer/GeometryLight.ispc
-  render/pathtracer/GeometryLight.cpp
   render/pathtracer/VirtualLight.ispc
   render/pathtracer/TransparentShadow.ispc
   render/pathtracer/ShadowCatcher.ispc
@@ -214,10 +214,15 @@ if (WIN32)
   file(READ def_header.txt OSPRAY_DEF)
   file(READ ispc_symbols.txt OSPRAY_ISPC_SYMBOLS_IN)
 
+  list(LENGTH OSPRAY_ISPC_TARGET_LIST NUM_TARGETS)
   foreach(isa ${OSPRAY_ISPC_TARGET_LIST})
     string(REPLACE "-i32x16" "" isa ${isa}) # strip avx512(knl|skx)-i32x16
+    if (NUM_TARGETS EQUAL 1)
+      set(isa "") # for single target no suffix
+      string(REPLACE "delete_uniform_," "delete_uniform," OSPRAY_ISPC_SYMBOLS_IN ${OSPRAY_ISPC_SYMBOLS_IN})
+    endif()
     # add isa suffix
-    string(REPLACE "," ${isa} OSPRAY_ISPC_SYMBOLS ${OSPRAY_ISPC_SYMBOLS_IN})
+    string(REPLACE "," "${isa}" OSPRAY_ISPC_SYMBOLS ${OSPRAY_ISPC_SYMBOLS_IN})
     string(APPEND OSPRAY_DEF ${OSPRAY_ISPC_SYMBOLS})
   endforeach()
 
@@ -266,7 +271,7 @@ install(FILES ${CMAKE_BINARY_DIR}/OSPConfig.h
 
 ## Build the module ##
 
-ispc_include_directories(
+include_directories_ispc(
   ${PROJECT_SOURCE_DIR}/ospray/include
   ${PROJECT_SOURCE_DIR}/ospray
   ${PROJECT_SOURCE_DIR}
@@ -285,6 +290,7 @@ target_link_libraries(ospray_module_cpu
 PUBLIC
   ospray
   rkcommon::rkcommon
+  $<BUILD_INTERFACE:ispcrt::ispcrt>
   $<BUILD_INTERFACE:embree>
   $<BUILD_INTERFACE:openvkl::openvkl>
 )
@@ -298,6 +304,7 @@ target_include_directories(ospray_module_cpu
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
     # NOTE(jda) - the following includes are missing despite PUBLIC linking
+    $<BUILD_INTERFACE:${ISPCRT_INCLUDE_DIR}>
     $<BUILD_INTERFACE:${OPENVKL_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${EMBREE_INCLUDE_DIRS}>
     #######################################################################
@@ -312,6 +319,28 @@ PUBLIC
   $<$<BOOL:${OSPRAY_DEBUG_NO_TASKING}>:OSPRAY_SERIAL_RENDERING>
 )
 
+
+# -------------------------------------------------------
+# Install SDK headers
+# -------------------------------------------------------
+
+get_subdirectories(SUBDIRS ${CMAKE_CURRENT_LIST_DIR})
+
+foreach(dir ${SUBDIRS})
+  install(DIRECTORY ${dir}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK/modules/cpu
+    COMPONENT devel
+    FILES_MATCHING
+    PATTERN *.h
+    PATTERN *.ih
+  )
+  install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${dir}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK/modules/cpu
+    COMPONENT devel
+    FILES_MATCHING
+    PATTERN *_ispc.h
+  )
+endforeach()
 
 ##############################################################
 # Additional interface targets

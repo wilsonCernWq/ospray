@@ -9,7 +9,7 @@ mark_as_advanced(OSPRAY_MPI_COMPRESSION_THRESHOLD)
 
 ## Build the MPI module ##
 
-ispc_include_directories(
+include_directories_ispc(
   ${PROJECT_SOURCE_DIR}/ospray/include
   ${PROJECT_SOURCE_DIR}/ospray
   ${PROJECT_SOURCE_DIR}
@@ -83,4 +83,27 @@ install(TARGETS ospray_mpi_worker
   COMPONENT mpi)
 
 ospray_sign_target(ospray_mpi_worker)
+
+# -------------------------------------------------------
+# Install SDK headers
+# -------------------------------------------------------
+
+get_subdirectories(SUBDIRS ${CMAKE_CURRENT_LIST_DIR})
+
+foreach(dir ${SUBDIRS})
+  install(DIRECTORY ${dir}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK/modules/mpi
+    COMPONENT devel
+    FILES_MATCHING
+    PATTERN *.h
+    PATTERN *.ih
+  )
+  install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/${dir}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/ospray/SDK/modules/mpi
+    COMPONENT devel
+    FILES_MATCHING
+    PATTERN *_ispc.h
+  )
+endforeach()
+
 

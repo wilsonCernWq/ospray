@@ -47,6 +47,12 @@ size_t FrameBufferInfo::pixelSize(uint32_t channel) const
     return channels & OSP_FB_NORMAL ? sizeof(vec3f) : 0;
   case OSP_FB_ALBEDO:
     return channels & OSP_FB_ALBEDO ? sizeof(vec3f) : 0;
+  case OSP_FB_ID_PRIMITIVE:
+    return channels & OSP_FB_ID_PRIMITIVE ? sizeof(uint32) : 0;
+  case OSP_FB_ID_OBJECT:
+    return channels & OSP_FB_ID_OBJECT ? sizeof(uint32) : 0;
+  case OSP_FB_ID_INSTANCE:
+    return channels & OSP_FB_ID_INSTANCE ? sizeof(uint32) : 0;
   default:
     return 0;
   }
@@ -176,7 +182,7 @@ void dataTransfer(OSPState &state,
   vec3ul numItems = 0;
   cmdBuf >> type >> numItems;
 
-  Data *data = new Data(type, numItems);
+  Data *data = new Data(state.hostDevice, type, numItems);
 
   const uint64_t nbytes = data->size() * sizeOf(type);
   auto view = std::make_shared<ArrayView<uint8_t>>(
@@ -202,7 +208,7 @@ Data *retrieveData(OSPState &state,
     // a fixed array, since the command buffer will be destroyed after
     // processing it
     if (!outputData) {
-      outputData = new Data(type, numItems);
+      outputData = new Data(state.hostDevice, type, numItems);
     }
     cmdBuf.read(outputData->data(), nbytes);
   } else {

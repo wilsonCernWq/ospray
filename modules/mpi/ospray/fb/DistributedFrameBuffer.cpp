@@ -45,7 +45,8 @@ void DistributedTileError::sync()
 
 // DistributedFrameBuffer definitions ///////////////////////////////////////
 
-DFB::DistributedFrameBuffer(const vec2i &numPixels,
+DFB::DistributedFrameBuffer(api::ISPCDevice &device,
+    const vec2i &numPixels,
     ObjectHandle myId,
     ColorBufferFormat colorBufferFormat,
     const uint32 channels)
@@ -55,7 +56,7 @@ DFB::DistributedFrameBuffer(const vec2i &numPixels,
     // be set from the object handle but pulled from some other ID pool
     // specific to those objects using the messaging layer
     : MessageHandler(myId),
-      FrameBuffer(numPixels, colorBufferFormat, channels),
+      FrameBuffer(device, numPixels, colorBufferFormat, channels),
       mpiGroup(mpicommon::worker.dup()),
       totalTiles(divRoundUp(size, vec2i(TILE_SIZE))),
       numRenderTasks((totalTiles * TILE_SIZE) / getRenderTaskSize()),
@@ -65,7 +66,8 @@ DFB::DistributedFrameBuffer(const vec2i &numPixels,
       frameIsDone(false)
 {
   if (mpicommon::IamTheMaster() && colorBufferFormat != OSP_FB_NONE) {
-    localFBonMaster = rkcommon::make_unique<LocalFrameBuffer>(numPixels,
+    localFBonMaster = rkcommon::make_unique<LocalFrameBuffer>(device,
+        numPixels,
         colorBufferFormat,
         channels & ~(OSP_FB_ACCUM | OSP_FB_VARIANCE));
   }
@@ -115,7 +117,8 @@ void DFB::startNewFrame(const float errorThreshold)
     const size_t uncompressedSize = masterMsgSize(getSh()->colorBufferFormat,
         hasDepthBuffer,
         hasNormalBuffer,
-        hasAlbedoBuffer);
+        hasAlbedoBuffer,
+        hasIDBuf());
     const size_t compressedSize = snappy::MaxCompressedLength(uncompressedSize);
     tileGatherBuffer.resize(myTiles.size() * compressedSize, 0);
   }
@@ -228,8 +231,11 @@ void DistributedFrameBuffer::setSparseFBLayerCount(size_t numLayers)
   // Allocate any new layers that have been added to the DFB
   for (size_t i = 1; i < layers.size(); ++i) {
     if (!layers[i]) {
-      layers[i] = rkcommon::make_unique<SparseFrameBuffer>(
-          size, getColorBufferFormat(), channelFlags, sparseFbTrackAccumIDs);
+      layers[i] = rkcommon::make_unique<SparseFrameBuffer>(getISPCDevice(),
+          size,
+          getColorBufferFormat(),
+          channelFlags,
+          sparseFbTrackAccumIDs);
     }
   }
 }
@@ -297,8 +303,12 @@ void DFB::createTiles()
 
   const bool sparseFbTrackAccumIDs = getChannelFlags() & OSP_FB_ACCUM;
   if (layers.empty()) {
-    layers.push_back(rkcommon::make_unique<SparseFrameBuffer>(
-        size, OSP_FB_NONE, channels, myTileIDs, sparseFbTrackAccumIDs));
+    layers.push_back(rkcommon::make_unique<SparseFrameBuffer>(getISPCDevice(),
+        size,
+        OSP_FB_NONE,
+        channels,
+        myTileIDs,
+        sparseFbTrackAccumIDs));
   } else {
     layers[0]->setTiles(myTileIDs);
     layers[0]->clear();
@@ -396,7 +406,8 @@ void DFB::waitUntilFinished()
 void DFB::processMessage(WriteTileMessage *msg)
 {
   ispc::Tile tile;
-  unpackWriteTileMessage(msg, tile, hasNormalBuffer || hasAlbedoBuffer);
+  unpackWriteTileMessage(
+      msg, tile, hasNormalBuffer || hasAlbedoBuffer || hasIDBuf());
 
   auto *tileDesc = this->getTileDescFor(tile.region.lower);
   LiveTileOperation *td = (LiveTileOperation *)tileDesc;
@@ -424,6 +435,39 @@ void DistributedFrameBuffer::processMessage(MasterTileMessage_FB<ColorT> *msg)
   if (msg->command & MASTER_TILE_HAS_AUX)
     aux = reinterpret_cast<MasterTileMessage_FB_Depth_Aux<ColorT> *>(msg);
 
+  uint32 *pidBuf = nullptr;
+  uint32 *gidBuf = nullptr;
+  uint32 *iidBuf = nullptr;
+  // TODO: Make the rest of the tile more dynamically sized and use a buffer
+  // cursor style to get the pointers to the individual tile components
+  if (msg->command & MASTER_TILE_HAS_ID) {
+    // The ID buffer data comes at the end of the tile message
+    uint8 *data = reinterpret_cast<uint8 *>(msg);
+    if (!aux) {
+      if (depth) {
+        data += sizeof(MasterTileMessage_FB_Depth<ColorT>);
+      } else {
+        data += sizeof(MasterTileMessage_FB<ColorT>);
+      }
+    } else {
+      data += sizeof(MasterTileMessage_FB_Depth_Aux<ColorT>);
+    }
+    // All IDs are sent if any were requested, however we need to write only the
+    // ones that actually exist in the local FB since it doesn't allocate
+    // buffers for the non-existant channels
+    if (hasPrimitiveIDBuffer) {
+      pidBuf = reinterpret_cast<uint32 *>(data);
+    }
+    if (hasObjectIDBuffer) {
+      gidBuf = reinterpret_cast<uint32 *>(
+          data + sizeof(uint32) * TILE_SIZE * TILE_SIZE);
+    }
+    if (hasInstanceIDBuffer) {
+      iidBuf = reinterpret_cast<uint32 *>(
+          data + 2 * sizeof(uint32) * TILE_SIZE * TILE_SIZE);
+    }
+  }
+
   ColorT *color = reinterpret_cast<ColorT *>(&localFBonMaster->colorBuffer[0]);
   for (int iy = 0; iy < TILE_SIZE; iy++) {
     int iiy = iy + msg->coords.y;
@@ -450,8 +494,28 @@ void DistributedFrameBuffer::processMessage(MasterTileMessage_FB<ColorT> *msg)
           localFBonMaster->albedoBuffer[iix + iiy * numPixels.x] =
               aux->albedo[ix + iy * TILE_SIZE];
       }
+      if (pidBuf) {
+        localFBonMaster->primitiveIDBuffer[iix + iiy * numPixels.x] =
+            pidBuf[ix + iy * TILE_SIZE];
+      }
+      if (gidBuf) {
+        localFBonMaster->objectIDBuffer[iix + iiy * numPixels.x] =
+            gidBuf[ix + iy * TILE_SIZE];
+      }
+      if (iidBuf) {
+        localFBonMaster->instanceIDBuffer[iix + iiy * numPixels.x] =
+            iidBuf[ix + iy * TILE_SIZE];
+      }
     }
   }
+}
+
+bool DFB::hasIDBuf() const
+{
+  // ID buffers are only needed on the first frame when rendering with
+  // accumulation
+  return getFrameID() == 0
+      && (hasPrimitiveIDBuffer || hasObjectIDBuffer || hasInstanceIDBuffer);
 }
 
 void DFB::tileIsFinished(LiveTileOperation *tile)
@@ -483,12 +547,16 @@ void DFB::tileIsFinished(LiveTileOperation *tile)
         hasDepthBuffer,
         hasNormalBuffer,
         hasAlbedoBuffer,
+        hasIDBuf(),
         tile->begin,
         tile->error);
     msg.setColor(tile->color);
     msg.setDepth(tile->finished.z);
     msg.setNormal((vec3f *)tile->finished.nx);
     msg.setAlbedo((vec3f *)tile->finished.ar);
+    msg.setPrimitiveID(tile->finished.pid);
+    msg.setObjectID(tile->finished.gid);
+    msg.setInstanceID(tile->finished.iid);
     return msg;
   };
 
@@ -608,7 +676,8 @@ void DFB::gatherFinalTiles()
   const size_t tileSize = masterMsgSize(getSh()->colorBufferFormat,
       hasDepthBuffer,
       hasNormalBuffer,
-      hasAlbedoBuffer);
+      hasAlbedoBuffer,
+      hasIDBuf());
 
   const int totalTilesExpected =
       std::accumulate(numTilesExpected.begin(), numTilesExpected.end(), 0);
@@ -814,7 +883,8 @@ void DFB::setTile(const ispc::Tile &tile)
 
   // Note my tile, send to the owner
   if (!tileDesc->mine()) {
-    auto msg = makeWriteTileMessage(tile, hasNormalBuffer || hasAlbedoBuffer);
+    auto msg = makeWriteTileMessage(
+        tile, hasNormalBuffer || hasAlbedoBuffer || hasIDBuf());
 
     int dstRank = tileDesc->ownerID;
     mpi::messaging::sendTo(dstRank, myId, msg);

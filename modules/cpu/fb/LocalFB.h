@@ -19,7 +19,8 @@ struct SparseFrameBuffer;
 struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
     : public AddStructShared<FrameBuffer, ispc::LocalFB>
 {
-  LocalFrameBuffer(const vec2i &size,
+  LocalFrameBuffer(api::ISPCDevice &device,
+      const vec2i &size,
       ColorBufferFormat colorBufferFormat,
       const uint32 channels);
 
@@ -82,6 +83,10 @@ struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
   containers::AlignedVector<vec3f> normalBuffer;
   // accumulated, one RGB per pixel
   containers::AlignedVector<vec3f> albedoBuffer;
+  // primitive ID, object ID, and instance ID
+  containers::AlignedVector<uint32> primitiveIDBuffer;
+  containers::AlignedVector<uint32> objectIDBuffer;
+  containers::AlignedVector<uint32> instanceIDBuffer;
 
  protected:
   vec2i getTaskStartPos(const uint32_t taskID) const;

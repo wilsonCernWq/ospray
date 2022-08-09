@@ -8,12 +8,16 @@
 
 namespace ospray {
 
-Data::Data(const void *sharedData,
+Data::Data(api::ISPCDevice &device,
+    const void *sharedData,
     OSPDataType type,
     const vec3ul &numItems,
     const vec3l &byteStride)
-    : shared(true), type(type), numItems(numItems), byteStride(byteStride)
-
+    : ISPCDeviceObject(device),
+      shared(true),
+      type(type),
+      numItems(numItems),
+      byteStride(byteStride)
 {
   if (sharedData == nullptr)
     throw std::runtime_error("OSPData: shared buffer is NULL");
@@ -28,11 +32,17 @@ Data::Data(const void *sharedData,
   }
 }
 
-Data::Data(OSPDataType type, const vec3ul &numItems)
-    : shared(false), type(type), numItems(numItems), byteStride(0)
+Data::Data(api::ISPCDevice &device, OSPDataType type, const vec3ul &numItems)
+    : ISPCDeviceObject(device),
+      shared(false),
+      type(type),
+      numItems(numItems),
+      byteStride(0)
 {
-  addr =
-      (char *)alignedMalloc(size() * sizeOf(type) + 16); // XXX padding needed?
+  view = BufferSharedCreate(
+      device.getIspcrtDevice().handle(), size() * sizeOf(type) + 16);
+  addr = (char *)ispcrtSharedPtr(view);
+
   init();
   if (isObjectType(type)) // XXX initialize always? or never?
     memset(addr, 0, size() * sizeOf(type));
@@ -48,7 +58,7 @@ Data::~Data()
   }
 
   if (!shared)
-    alignedFree(addr);
+    BufferSharedDelete(view);
 }
 
 ispc::Data1D Data::emptyData1D;

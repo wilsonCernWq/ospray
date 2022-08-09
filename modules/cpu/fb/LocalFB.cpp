@@ -14,10 +14,12 @@
 
 namespace ospray {
 
-LocalFrameBuffer::LocalFrameBuffer(const vec2i &_size,
+LocalFrameBuffer::LocalFrameBuffer(api::ISPCDevice &device,
+    const vec2i &_size,
     ColorBufferFormat _colorBufferFormat,
     const uint32 channels)
-    : AddStructShared(_size, _colorBufferFormat, channels),
+    : AddStructShared(
+        device.getIspcrtDevice(), device, _size, _colorBufferFormat, channels),
       numRenderTasks(divRoundUp(size, getRenderTaskSize())),
       taskErrorRegion(hasVarianceBuffer ? getNumRenderTasks() : vec2i(0))
 {
@@ -43,6 +45,15 @@ LocalFrameBuffer::LocalFrameBuffer(const vec2i &_size,
 
   if (hasAlbedoBuffer)
     albedoBuffer.resize(numPixels);
+
+  if (hasPrimitiveIDBuffer)
+    primitiveIDBuffer.resize(numPixels);
+
+  if (hasObjectIDBuffer)
+    objectIDBuffer.resize(numPixels);
+
+  if (hasInstanceIDBuffer)
+    instanceIDBuffer.resize(numPixels);
 
   // TODO: Better way to pass the task IDs that doesn't require just storing
   // them all? Maybe as blocks/tiles similar to when we just had tiles? Will
@@ -77,6 +88,9 @@ LocalFrameBuffer::LocalFrameBuffer(const vec2i &_size,
   getSh()->taskAccumID = getDataSafe(taskAccumID);
   getSh()->taskRegionError = taskErrorRegion.errorBuffer();
   getSh()->numRenderTasks = numRenderTasks;
+  getSh()->primitiveIDBuffer = getDataSafe(primitiveIDBuffer);
+  getSh()->objectIDBuffer = getDataSafe(objectIDBuffer);
+  getSh()->instanceIDBuffer = getDataSafe(instanceIDBuffer);
 }
 
 void LocalFrameBuffer::commit()
@@ -150,6 +164,21 @@ void LocalFrameBuffer::writeTiles(const containers::AlignedVector<Tile> &tiles)
           tile->ar,
           tile->ag,
           tile->ab);
+    }
+
+    if (hasPrimitiveIDBuffer) {
+      ispc::LocalFrameBuffer_writeIDTile(
+          getSh(), tile, getSh()->primitiveIDBuffer, tile->pid);
+    }
+
+    if (hasObjectIDBuffer) {
+      ispc::LocalFrameBuffer_writeIDTile(
+          getSh(), tile, getSh()->objectIDBuffer, tile->gid);
+    }
+
+    if (hasInstanceIDBuffer) {
+      ispc::LocalFrameBuffer_writeIDTile(
+          getSh(), tile, getSh()->instanceIDBuffer, tile->iid);
     }
 
     if (hasNormalBuffer)
@@ -262,6 +291,15 @@ const void *LocalFrameBuffer::mapBuffer(OSPFrameBufferChannel channel)
     break;
   case OSP_FB_ALBEDO:
     buf = getDataSafe(albedoBuffer);
+    break;
+  case OSP_FB_ID_PRIMITIVE:
+    buf = getDataSafe(primitiveIDBuffer);
+    break;
+  case OSP_FB_ID_OBJECT:
+    buf = getDataSafe(objectIDBuffer);
+    break;
+  case OSP_FB_ID_INSTANCE:
+    buf = getDataSafe(instanceIDBuffer);
     break;
   default:
     break;

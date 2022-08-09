@@ -14,10 +14,12 @@ struct Material;
 
 namespace ospray {
 
+struct Material;
+
 struct OSPRAY_SDK_INTERFACE GeometricModel
-    : public AddStructShared<ManagedObject, ispc::GeometricModel>
+    : public AddStructShared<ISPCDeviceObject, ispc::GeometricModel>
 {
-  GeometricModel(Geometry *geometry);
+  GeometricModel(api::ISPCDevice &device, Geometry *geometry);
   ~GeometricModel() override = default;
 
   std::string toString() const override;
@@ -25,8 +27,12 @@ struct OSPRAY_SDK_INTERFACE GeometricModel
   void commit() override;
 
   Geometry &geometry();
+  RTCGeometry embreeGeometryHandle() const;
 
   bool invertedNormals() const;
+
+  bool hasEmissiveMaterials(
+      Ref<const DataT<Material *>> rendererMaterials) const;
 
  private:
   Ref<Geometry> geom;
@@ -34,10 +40,8 @@ struct OSPRAY_SDK_INTERFACE GeometricModel
   Ref<const Data> materialData;
   Ref<const DataT<vec4f>> colorData;
   Ref<const DataT<uint8_t>> indexData;
-  std::vector<ispc::Material *> ispcMaterialPtrs;
-
-  friend struct PathTracer; // TODO: fix this!
-  friend struct Renderer;
+  std::unique_ptr<BufferShared<ispc::Material *>> materialArray;
+  std::unique_ptr<BufferShared<uint32_t>> materialIDArray;
 };
 
 OSPTYPEFOR_SPECIALIZATION(GeometricModel *, OSP_GEOMETRIC_MODEL);
@@ -47,6 +51,11 @@ OSPTYPEFOR_SPECIALIZATION(GeometricModel *, OSP_GEOMETRIC_MODEL);
 inline Geometry &GeometricModel::geometry()
 {
   return *geom;
+}
+
+inline RTCGeometry GeometricModel::embreeGeometryHandle() const
+{
+  return geom->getEmbreeGeometry();
 }
 
 inline bool GeometricModel::invertedNormals() const
