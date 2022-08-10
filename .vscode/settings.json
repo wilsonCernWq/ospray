@@ -1,6 +1,6 @@
 {
     "cmake.sourceDirectory": "${workspaceFolder}",
-    "cmake.buildDirectory": "${workspaceFolder}/build/${input:configuration}/build",
+    "cmake.buildDirectory": "${workspaceFolder}/build/${command:cmake.buildType}/build",
     "cmake.configureSettings": {
         "OSPRAY_APPS_TUTORIAL_GLM": true,
         "OSPRAY_BUILD_ISA": "ALL",

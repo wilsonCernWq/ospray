@@ -42,8 +42,8 @@
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
         "args": [
-          "-G",
-          "Visual Studio 16 2019",
+          // "-G",
+          // "Visual Studio 16 2019",
           "-T",
           "host=x64",
           "-A",
@@ -55,7 +55,8 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build/${input:configuration}/deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
         ]
       },
       "linux": {
@@ -68,7 +69,8 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build/${input:configuration}/deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
         ],
       },
       "problemMatcher": []
@@ -80,8 +82,8 @@
       "windows": {
         "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
         "args": [
-          "-G",
-          "Visual Studio 16 2019",
+          // "-G",
+          // "Visual Studio 16 2019",
           "-T",
           "host=x64",
           "-A",
@@ -94,7 +96,8 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build/${input:configuration}/deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
         ]
       },
       "linux": {
@@ -108,7 +111,8 @@
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
           "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
           "-H${workspaceFolder}/scripts/superbuild",
-          "-B${workspaceFolder}/build/${input:configuration}/deps"
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
         ],
       },
       "problemMatcher": []
