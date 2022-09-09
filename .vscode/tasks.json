@@ -64,6 +64,7 @@
         "args": [
           "--no-warn-unused-cli",
           "-DBUILD_OIDN=ON",
+          // "-DBUILD_OSPRAY_MODULE_MPI=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
@@ -106,6 +107,7 @@
           "--no-warn-unused-cli",
           "-DOPENVKL_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
           "-DBUILD_OIDN=ON",
+          // "-DBUILD_OSPRAY_MODULE_MPI=ON",
           "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
           "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
           "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
