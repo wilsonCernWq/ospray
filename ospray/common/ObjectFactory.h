@@ -9,11 +9,19 @@
 #include <stdexcept>
 #include <string>
 
-#ifdef OBJECTFACTORY_DLLIMPORT
+#ifdef _WIN32
+#ifdef OBJECTFACTORY_IMPORT
 #define OF_DECLSPEC __declspec(dllimport)
 #else
+#define OF_DECLSPEC __declspec(dllexport)
+#endif
+#else
 #define OF_DECLSPEC
-#endif // OBJECTFACTORY_IMPORT
+#endif
+
+// 'fcns' member is not defined when imported from other library
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wundefined-var-template"
 
 namespace ospray {
 
@@ -28,7 +36,7 @@ struct OF_DECLSPEC ObjectFactory
   }
 
   // Instantiate provided type class
-  static T *createInstance(const char *type, Args &&... args)
+  static T *createInstance(const char *type, Args &&...args)
   {
     // Find constructor pointer and call it
     FactoryFcn fcn = fcns[type];
@@ -45,23 +53,25 @@ struct OF_DECLSPEC ObjectFactory
   }
 
  private:
-  using FactoryFcn = T *(*)(Args &&... args);
+  using FactoryFcn = T *(*)(Args &&...args);
   using FactoryMap = std::map<std::string, FactoryFcn>;
 
   // Map of constructor pointers, preferably use 'inline static' since C++17
   static FactoryMap fcns;
 
   template <typename D>
-  static T *allocate_object(Args &&... args)
+  static T *allocate_object(Args &&...args)
   {
     return new D(std::forward<Args>(args)...);
   }
 };
 
-#ifndef OBJECTFACTORY_DLLIMPORT
+#ifndef OBJECTFACTORY_IMPORT
 template <typename T, typename... Args>
 typename ObjectFactory<T, Args...>::FactoryMap ObjectFactory<T, Args...>::fcns;
 #endif
 } // namespace ospray
+
+#pragma clang diagnostic pop
 
 #undef OF_DECLSPEC

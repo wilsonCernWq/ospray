@@ -1,16 +1,20 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-#include "fb/FrameBuffer.ih"
-#include "fb/Tile.ih"
+#include "FrameBuffer.ih"
+#include "RenderTaskDesc.ih"
+#include "Tile.ih"
+#include "render/ScreenSample.ih"
 // c++ shared
 #include "LocalFBShared.h"
+
+OSPRAY_BEGIN_ISPC_NAMESPACE
 
 // write tile into the given frame buffer's color buffer,
 // this buffer _must_ exist when this fct is called, and it
 // _must_ have format 'name'
 #define template_writeTile(name, type, cvt)                                    \
-  export void LocalFrameBuffer_writeTile_##name(                               \
+export SYCL_EXTERNAL void LocalFrameBuffer_writeTile_##name(                   \
       void *uniform _fb, const void *uniform _tile)                            \
   {                                                                            \
     Tile *uniform tile = (Tile * uniform) _tile;                               \
@@ -23,13 +27,14 @@
     color += (uniform uint64)tile->region.lower.y * fb->super.size.x;          \
     VaryingTile *uniform varyTile = (VaryingTile * uniform) tile;              \
     for (uniform uint32 iiy = tile->region.lower.y;                            \
-         iiy < tile->region.upper.y;                                           \
+         iiy < (uniform uint32)tile->region.upper.y;                           \
          iiy++) {                                                              \
       uniform uint32 chunkID =                                                 \
           (iiy - tile->region.lower.y) * (TILE_SIZE / programCount);           \
       for (uint32 iix = tile->region.lower.x + programIndex;                   \
-           iix < tile->region.upper.x;                                         \
+           iix < (uniform uint32)tile->region.upper.x;                         \
            iix += programCount, chunkID++) {                                   \
+        type cvtCol;                                                           \
         unmasked                                                               \
         {                                                                      \
           varying vec4f col = make_vec4f(varyTile->r[chunkID],                 \
@@ -37,7 +42,7 @@
               varyTile->b[chunkID],                                            \
               varyTile->a[chunkID]);                                           \
                                                                                \
-          const type cvtCol = cvt(col);                                        \
+          cvtCol = cvt(col);                                                   \
         }                                                                      \
         color[iix] = cvtCol;                                                   \
       }                                                                        \
@@ -162,7 +167,7 @@ inline void LocalFB_accumulateAux(uniform vec3f *uniform auxBuffer,
  * enabled) and writes aux channels (depth, normal, albedo) that the framebuffer
  * has and writes the accumulated color in to the framebuffer for display.
  */
-void LocalFB_accumulateSample(FrameBuffer *uniform _fb,
+SYCL_EXTERNAL void LocalFB_accumulateSample(FrameBuffer *uniform _fb,
     const varying ScreenSample &screenSample,
     uniform RenderTaskDesc &taskDesc)
 {
@@ -240,10 +245,12 @@ void LocalFB_accumulateSample(FrameBuffer *uniform _fb,
     }
   }
 
+#ifndef OSPRAY_TARGET_SYCL
   FrameBuffer_updateProgress(&fb->super, popcnt(lanemask()));
+#endif
 }
 
-uniform RenderTaskDesc LocalFB_getRenderTaskDesc(
+SYCL_EXTERNAL uniform RenderTaskDesc LocalFB_getRenderTaskDesc(
     FrameBuffer *uniform _fb, const uniform uint32 taskID)
 {
   LocalFB *uniform fb = (LocalFB * uniform) _fb;
@@ -260,7 +267,7 @@ uniform RenderTaskDesc LocalFB_getRenderTaskDesc(
   return desc;
 }
 
-void LocalFB_completeTask(
+SYCL_EXTERNAL void LocalFB_completeTask(
     FrameBuffer *uniform _fb, const uniform RenderTaskDesc &taskDesc)
 {
   LocalFB *uniform fb = (LocalFB * uniform) _fb;
@@ -283,7 +290,7 @@ void LocalFB_completeTask(
 }
 
 // Write the input tile into the row-major framebuffer's depth buffer
-export void LocalFrameBuffer_writeDepthTile(
+export SYCL_EXTERNAL void LocalFrameBuffer_writeDepthTile(
     void *uniform _fb, const void *uniform _tile)
 {
   uniform LocalFB *uniform fb = (uniform LocalFB * uniform) _fb;
@@ -293,13 +300,14 @@ export void LocalFrameBuffer_writeDepthTile(
   uniform float *uniform depth = (uniform float *uniform)fb->depthBuffer;
   depth += (uniform uint64)tile->region.lower.y * fb->super.size.x;
 
-  for (uniform uint32 iiy = tile->region.lower.y; iiy < tile->region.upper.y;
+  for (uniform uint32 iiy = tile->region.lower.y;
+       iiy < (uniform uint32)tile->region.upper.y;
        iiy++) {
     uniform uint32 chunkID =
         (iiy - tile->region.lower.y) * (TILE_SIZE / programCount);
 
     for (uint32 iix = tile->region.lower.x + programIndex;
-         iix < tile->region.upper.x;
+         iix < (uniform uint32)tile->region.upper.x;
          iix += programCount, chunkID++) {
       depth[iix] = varyTile->z[chunkID];
     }
@@ -308,27 +316,27 @@ export void LocalFrameBuffer_writeDepthTile(
 }
 
 // "accumulate" first frame only and write into buffer
-export void LocalFrameBuffer_writeIDTile(void *uniform _fb,
+export SYCL_EXTERNAL void LocalFrameBuffer_writeIDTile(void *uniform _fb,
     const void *uniform _tile,
     uniform uint32 *uniform dst,
     const void *uniform src)
 {
   uniform LocalFB *uniform fb = (uniform LocalFB * uniform) _fb;
   const Tile *uniform tile = (const Tile *uniform)_tile;
-  VaryingTile *uniform varyTile = (VaryingTile * uniform) tile;
   uniform uint32 *uniform buffer =
       dst; //(uniform uint32 *uniform)fb->primitiveIDBuffer;
   buffer += (uniform uint64)tile->region.lower.y * fb->super.size.x;
   const void *uniform upid = src; //(const void* uniform)tile->pid;
   const varying int32 *uniform pid = (const varying int32 *uniform)upid;
 
-  for (uniform uint32 iiy = tile->region.lower.y; iiy < tile->region.upper.y;
+  for (uniform uint32 iiy = tile->region.lower.y;
+       iiy < (uniform uint32)tile->region.upper.y;
        iiy++) {
     uniform uint32 chunkID =
         (iiy - tile->region.lower.y) * (TILE_SIZE / programCount);
 
     for (uint32 iix = tile->region.lower.x + programIndex;
-         iix < tile->region.upper.x;
+         iix < (uniform uint32)tile->region.upper.x;
          iix += programCount, chunkID++) {
       if (tile->accumID == 0) {
         varying uint32 val = -1;
@@ -344,30 +352,30 @@ export void LocalFrameBuffer_writeIDTile(void *uniform _fb,
 }
 
 // Write a Tile's auxiliary buffer into the framebuffer's row major storage
-export void LocalFrameBuffer_writeAuxTile(void *uniform _fb,
+export SYCL_EXTERNAL void LocalFrameBuffer_writeAuxTile(void *uniform _fb,
     const void *uniform _tile,
-    uniform vec3f *uniform aux,
+    void *uniform _aux,
     const void *uniform _ax,
     const void *uniform _ay,
     const void *uniform _az)
 {
   uniform LocalFB *uniform fb = (uniform LocalFB * uniform) _fb;
   const Tile *uniform tile = (const Tile *uniform)_tile;
+  uniform vec3f *uniform aux = (uniform vec3f * uniform) _aux;
   const varying float *uniform ax = (const varying float *uniform)_ax;
   const varying float *uniform ay = (const varying float *uniform)_ay;
   const varying float *uniform az = (const varying float *uniform)_az;
 
-  const uniform float accumID = tile->accumID;
-  const uniform float accScale = rcpf(tile->accumID + 1);
   aux += (uniform uint64)tile->region.lower.y * fb->super.size.x;
 
-  for (uniform uint32 iiy = tile->region.lower.y; iiy < tile->region.upper.y;
+  for (uniform uint32 iiy = tile->region.lower.y;
+       iiy < (uniform uint32)tile->region.upper.y;
        iiy++) {
     uniform uint32 chunkID =
         (iiy - tile->region.lower.y) * (TILE_SIZE / programCount);
 
     for (uint32 iix = tile->region.lower.x + programIndex;
-         iix < tile->region.upper.x;
+         iix < (uint32)tile->region.upper.x;
          iix += programCount, chunkID++) {
       aux[iix] = make_vec3f(ax[chunkID], ay[chunkID], az[chunkID]);
     }
@@ -377,15 +385,17 @@ export void LocalFrameBuffer_writeAuxTile(void *uniform _fb,
 
 export void *uniform LocalFrameBuffer_accumulateSample_addr()
 {
-  return LocalFB_accumulateSample;
+  return (void *uniform)LocalFB_accumulateSample;
 }
 
 export void *uniform LocalFrameBuffer_getRenderTaskDesc_addr()
 {
-  return LocalFB_getRenderTaskDesc;
+  return (void *uniform)LocalFB_getRenderTaskDesc;
 }
 
 export void *uniform LocalFrameBuffer_completeTask_addr()
 {
-  return LocalFB_completeTask;
+  return (void *uniform)LocalFB_completeTask;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

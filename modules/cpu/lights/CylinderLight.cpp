@@ -2,10 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "CylinderLight.h"
-// embree
-#include "embree3/rtcore.h"
-
+#include "common/StructShared.h"
+#ifndef OSPRAY_TARGET_SYCL
 #include "lights/CylinderLight_ispc.h"
+#else
+namespace ispc {
+void CylinderLight_Transform(const void *self, const void *xfm, void *dyn);
+void *CylinderLight_sample_addr();
+void *CylinderLight_sample_instanced_addr();
+void *CylinderLight_eval_addr();
+void *CylinderLight_eval_instanced_addr();
+} // namespace ispc
+#endif
 
 #include "CylinderLightShared.h"
 #include "common/InstanceShared.h"
@@ -16,10 +24,15 @@ ISPCRTMemoryView CylinderLight::createSh(
     uint32_t, const ispc::Instance *instance) const
 {
   ISPCRTMemoryView view = StructSharedCreate<ispc::CylinderLight>(
-      getISPCDevice().getIspcrtDevice().handle());
+      getISPCDevice().getIspcrtContext().handle());
   ispc::CylinderLight *sh = (ispc::CylinderLight *)ispcrtSharedPtr(view);
-  sh->super.sample = ispc::CylinderLight_sample_addr();
-  sh->super.eval = ispc::CylinderLight_eval_addr();
+
+#ifndef OSPRAY_TARGET_SYCL
+  sh->super.sample = reinterpret_cast<ispc::Light_SampleFunc>(
+      ispc::CylinderLight_sample_addr());
+  sh->super.eval =
+      reinterpret_cast<ispc::Light_EvalFunc>(ispc::CylinderLight_eval_addr());
+#endif
   sh->super.isVisible = visible;
   sh->super.instance = instance;
 
@@ -37,8 +50,12 @@ ISPCRTMemoryView CylinderLight::createSh(
   // Enable dynamic runtime instancing or apply static transformation
   if (instance) {
     if (instance->motionBlur) {
-      sh->super.sample = ispc::CylinderLight_sample_instanced_addr();
-      sh->super.eval = ispc::CylinderLight_eval_instanced_addr();
+#ifndef OSPRAY_TARGET_SYCL
+      sh->super.sample = reinterpret_cast<ispc::Light_SampleFunc>(
+          ispc::CylinderLight_sample_instanced_addr());
+      sh->super.eval = reinterpret_cast<ispc::Light_EvalFunc>(
+          ispc::CylinderLight_eval_instanced_addr());
+#endif
     } else
       ispc::CylinderLight_Transform(sh, instance->xfm, &sh->pre);
   }

@@ -1,5 +1,8 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
+#ifdef OSPRAY_ENABLE_VOLUMES
+
+#include "openvkl/openvkl.h"
 
 // ospray
 #include "VolumetricModel.h"
@@ -8,7 +11,12 @@
 namespace ospray {
 
 VolumetricModel::VolumetricModel(api::ISPCDevice &device, Volume *_volume)
-    : AddStructShared(device.getIspcrtDevice(), device), volumeAPI(_volume)
+    : AddStructShared(device.getIspcrtContext(), device),
+      volumeAPI(_volume)
+#if OPENVKL_VERSION_MAJOR == 1
+      ,
+      vklIntervalContext(nullptr)
+#endif
 {
   managedObjectType = OSP_VOLUMETRIC_MODEL;
 }
@@ -40,7 +48,6 @@ void VolumetricModel::commit()
   if (volume->vklVolume) {
     if (vklIntervalContext) {
       vklRelease(vklIntervalContext);
-      vklIntervalContext = nullptr;
     }
 
     vklIntervalContext = vklNewIntervalIteratorContext(volume->vklSampler);
@@ -96,3 +103,4 @@ Ref<Volume> VolumetricModel::getVolume() const
 OSPTYPEFOR_DEFINITION(VolumetricModel *);
 
 } // namespace ospray
+#endif

@@ -1,13 +1,20 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
+#ifdef OSPRAY_ENABLE_VOLUMES
 
 #pragma once
 
 #include "ISPCDeviceObject.h"
+#include "common/FeatureFlagsEnum.h"
+#include "common/StructShared.h"
 // embree
-#include "embree3/rtcore.h"
+#include "common/Embree.h"
 // openvkl
-#include "openvkl/volume.h"
+#include "openvkl/openvkl.h"
+// comment break to prevent clang-format from reordering openvkl includes
+#if OPENVKL_VERSION_MAJOR > 1
+#include "openvkl/device/openvkl.h"
+#endif
 // ispc shared
 #include "VolumeShared.h"
 
@@ -22,6 +29,8 @@ struct OSPRAY_SDK_INTERFACE Volume
   std::string toString() const override;
   void commit() override;
 
+  FeatureFlags getFeatureFlags() const;
+
  private:
   void checkDataStride(const Data *) const;
   void handleParams();
@@ -33,14 +42,24 @@ struct OSPRAY_SDK_INTERFACE Volume
 
   // Data //
   RTCGeometry embreeGeometry{nullptr};
-  VKLVolume vklVolume{nullptr};
-  VKLSampler vklSampler{nullptr};
+  VKLVolume vklVolume = VKLVolume();
+  VKLSampler vklSampler = VKLSampler();
 
   box3f bounds{empty};
 
   std::string vklType;
+
+  VKLFeatureFlags vklFeatureFlags = VKL_FEATURE_FLAGS_NONE;
 };
 
 OSPTYPEFOR_SPECIALIZATION(Volume *, OSP_VOLUME);
 
+inline FeatureFlags Volume::getFeatureFlags() const
+{
+  FeatureFlags ff;
+  ff.volume = vklFeatureFlags;
+  return ff;
+}
+
 } // namespace ospray
+#endif

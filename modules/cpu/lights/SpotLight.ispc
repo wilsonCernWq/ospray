@@ -7,6 +7,8 @@
 // c++ shared
 #include "SpotLightShared.h"
 
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
 // Implementation
 //////////////////////////////////////////////////////////////////////////////
 inline void Transform(const uniform SpotLightDynamic &pre,
@@ -92,20 +94,24 @@ inline Light_SampleRes Sample(const SpotLight *uniform self,
   return res;
 }
 
-Light_SampleRes SpotLight_sample(const Light *uniform super,
+SYCL_EXTERNAL Light_SampleRes SpotLight_sample(const Light *uniform super,
     const DifferentialGeometry &dg,
     const vec2f &s,
-    const float)
+    const float,
+    const uniform FeatureFlagsHandler &)
 {
   const SpotLight *uniform self = (SpotLight * uniform) super;
   assert(self);
   return Sample(self, self->pre, dg, s);
 }
 
-Light_SampleRes SpotLight_sample_instanced(const Light *uniform super,
+#ifndef OSPRAY_TARGET_SYCL
+SYCL_EXTERNAL Light_SampleRes SpotLight_sample_instanced(
+    const Light *uniform super,
     const DifferentialGeometry &dg,
     const vec2f &s,
-    const float time)
+    const float time,
+    const uniform FeatureFlagsHandler &)
 {
   const SpotLight *uniform self = (SpotLight * uniform) super;
   assert(self);
@@ -122,6 +128,7 @@ Light_SampleRes SpotLight_sample_instanced(const Light *uniform super,
   }
   return res;
 }
+#endif
 
 inline Light_EvalRes Eval(const SpotLight *uniform self,
     const uniform SpotLightDynamic &dyn,
@@ -143,7 +150,7 @@ inline Light_EvalRes Eval(const SpotLight *uniform self,
         const vec3f vd = vp + t * dir;
         const float d2 = dot(vd, vd);
         // inside ring?
-        if (and(d2<sqr(self->radius), d2> sqr(self->innerRadius))) {
+        if (d2 < sqr(self->radius) && d2 > sqr(self->innerRadius)) {
           float attenuation = AngularAttenuation(self, cosAngle);
           if (self->intensityDistribution.lid) {
             attenuation *= IntensityDistribution_eval(
@@ -165,7 +172,7 @@ inline Light_EvalRes Eval(const SpotLight *uniform self,
   return res;
 }
 
-Light_EvalRes SpotLight_eval(const Light *uniform super,
+SYCL_EXTERNAL Light_EvalRes SpotLight_eval(const Light *uniform super,
     const DifferentialGeometry &dg,
     const vec3f &dir,
     const float minDist,
@@ -177,7 +184,8 @@ Light_EvalRes SpotLight_eval(const Light *uniform super,
   return Eval(self, self->pre, dg, dir, minDist, maxDist);
 }
 
-Light_EvalRes SpotLight_eval_instanced(const Light *uniform super,
+#ifndef OSPRAY_TARGET_SYCL
+SYCL_EXTERNAL Light_EvalRes SpotLight_eval_instanced(const Light *uniform super,
     const DifferentialGeometry &dg,
     const vec3f &dir,
     const float minDist,
@@ -199,26 +207,32 @@ Light_EvalRes SpotLight_eval_instanced(const Light *uniform super,
   }
   return res;
 }
+#endif
 
 // Exports (called from C++)
 //////////////////////////////////////////////////////////////////////////////
 
 export void *uniform SpotLight_sample_addr()
 {
-  return SpotLight_sample;
+  return (void *uniform)SpotLight_sample;
 }
 
+#ifndef OSPRAY_TARGET_SYCL
 export void *uniform SpotLight_sample_instanced_addr()
 {
-  return SpotLight_sample_instanced;
+  return (void *uniform)SpotLight_sample_instanced;
 }
+#endif
 
 export void *uniform SpotLight_eval_addr()
 {
-  return SpotLight_eval;
+  return (void *uniform)SpotLight_eval;
 }
 
+#ifndef OSPRAY_TARGET_SYCL
 export void *uniform SpotLight_eval_instanced_addr()
 {
-  return SpotLight_eval_instanced;
+  return (void *uniform)SpotLight_eval_instanced;
 }
+#endif
+OSPRAY_END_ISPC_NAMESPACE

@@ -179,7 +179,8 @@ INSTANTIATE_TEST_SUITE_P(TestScenesGeometry,
                            "subdivision_cube",
                            "planes",
                            "unstructured_volume_isosurface",
-                           "instancing"),
+                           "instancing",
+                           "nolight"),
         ::testing::Values("scivis", "pathtracer", "ao"),
         ::testing::Values(16)));
 
@@ -246,5 +247,26 @@ INSTANTIATE_TEST_SUITE_P(TestScenesMaxDepth,
             "cornell_box", "clip_with_spheres", "clip_gravity_spheres_volume"),
         ::testing::Values("ao"),
         ::testing::Values(16)));
+
+TEST_P(FromOsprayTestingVariance, testScenes)
+{
+  PerformRenderTest();
+  EXPECT_LE(framebuffer.variance(), 20.0f);
+}
+
+INSTANTIATE_TEST_SUITE_P(TestScenesVariance,
+    FromOsprayTestingVariance,
+    ::testing::Values(std::make_tuple("cornell_box", "pathtracer", 4)));
+
+TEST_P(FromOsprayTestingLightSamples, testScenes)
+{
+  PerformRenderTest();
+}
+
+INSTANTIATE_TEST_SUITE_P(TestScenesLightSamples,
+    FromOsprayTestingLightSamples,
+    ::testing::Combine(::testing::Values("cornell_box", "nolight"),
+        ::testing::Values("pathtracer"),
+        ::testing::Values(1)));
 
 } // namespace OSPRayTestScenes

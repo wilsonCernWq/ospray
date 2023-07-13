@@ -4,13 +4,17 @@
 // ospray
 #include "Geometry.h"
 #include "common/Data.h"
+#ifndef OSPRAY_TARGET_SYCL
+#include "geometry/GeometryDispatch_ispc.h"
+#endif
 
 namespace ospray {
 
 // Geometry definitions ///////////////////////////////////////////////////////
 
-Geometry::Geometry(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+Geometry::Geometry(api::ISPCDevice &device, const FeatureFlagsGeometry ffg)
+    : AddStructShared(device.getIspcrtContext(), device),
+      featureFlagsGeometry(ffg)
 {
   managedObjectType = OSP_GEOMETRY;
 }
@@ -47,9 +51,7 @@ void Geometry::createEmbreeGeometry(RTCGeometryType type)
   embreeGeometry = rtcNewGeometry(getISPCDevice().getEmbreeDevice(), type);
 }
 
-void Geometry::createEmbreeUserGeometry(RTCBoundsFunction boundsFn,
-    RTCIntersectFunctionN intersectFn,
-    RTCOccludedFunctionN occludedFn)
+void Geometry::createEmbreeUserGeometry(RTCBoundsFunction boundsFn)
 {
   createEmbreeGeometry(RTC_GEOMETRY_TYPE_USER);
 
@@ -57,8 +59,6 @@ void Geometry::createEmbreeUserGeometry(RTCBoundsFunction boundsFn,
   rtcSetGeometryUserData(embreeGeometry, getSh());
   rtcSetGeometryUserPrimitiveCount(embreeGeometry, numPrimitives());
   rtcSetGeometryBoundsFunction(embreeGeometry, boundsFn, getSh());
-  rtcSetGeometryIntersectFunction(embreeGeometry, intersectFn);
-  rtcSetGeometryOccludedFunction(embreeGeometry, occludedFn);
   rtcCommitGeometry(embreeGeometry);
 }
 

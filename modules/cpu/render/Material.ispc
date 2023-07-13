@@ -3,17 +3,18 @@
 
 #include "Material.ih"
 
-vec3f Material_getTransparency(const uniform Material *uniform self,
-    const DifferentialGeometry &dg,
-    const Ray &ray,
-    const Medium &currentMedium)
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+SYCL_EXTERNAL vec3f Material_getTransparency(const uniform Material *uniform,
+    const DifferentialGeometry &,
+    const Ray &,
+    const Medium &)
 {
   return make_vec3f(0.0f);
 }
 
-void Material_selectNextMedium(const uniform Material *uniform self,
-    const DifferentialGeometry &dg,
-    Medium &currentMedium)
+SYCL_EXTERNAL void Material_selectNextMedium(
+    const uniform Material *uniform, const DifferentialGeometry &, Medium &)
 { /* do nothing by default */
 }
 
@@ -22,10 +23,12 @@ void Material_selectNextMedium(const uniform Material *uniform self,
 
 export void *uniform Material_getTransparency_addr()
 {
-  return Material_getTransparency;
+  return (void *uniform)Material_getTransparency;
 }
 
 export void *uniform Material_selectNextMedium_addr()
 {
-  return Material_selectNextMedium;
+  return (void *uniform)Material_selectNextMedium;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

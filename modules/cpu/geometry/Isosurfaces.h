@@ -1,5 +1,7 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
+#include "common/FeatureFlagsEnum.h"
+#ifdef OSPRAY_ENABLE_VOLUMES
 
 #pragma once
 
@@ -22,6 +24,8 @@ struct OSPRAY_SDK_INTERFACE Isosurfaces
 
   virtual size_t numPrimitives() const override;
 
+  FeatureFlags getFeatureFlags() const override;
+
  protected:
   // Data members //
 
@@ -30,7 +34,20 @@ struct OSPRAY_SDK_INTERFACE Isosurfaces
   // the volume and color
   Ref<VolumetricModel> model;
   Ref<Volume> volume;
-  VKLHitIteratorContext vklHitContext{nullptr};
+  VKLHitIteratorContext vklHitContext = VKLHitIteratorContext();
 };
 
+inline FeatureFlags Isosurfaces::getFeatureFlags() const
+{
+  FeatureFlags ff = Geometry::getFeatureFlags();
+  if (model) {
+    ff |= model->getFeatureFlags();
+  } else {
+    ff |= volume->getFeatureFlags();
+  }
+  return ff;
+}
+
 } // namespace ospray
+
+#endif

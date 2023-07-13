@@ -3,20 +3,56 @@
 
 // ospray
 #include "Material.h"
+#include "render/bsdfs/MicrofacetAlbedoTables.h"
 #include "texture/Texture.h"
+#ifndef OSPRAY_TARGET_SYCL
 // ispc
 #include "render/Material_ispc.h"
+#endif
 
 namespace ospray {
 
 // Material definitions ///////////////////////////////////////////////////////
 
-Material::Material(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+Ref<MicrofacetAlbedoTables> Material::microfacetAlbedoTables = nullptr;
+
+Material::Material(api::ISPCDevice &device, const FeatureFlagsOther ffo)
+    : AddStructShared(device.getIspcrtContext(), device), featureFlags(ffo)
 {
   managedObjectType = OSP_MATERIAL;
-  getSh()->getTransparency = ispc::Material_getTransparency_addr();
-  getSh()->selectNextMedium = ispc::Material_selectNextMedium_addr();
+#ifndef OSPRAY_TARGET_SYCL
+  getSh()->getTransparency =
+      reinterpret_cast<ispc::Material_GetTransparencyFunc>(
+          ispc::Material_getTransparency_addr());
+  getSh()->selectNextMedium =
+      reinterpret_cast<ispc::Material_SelectNextMediumFunc>(
+          ispc::Material_selectNextMedium_addr());
+#endif
+
+  if (!microfacetAlbedoTables) {
+    microfacetAlbedoTables = new MicrofacetAlbedoTables(device);
+    // Release the extra local ref
+    microfacetAlbedoTables->refDec();
+  } else {
+    microfacetAlbedoTables->refInc();
+  }
+
+  getSh()->microfacetAlbedoTables = microfacetAlbedoTables->getSh();
+}
+
+Material::~Material()
+{
+  if (microfacetAlbedoTables) {
+    const bool lastReference = microfacetAlbedoTables->useCount() == 1;
+    // The last material referencing the albedo tables should null out the
+    // pointer so we don't try to call refDec again and know to re-create it
+    // when a new material is made
+    if (lastReference) {
+      microfacetAlbedoTables = nullptr;
+    } else {
+      microfacetAlbedoTables->refDec();
+    }
+  }
 }
 
 std::string Material::toString() const
@@ -30,6 +66,8 @@ ispc::TextureParam Material::getTextureParam(const char *texture_name)
 {
   // Get texture pointer
   Texture *ptr = (Texture *)getParamObject(texture_name);
+  if (ptr)
+    featureFlags |= FFO_TEXTURE_IN_MATERIAL;
 
   // Get 2D transformation if exists
   int transformFlags = ispc::TRANSFORM_FLAG_NONE;

@@ -8,6 +8,8 @@
 #include "GGXDistribution.ih"
 #include "MicrofacetAlbedoTables.ih"
 
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
 // Microfacet dielectric BSDF with the Smith microsurface model and approximate
 // multiple scattering. [Walter et al., 2007, "Microfacet Models for Refraction
 // through Rough Surfaces"] [Kulla and Conty, 2017, "Revisiting Physically Based
@@ -21,6 +23,7 @@ struct MicrofacetDielectric
   float eta; // etaO / etaI
   GGXDistribution microfacet;
   float roughness;
+  const MicrofacetAlbedoTables *uniform microfacetAlbedoTables;
 
   // Energy compensation [Kulla and Conty, 2017]
   float EavgEta, EavgRcpEta;
@@ -30,7 +33,10 @@ struct MicrofacetDielectric
 
 // Single-scattering lobe
 inline BSDF_EvalRes MicrofacetDielectric_evalSingle(
-    const varying BSDF *uniform super, const vec3f &wo, const vec3f &wi)
+    const varying BSDF *uniform super,
+    const vec3f &wo,
+    const vec3f &wi,
+    const uniform FeatureFlagsHandler &)
 {
   const varying MicrofacetDielectric *uniform self =
       (const varying MicrofacetDielectric *uniform)super;
@@ -92,8 +98,10 @@ inline BSDF_EvalRes MicrofacetDielectric_evalSingle(
   return res;
 }
 
-inline BSDF_EvalRes MicrofacetDielectric_eval(
-    const varying BSDF *uniform super, const vec3f &wo, const vec3f &wi)
+inline BSDF_EvalRes MicrofacetDielectric_eval(const varying BSDF *uniform super,
+    const vec3f &wo,
+    const vec3f &wi,
+    const uniform FeatureFlagsHandler &ffh)
 {
   const varying MicrofacetDielectric *uniform self =
       (const varying MicrofacetDielectric *uniform)super;
@@ -107,28 +115,31 @@ inline BSDF_EvalRes MicrofacetDielectric_eval(
 
   // Evaluate the energy compensation lobe [Kulla and Conty, 2017]
   float Eo = MicrofacetDielectricAlbedoTable_eval(
-      cosThetaO, self->eta, self->roughness);
+      self->microfacetAlbedoTables, cosThetaO, self->eta, self->roughness);
 
   BSDF_EvalRes fms;
   if (isReflection) {
     // Reflection
     float Ei = MicrofacetDielectricAlbedoTable_eval(
-        cosThetaI, self->eta, self->roughness);
+        self->microfacetAlbedoTables, cosThetaI, self->eta, self->roughness);
     fms.pdf = self->fmsRatio * cosineSampleHemispherePDF(cosThetaI);
     fms.value = make_vec3f(self->fmsRatio * (1.f - Eo) * (1.f - Ei)
-        * rcp(pi * (1.f - self->EavgEta)) * cosThetaI);
+        * rcp((float)pi * (1.f - self->EavgEta)) * cosThetaI);
   } else {
     // Transmission
-    float Ei = MicrofacetDielectricAlbedoTable_eval(
-        abs(cosThetaI), rcp(self->eta), self->roughness);
+    float Ei =
+        MicrofacetDielectricAlbedoTable_eval(self->microfacetAlbedoTables,
+            abs(cosThetaI),
+            rcp(self->eta),
+            self->roughness);
     fms.pdf =
         (1.f - self->fmsRatio) * cosineSampleHemispherePDF(abs(cosThetaI));
     fms.value = make_vec3f((1.f - self->fmsRatio) * (1.f - Eo) * (1.f - Ei)
-        * rcp(pi * (1.f - self->EavgRcpEta)) * abs(cosThetaI));
+        * rcp((float)pi * (1.f - self->EavgRcpEta)) * abs(cosThetaI));
   }
 
   // Evaluate the single-scattering lobe
-  BSDF_EvalRes single = MicrofacetDielectric_evalSingle(super, wo, wi);
+  BSDF_EvalRes single = MicrofacetDielectric_evalSingle(super, wo, wi, ffh);
 
   // Compute the final result
   float singlePickProb = Eo;
@@ -141,7 +152,8 @@ inline BSDF_SampleRes MicrofacetDielectric_sample(
     const varying BSDF *uniform super,
     const vec3f &wo,
     const vec2f &s,
-    float ss)
+    float ss,
+    const uniform FeatureFlagsHandler &ffh)
 {
   const varying MicrofacetDielectric *uniform self =
       (const varying MicrofacetDielectric *uniform)super;
@@ -153,7 +165,7 @@ inline BSDF_SampleRes MicrofacetDielectric_sample(
 
   // Energy compensation
   float Eo = MicrofacetDielectricAlbedoTable_eval(
-      cosThetaO, self->eta, self->roughness);
+      self->microfacetAlbedoTables, cosThetaO, self->eta, self->roughness);
 
   float singlePickProb = Eo;
   bool doReflection;
@@ -212,22 +224,25 @@ inline BSDF_SampleRes MicrofacetDielectric_sample(
   if (doReflection) {
     // Reflection
     float Ei = MicrofacetDielectricAlbedoTable_eval(
-        cosThetaI, self->eta, self->roughness);
+        self->microfacetAlbedoTables, cosThetaI, self->eta, self->roughness);
     fms.pdf = self->fmsRatio * cosineSampleHemispherePDF(cosThetaI);
     fms.value = make_vec3f(self->fmsRatio * (1.f - Eo) * (1.f - Ei)
-        * rcp(pi * (1.f - self->EavgEta)) * cosThetaI);
+        * rcp((float)pi * (1.f - self->EavgEta)) * cosThetaI);
   } else {
     // Transmission
-    float Ei = MicrofacetDielectricAlbedoTable_eval(
-        abs(cosThetaI), rcp(self->eta), self->roughness);
+    float Ei =
+        MicrofacetDielectricAlbedoTable_eval(self->microfacetAlbedoTables,
+            abs(cosThetaI),
+            rcp(self->eta),
+            self->roughness);
     fms.pdf =
         (1.f - self->fmsRatio) * cosineSampleHemispherePDF(abs(cosThetaI));
     fms.value = make_vec3f((1.f - self->fmsRatio) * (1.f - Eo) * (1.f - Ei)
-        * rcp(pi * (1.f - self->EavgRcpEta)) * abs(cosThetaI));
+        * rcp((float)pi * (1.f - self->EavgRcpEta)) * abs(cosThetaI));
   }
 
   // Evaluate the single-scattering lobe
-  BSDF_EvalRes single = MicrofacetDielectric_evalSingle(super, wo, res.wi);
+  BSDF_EvalRes single = MicrofacetDielectric_evalSingle(super, wo, res.wi, ffh);
 
   // Compute the final result
   res.pdf = singlePickProb * single.pdf + (1.f - singlePickProb) * fms.pdf;
@@ -237,6 +252,7 @@ inline BSDF_SampleRes MicrofacetDielectric_sample(
 
 inline void MicrofacetDielectric_Constructor(
     varying MicrofacetDielectric *uniform self,
+    MicrofacetAlbedoTables *uniform microfacetAlbedoTables,
     const varying linear3f *uniform frame,
     float eta,
     float roughness,
@@ -245,19 +261,27 @@ inline void MicrofacetDielectric_Constructor(
   BSDF_Constructor(&self->super,
       make_vec3f(0.9f), // TODO better estimate
       BSDF_GLOSSY | BSDF_DIFFUSE,
+      BSDF_TYPE_MICROFACET_DIELECTRIC,
+#ifdef OSPRAY_TARGET_SYCL
+      NULL,
+      NULL,
+#else
       MicrofacetDielectric_eval,
       MicrofacetDielectric_sample,
+#endif
       frame);
 
   self->eta = eta;
   self->microfacet =
       make_GGXDistribution(roughnessToAlpha(roughness, anisotropy));
   self->roughness = roughness;
+  self->microfacetAlbedoTables = microfacetAlbedoTables;
 
   // Energy compensation
-  self->EavgEta = MicrofacetDielectricAlbedoTable_evalAvg(eta, roughness);
-  self->EavgRcpEta =
-      MicrofacetDielectricAlbedoTable_evalAvg(rcp(eta), roughness);
+  self->EavgEta = MicrofacetDielectricAlbedoTable_evalAvg(
+      microfacetAlbedoTables, eta, roughness);
+  self->EavgRcpEta = MicrofacetDielectricAlbedoTable_evalAvg(
+      microfacetAlbedoTables, rcp(eta), roughness);
   self->FavgEta = fresnelDielectricAvg(eta);
   self->FavgRcpEta = fresnelDielectricAvg(rcp(eta));
   float a = (1.f - self->FavgEta) * rcp(1.f - self->EavgRcpEta);
@@ -270,6 +294,7 @@ inline void MicrofacetDielectric_Constructor(
 
 inline varying BSDF *uniform MicrofacetDielectric_create(
     uniform ShadingContext *uniform ctx,
+    MicrofacetAlbedoTables *uniform microfacetAlbedoTables,
     const varying linear3f *uniform frame,
     float eta,
     float roughness,
@@ -278,6 +303,9 @@ inline varying BSDF *uniform MicrofacetDielectric_create(
   varying MicrofacetDielectric *uniform self =
       (varying MicrofacetDielectric * uniform)
           ShadingContext_alloc(ctx, sizeof(MicrofacetDielectric));
-  MicrofacetDielectric_Constructor(self, frame, eta, roughness, anisotropy);
+  MicrofacetDielectric_Constructor(
+      self, microfacetAlbedoTables, frame, eta, roughness, anisotropy);
   return &self->super;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

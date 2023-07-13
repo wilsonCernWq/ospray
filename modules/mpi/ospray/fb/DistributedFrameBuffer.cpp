@@ -3,13 +3,17 @@
 
 #include "DistributedFrameBuffer.h"
 #include <snappy.h>
+#include <numeric>
 #include <thread>
 #include "DistributedFrameBuffer_TileMessages.h"
+#include "ISPCDevice.h"
 #include "TileOperation.h"
 #include "common/Profiling.h"
+#include "fb/FrameBufferView.h"
+#ifndef OSPRAY_TARGET_SYCL
 #include "fb/DistributedFrameBuffer_ispc.h"
+#endif
 
-#include "pico_bench.h"
 #include "rkcommon/tasking/parallel_for.h"
 #include "rkcommon/tasking/schedule.h"
 
@@ -28,18 +32,22 @@ using DFB = DistributedFrameBuffer;
 // DistributedTileError definitions /////////////////////////////////////////
 
 DistributedTileError::DistributedTileError(
-    const vec2i &numTiles, mpicommon::Group group)
-    : TaskError(numTiles), group(group)
+    api::ISPCDevice &device, const vec2i &numTiles, mpicommon::Group group)
+    : TaskError(device.getIspcrtContext(), numTiles), group(group)
 {}
 
 void DistributedTileError::sync()
 {
-  if (taskErrorBuffer.empty()) {
+  if (!taskErrorBuffer || taskErrorBuffer->size() == 0) {
     return;
   }
 
-  mpicommon::bcast(
-      taskErrorBuffer.data(), taskErrorBuffer.size(), MPI_FLOAT, 0, group.comm)
+  // TODO: USM thrashing possible issue
+  mpicommon::bcast(taskErrorBuffer->data(),
+      taskErrorBuffer->size(),
+      MPI_FLOAT,
+      0,
+      group.comm)
       .wait();
 }
 
@@ -56,11 +64,12 @@ DFB::DistributedFrameBuffer(api::ISPCDevice &device,
     // be set from the object handle but pulled from some other ID pool
     // specific to those objects using the messaging layer
     : MessageHandler(myId),
-      FrameBuffer(device, numPixels, colorBufferFormat, channels),
+      FrameBuffer(device, numPixels, colorBufferFormat, channels, FFO_NONE),
       mpiGroup(mpicommon::worker.dup()),
       totalTiles(divRoundUp(size, vec2i(TILE_SIZE))),
       numRenderTasks((totalTiles * TILE_SIZE) / getRenderTaskSize()),
-      tileErrorRegion(hasVarianceBuffer ? totalTiles : vec2i(0), mpiGroup),
+      tileErrorRegion(
+          device, hasVarianceBuffer ? totalTiles : vec2i(0), mpiGroup),
       localFBonMaster(nullptr),
       frameIsActive(false),
       frameIsDone(false)
@@ -82,22 +91,38 @@ void DFB::commit()
 {
   FrameBuffer::commit();
 
-  imageOps.clear();
   if (imageOpData) {
-    FrameBufferView fbv(localFBonMaster ? localFBonMaster.get()
-                                        : static_cast<FrameBuffer *>(this),
-        getSh()->colorBufferFormat,
-        localFBonMaster ? localFBonMaster->colorBuffer.data() : nullptr,
-        localFBonMaster ? localFBonMaster->depthBuffer.data() : nullptr,
-        localFBonMaster ? localFBonMaster->normalBuffer.data() : nullptr,
-        localFBonMaster ? localFBonMaster->albedoBuffer.data() : nullptr);
+    FrameBuffer *fb = static_cast<FrameBuffer *>(this);
+    void *colorBuffer = nullptr;
+    float *depthBuffer = nullptr;
+    vec3f *normalBuffer = nullptr;
+    vec3f *albedoBuffer = nullptr;
+    if (localFBonMaster) {
+      fb = localFBonMaster.get();
+      colorBuffer = localFBonMaster->colorBuffer
+          ? localFBonMaster->colorBuffer->devicePtr()
+          : nullptr;
+      depthBuffer = localFBonMaster->depthBuffer
+          ? localFBonMaster->depthBuffer->devicePtr()
+          : nullptr;
+      normalBuffer = localFBonMaster->normalBuffer
+          ? localFBonMaster->normalBuffer->devicePtr()
+          : nullptr;
+      albedoBuffer = localFBonMaster->albedoBuffer
+          ? localFBonMaster->albedoBuffer->devicePtr()
+          : nullptr;
+    }
 
-    std::for_each(imageOpData->begin(), imageOpData->end(), [&](ImageOp *i) {
-      if (!dynamic_cast<FrameOp *>(i) || localFBonMaster)
-        imageOps.push_back(i->attach(fbv));
-    });
+    FrameBufferView fbv(fb,
+        getColorBufferFormat(),
+        getNumPixels(),
+        colorBuffer,
+        depthBuffer,
+        normalBuffer,
+        albedoBuffer);
+
+    prepareLiveOpsForFBV(fbv, localFBonMaster != nullptr, true);
   }
-  prepareImageOps();
 }
 
 mpicommon::Group DFB::getMPIGroup()
@@ -135,10 +160,6 @@ void DFB::startNewFrame(const float errorThreshold)
     frameProgress = 0.f;
 
     FrameBuffer::beginFrame();
-
-    std::for_each(imageOps.begin(),
-        imageOps.end(),
-        [](std::unique_ptr<LiveImageOp> &p) { p->beginFrame(); });
 
     lastProgressReport = std::chrono::steady_clock::now();
     renderingProgressTiles = 0;
@@ -349,7 +370,53 @@ const void *DFB::mapBuffer(OSPFrameBufferChannel channel)
         "#osp:mpi:dfb: tried to 'ospMap()' a frame "
         "buffer that doesn't have a host-side correspondence");
   }
-  return localFBonMaster->mapBuffer(channel);
+
+  const void *buf = nullptr;
+
+  // DFB writes directly to the localFB's host-side memory, so we don't want
+  // to call map/unmap here because it'll copy over the unused/empty GPU
+  // buffers for the channel.
+  switch (channel) {
+  case OSP_FB_COLOR: {
+    buf = localFBonMaster->colorBuffer ? localFBonMaster->colorBuffer->data()
+                                       : nullptr;
+  } break;
+  case OSP_FB_DEPTH: {
+    buf = localFBonMaster->depthBuffer ? localFBonMaster->depthBuffer->data()
+                                       : nullptr;
+  } break;
+  case OSP_FB_NORMAL: {
+    buf = localFBonMaster->normalBuffer ? localFBonMaster->normalBuffer->data()
+                                        : nullptr;
+  } break;
+  case OSP_FB_ALBEDO: {
+    buf = localFBonMaster->albedoBuffer ? localFBonMaster->albedoBuffer->data()
+                                        : nullptr;
+  } break;
+  case OSP_FB_ID_PRIMITIVE: {
+    buf = localFBonMaster->primitiveIDBuffer
+        ? localFBonMaster->primitiveIDBuffer->data()
+        : nullptr;
+  } break;
+  case OSP_FB_ID_OBJECT: {
+    buf = localFBonMaster->objectIDBuffer
+        ? localFBonMaster->objectIDBuffer->data()
+        : nullptr;
+  } break;
+  case OSP_FB_ID_INSTANCE: {
+    buf = localFBonMaster->instanceIDBuffer
+        ? localFBonMaster->instanceIDBuffer->data()
+        : nullptr;
+  } break;
+  default:
+    break;
+  }
+
+  if (buf) {
+    this->refInc();
+  }
+
+  return buf;
 }
 
 void DFB::unmap(const void *mappedMem)
@@ -360,7 +427,9 @@ void DFB::unmap(const void *mappedMem)
         "buffer that doesn't have a host-side color "
         "buffer");
   }
-  localFBonMaster->unmap(mappedMem);
+  if (mappedMem) {
+    this->refDec();
+  }
 }
 
 void DFB::waitUntilFinished()
@@ -468,7 +537,10 @@ void DistributedFrameBuffer::processMessage(MasterTileMessage_FB<ColorT> *msg)
     }
   }
 
-  ColorT *color = reinterpret_cast<ColorT *>(&localFBonMaster->colorBuffer[0]);
+  // TODO: Here we're just accessing the local fb on the host, but have it
+  // allocated in USM. Will work, but maybe wasting some USM space?
+  ColorT *color =
+      reinterpret_cast<ColorT *>(localFBonMaster->colorBuffer->data());
   for (int iy = 0; iy < TILE_SIZE; iy++) {
     int iiy = iy + msg->coords.y;
     if (iiy >= numPixels.y) {
@@ -483,27 +555,27 @@ void DistributedFrameBuffer::processMessage(MasterTileMessage_FB<ColorT> *msg)
 
       color[iix + iiy * numPixels.x] = msg->color[ix + iy * TILE_SIZE];
       if (depth) {
-        localFBonMaster->depthBuffer[iix + iiy * numPixels.x] =
+        (*localFBonMaster->depthBuffer)[iix + iiy * numPixels.x] =
             depth->depth[ix + iy * TILE_SIZE];
       }
       if (aux) {
         if (hasNormalBuffer)
-          localFBonMaster->normalBuffer[iix + iiy * numPixels.x] =
+          (*localFBonMaster->normalBuffer)[iix + iiy * numPixels.x] =
               aux->normal[ix + iy * TILE_SIZE];
         if (hasAlbedoBuffer)
-          localFBonMaster->albedoBuffer[iix + iiy * numPixels.x] =
+          (*localFBonMaster->albedoBuffer)[iix + iiy * numPixels.x] =
               aux->albedo[ix + iy * TILE_SIZE];
       }
       if (pidBuf) {
-        localFBonMaster->primitiveIDBuffer[iix + iiy * numPixels.x] =
+        (*localFBonMaster->primitiveIDBuffer)[iix + iiy * numPixels.x] =
             pidBuf[ix + iy * TILE_SIZE];
       }
       if (gidBuf) {
-        localFBonMaster->objectIDBuffer[iix + iiy * numPixels.x] =
+        (*localFBonMaster->objectIDBuffer)[iix + iiy * numPixels.x] =
             gidBuf[ix + iy * TILE_SIZE];
       }
       if (iidBuf) {
-        localFBonMaster->instanceIDBuffer[iix + iiy * numPixels.x] =
+        (*localFBonMaster->instanceIDBuffer)[iix + iiy * numPixels.x] =
             iidBuf[ix + iy * TILE_SIZE];
       }
     }
@@ -801,6 +873,8 @@ void DFB::gatherFinalTiles()
     std::cout << "Master tile write time: "
               << elapsedTimeMs(startFbWrite, endFbWrite) << "ms\n";
 #endif
+    // not accurate, did we render something at all
+    localFBonMaster->getSh()->super.numPixelsRendered = totalTilesExpected;
   }
 }
 
@@ -899,7 +973,7 @@ void DFB::setTile(const ispc::Tile &tile)
 
 void DFB::clear()
 {
-  getSh()->frameID = -1; // we increment at the start of the frame
+  FrameBuffer::clear();
 
   if (hasAccumBuffer) {
     tileErrorRegion.clear();
@@ -932,9 +1006,9 @@ uint32_t DFB::getGlobalTotalTiles() const
   return totalTiles.product();
 }
 
-utility::ArrayView<uint32_t> DFB::getRenderTaskIDs()
+utility::ArrayView<uint32_t> DFB::getRenderTaskIDs(float errorThreshold)
 {
-  return layers[0]->getRenderTaskIDs();
+  return layers[0]->getRenderTaskIDs(errorThreshold);
 }
 
 float DFB::taskError(const uint32_t) const
@@ -949,21 +1023,9 @@ float DFB::tileError(const uint32_t tileID)
 
 void DFB::endFrame(const float errorThreshold, const Camera *camera)
 {
-  if (localFBonMaster && !imageOps.empty()
-      && firstFrameOperation < imageOps.size()) {
-    std::for_each(imageOps.begin() + firstFrameOperation,
-        imageOps.end(),
-        [&](std::unique_ptr<LiveImageOp> &iop) {
-          LiveFrameOp *fop = dynamic_cast<LiveFrameOp *>(iop.get());
-          if (fop)
-            fop->process(camera);
-        });
-  }
-  if (!imageOps.empty()) {
-    std::for_each(imageOps.begin(),
-        imageOps.end(),
-        [](std::unique_ptr<LiveImageOp> &p) { p->endFrame(); });
-  }
+  if (localFBonMaster)
+    for (auto &p : frameOps)
+      p->process(nullptr, camera);
 
   // only refine on master
   if (mpicommon::IamTheMaster()) {
@@ -974,6 +1036,14 @@ void DFB::endFrame(const float errorThreshold, const Camera *camera)
   }
 
   setCompletedEvent(OSP_FRAME_FINISHED);
+}
+
+AsyncEvent DFB::postProcess(const Camera *, bool)
+{
+  AsyncEvent event;
+  // TODO: Modify DistributedLoadBalancer and move here post-processing loop
+  // from endFrame()
+  return event;
 }
 
 } // namespace ospray

@@ -4,11 +4,19 @@
 #pragma once
 
 #include "Geometry.ih"
+#include "GeometryDispatch.ih"
 #include "common/Data.ih"
-#include "math/AffineSpace.ih"
+#include "common/FeatureFlagsEnum.h"
 #include "render/Renderer.ih"
+#include "rkcommon/math/AffineSpace.ih"
 // c++ shared
 #include "GeometricModelShared.h"
+
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+#ifdef OSPRAY_TARGET_SYCL
+using namespace ospray;
+#endif
 
 inline Material *GeometricModel_getMaterial(const GeometricModel *uniform self,
     const Renderer *uniform renderer,
@@ -40,11 +48,12 @@ inline void GeometricModel_postIntersect(const GeometricModel *uniform self,
     const Renderer *uniform renderer,
     varying DifferentialGeometry &dg,
     const varying Ray &ray,
-    uniform int64 flags)
+    uniform int64 flags,
+    const uniform FeatureFlagsHandler &ffh)
 {
   Geometry *uniform geom = self->geom;
 
-  geom->postIntersect(geom, dg, ray, flags);
+  Geometry_dispatch_postIntersect(geom, dg, ray, flags, ffh);
 
   dg.areaPDF = self->areaPDF;
   dg.objID =
@@ -65,3 +74,5 @@ inline void GeometricModel_postIntersect(const GeometricModel *uniform self,
   if (flags & DG_NS && self->invertedNormals)
     dg.Ns = neg(dg.Ns);
 }
+
+OSPRAY_END_ISPC_NAMESPACE

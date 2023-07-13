@@ -3,54 +3,60 @@
 
 // ospray
 #include "DebugRenderer.h"
-#include "DebugRendererType.h"
+#include "camera/Camera.h"
+#include "common/FeatureFlagsEnum.h"
+#include "common/World.h"
+#include "fb/FrameBuffer.h"
+#ifndef OSPRAY_TARGET_SYCL
 // ispc exports
 #include "render/debug/DebugRenderer_ispc.h"
+#else
+#include "DebugRenderer.ih"
+#endif
 
 namespace ospray {
 
 // Helper functions /////////////////////////////////////////////////////////
 
-static DebugRendererType typeFromString(const std::string &name)
+static ispc::DebugRendererType typeFromString(const std::string &name)
 {
   if (name == "rayDir")
-    return DebugRendererType::RAY_DIR;
+    return ispc::DebugRendererType::RAY_DIR;
   else if (name == "eyeLight")
-    return DebugRendererType::EYE_LIGHT;
+    return ispc::DebugRendererType::EYE_LIGHT;
   else if (name == "Ng")
-    return DebugRendererType::NG;
+    return ispc::DebugRendererType::NG;
   else if (name == "Ns")
-    return DebugRendererType::NS;
+    return ispc::DebugRendererType::NS;
   else if (name == "color")
-    return DebugRendererType::COLOR;
+    return ispc::DebugRendererType::COLOR;
   else if (name == "texCoord")
-    return DebugRendererType::TEX_COORD;
+    return ispc::DebugRendererType::TEX_COORD;
   else if (name == "backfacing_Ng")
-    return DebugRendererType::BACKFACING_NG;
+    return ispc::DebugRendererType::BACKFACING_NG;
   else if (name == "backfacing_Ns")
-    return DebugRendererType::BACKFACING_NS;
+    return ispc::DebugRendererType::BACKFACING_NS;
   else if (name == "dPds")
-    return DebugRendererType::DPDS;
+    return ispc::DebugRendererType::DPDS;
   else if (name == "dPdt")
-    return DebugRendererType::DPDT;
+    return ispc::DebugRendererType::DPDT;
   else if (name == "primID")
-    return DebugRendererType::PRIM_ID;
+    return ispc::DebugRendererType::PRIM_ID;
   else if (name == "geomID")
-    return DebugRendererType::GEOM_ID;
+    return ispc::DebugRendererType::GEOM_ID;
   else if (name == "instID")
-    return DebugRendererType::INST_ID;
+    return ispc::DebugRendererType::INST_ID;
   else if (name == "volume")
-    return DebugRendererType::VOLUME;
+    return ispc::DebugRendererType::VOLUME;
   else
-    return DebugRendererType::TEST_FRAME;
+    return ispc::DebugRendererType::TEST_FRAME;
 }
 
 // DebugRenderer definitions ////////////////////////////////////////////////
 
-DebugRenderer::DebugRenderer(api::ISPCDevice &device) : Renderer(device)
-{
-  getSh()->renderSample = ispc::DebugRenderer_testFrame_addr();
-}
+DebugRenderer::DebugRenderer(api::ISPCDevice &device)
+    : AddStructShared(device.getIspcrtContext(), device)
+{}
 
 std::string DebugRenderer::toString() const
 {
@@ -61,55 +67,61 @@ void DebugRenderer::commit()
 {
   Renderer::commit();
 
-  std::string method = getParam<std::string>("method", "eyeLight");
-  switch (typeFromString(method)) {
-  case RAY_DIR:
-    getSh()->renderSample = ispc::DebugRenderer_rayDir_addr();
-    break;
-  case EYE_LIGHT:
-    getSh()->renderSample = ispc::DebugRenderer_eyeLight_addr();
-    break;
-  case NG:
-    getSh()->renderSample = ispc::DebugRenderer_Ng_addr();
-    break;
-  case NS:
-    getSh()->renderSample = ispc::DebugRenderer_Ns_addr();
-    break;
-  case COLOR:
-    getSh()->renderSample = ispc::DebugRenderer_vertexColor_addr();
-    break;
-  case TEX_COORD:
-    getSh()->renderSample = ispc::DebugRenderer_texCoord_addr();
-    break;
-  case DPDS:
-    getSh()->renderSample = ispc::DebugRenderer_dPds_addr();
-    break;
-  case DPDT:
-    getSh()->renderSample = ispc::DebugRenderer_dPdt_addr();
-    break;
-  case PRIM_ID:
-    getSh()->renderSample = ispc::DebugRenderer_primID_addr();
-    break;
-  case GEOM_ID:
-    getSh()->renderSample = ispc::DebugRenderer_geomID_addr();
-    break;
-  case INST_ID:
-    getSh()->renderSample = ispc::DebugRenderer_instID_addr();
-    break;
-  case BACKFACING_NG:
-    getSh()->renderSample = ispc::DebugRenderer_backfacing_Ng_addr();
-    break;
-  case BACKFACING_NS:
-    getSh()->renderSample = ispc::DebugRenderer_backfacing_Ns_addr();
-    break;
-  case VOLUME:
-    getSh()->renderSample = ispc::DebugRenderer_volume_addr();
-    break;
-  case TEST_FRAME:
-  default:
-    getSh()->renderSample = ispc::DebugRenderer_testFrame_addr();
-    break;
-  }
+  const std::string method = getParam<std::string>("method", "eyeLight");
+  getSh()->type = typeFromString(method);
+}
+
+AsyncEvent DebugRenderer::renderTasks(FrameBuffer *fb,
+    Camera *camera,
+    World *world,
+    void *,
+    const utility::ArrayView<uint32_t> &taskIDs,
+    bool wait) const
+{
+  AsyncEvent event;
+  auto *rendererSh = getSh();
+  auto *fbSh = fb->getSh();
+  auto *cameraSh = camera->getSh();
+  auto *worldSh = world->getSh();
+  const size_t numTasks = taskIDs.size();
+
+#ifdef OSPRAY_TARGET_SYCL
+  const uint32_t *taskIDsPtr = taskIDs.data();
+  event = device.getSyclQueue().submit([&](sycl::handler &cgh) {
+    FeatureFlags ff = world->getFeatureFlags();
+    ff |= featureFlags;
+    ff |= fb->getFeatureFlags();
+    ff |= camera->getFeatureFlags();
+    cgh.set_specialization_constant<ispc::specFeatureFlags>(ff);
+
+    cgh.set_specialization_constant<debugRendererType>(rendererSh->type);
+
+    const sycl::nd_range<1> dispatchRange =
+        device.computeDispatchRange(numTasks, 16);
+    cgh.parallel_for(dispatchRange,
+        [=](sycl::nd_item<1> taskIndex, sycl::kernel_handler kh) {
+          if (taskIndex.get_global_id(0) < numTasks) {
+            ispc::FeatureFlagsHandler ffh(kh);
+            ispc::DebugRenderer_renderTask(&rendererSh->super,
+                fbSh,
+                cameraSh,
+                worldSh,
+                taskIDsPtr,
+                taskIndex.get_global_id(0),
+                ffh);
+          }
+        });
+  });
+
+  if (wait)
+    event.wait_and_throw();
+
+#else
+  (void)wait;
+  ispc::DebugRenderer_renderTasks(
+      &rendererSh->super, fbSh, cameraSh, worldSh, taskIDs.data(), numTasks);
+#endif
+  return event;
 }
 
 } // namespace ospray

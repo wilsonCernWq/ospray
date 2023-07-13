@@ -7,10 +7,14 @@
 #include <memory>
 #include "../common/Messaging.h"
 #include "DistributedFrameBuffer_TileMessages.h"
+#include "ISPCDevice.h"
 #include "fb/LocalFB.h"
 #include "fb/SparseFB.h"
 #include "render/Renderer.h"
 #include "rkcommon/containers/AlignedVector.h"
+#include "rkcommon/math/vec.h"
+
+#include "DistributedFrameBufferShared.h"
 
 namespace ospray {
 struct TileDesc;
@@ -22,7 +26,8 @@ class DistributedTileError : public TaskError
   mpicommon::Group group;
 
  public:
-  DistributedTileError(const vec2i &numTiles, mpicommon::Group group);
+  DistributedTileError(
+      api::ISPCDevice &device, const vec2i &numTiles, mpicommon::Group group);
 
   // broadcast tileErrorBuffer to all workers in this group
   void sync();
@@ -75,7 +80,7 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
   /* Get render task IDs will return the render task IDs for layer 0,
    * the tiles owned by the DFB for compositing.
    */
-  utility::ArrayView<uint32_t> getRenderTaskIDs() override;
+  utility::ArrayView<uint32_t> getRenderTaskIDs(float errorThreshold) override;
 
   // Task error is not valid for the DFB, as error is tracked at a per-tile
   // level. Use tileError to get rendering error
@@ -95,6 +100,8 @@ struct DistributedFrameBuffer : public mpi::messaging::MessageHandler,
   void waitUntilFinished();
 
   void endFrame(const float errorThreshold, const Camera *camera) override;
+
+  AsyncEvent postProcess(const Camera *camera, bool wait) override;
 
   void setTileOperation(
       std::shared_ptr<TileOperation> tileOp, const Renderer *renderer);

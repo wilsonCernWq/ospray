@@ -6,6 +6,8 @@
 #include "BSDF.ih"
 #include "ShadingContext.ih"
 
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
 struct Minneart
 {
   BSDF super;
@@ -14,8 +16,10 @@ struct Minneart
   float b;
 };
 
-inline BSDF_EvalRes Minneart_eval(
-    const varying BSDF *uniform super, const vec3f &wo, const vec3f &wi)
+inline BSDF_EvalRes Minneart_eval(const varying BSDF *uniform super,
+    const vec3f &wo,
+    const vec3f &wi,
+    const uniform FeatureFlagsHandler &)
 {
   const varying Minneart *uniform self = (const varying Minneart *uniform)super;
   BSDF_EvalRes res;
@@ -23,22 +27,23 @@ inline BSDF_EvalRes Minneart_eval(
   const float cosThetaI = clamp(dot(wi, getN(super)));
   const float backScatter = pow(clamp(dot(wo, wi)), self->b);
   res.pdf = cosineSampleHemispherePDF(cosThetaI);
-  res.value = (backScatter * cosThetaI * one_over_pi) * self->super.albedo;
+  res.value =
+      (backScatter * cosThetaI * (float)one_over_pi) * self->super.albedo;
   return res;
 }
 
 inline BSDF_SampleRes Minneart_sample(const varying BSDF *uniform super,
     const vec3f &wo,
     const vec2f &s,
-    float ss)
+    float,
+    const uniform FeatureFlagsHandler &ffh)
 {
-  const varying Minneart *uniform self = (const varying Minneart *uniform)super;
   BSDF_SampleRes res;
 
   const vec3f localDir = cosineSampleHemisphere(s);
   res.wi = getFrame(super) * localDir;
   res.type = BSDF_DIFFUSE_REFLECTION;
-  BSDF_EvalRes eval = Minneart_eval(super, wo, res.wi);
+  BSDF_EvalRes eval = Minneart_eval(super, wo, res.wi, ffh);
   res.pdf = eval.pdf;
   res.weight = eval.value * rcp(eval.pdf);
   return res;
@@ -52,8 +57,14 @@ inline void Minneart_Constructor(varying Minneart *uniform self,
   BSDF_Constructor(&self->super,
       R,
       BSDF_DIFFUSE_REFLECTION,
+      BSDF_TYPE_MINNEART,
+#ifdef OSPRAY_TARGET_SYCL
+      NULL,
+      NULL,
+#else
       Minneart_eval,
       Minneart_sample,
+#endif
       frame);
 
   self->b = b;
@@ -70,3 +81,5 @@ inline varying BSDF *uniform Minneart_create(
   Minneart_Constructor(self, frame, R, b);
   return &self->super;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

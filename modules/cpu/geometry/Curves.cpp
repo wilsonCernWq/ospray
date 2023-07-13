@@ -5,8 +5,10 @@
 #include "Curves.h"
 #include "common/DGEnum.h"
 
+#ifndef OSPRAY_TARGET_SYCL
 // ispc-generated files
 #include "geometry/Curves_ispc.h"
+#endif
 // std
 #include <map>
 
@@ -43,12 +45,37 @@ static std::map<std::pair<OSPCurveType, OSPCurveBasis>, RTCGeometryType>
             RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_CATMULL_ROM_CURVE},
         {{OSP_DISJOINT, OSP_CATMULL_ROM}, (RTCGeometryType)-1}};
 
+static std::map<RTCGeometryType, FeatureFlagsGeometry> curveFeatureFlags = {
+    {RTC_GEOMETRY_TYPE_CONE_LINEAR_CURVE, FFG_CONE_LINEAR_CURVE},
+    {RTC_GEOMETRY_TYPE_ROUND_LINEAR_CURVE, FFG_ROUND_LINEAR_CURVE},
+    {RTC_GEOMETRY_TYPE_FLAT_LINEAR_CURVE, FFG_FLAT_LINEAR_CURVE},
+    {RTC_GEOMETRY_TYPE_ROUND_BEZIER_CURVE, FFG_ROUND_BEZIER_CURVE},
+    {RTC_GEOMETRY_TYPE_FLAT_BEZIER_CURVE, FFG_FLAT_BEZIER_CURVE},
+    {RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_BEZIER_CURVE,
+        FFG_NORMAL_ORIENTED_BEZIER_CURVE},
+    {RTC_GEOMETRY_TYPE_ROUND_BSPLINE_CURVE, FFG_ROUND_BSPLINE_CURVE},
+    {RTC_GEOMETRY_TYPE_FLAT_BSPLINE_CURVE, FFG_FLAT_BSPLINE_CURVE},
+    {RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_BSPLINE_CURVE,
+        FFG_NORMAL_ORIENTED_BSPLINE_CURVE},
+    {RTC_GEOMETRY_TYPE_ROUND_HERMITE_CURVE, FFG_ROUND_HERMITE_CURVE},
+    {RTC_GEOMETRY_TYPE_FLAT_HERMITE_CURVE, FFG_FLAT_HERMITE_CURVE},
+    {RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_HERMITE_CURVE,
+        FFG_NORMAL_ORIENTED_HERMITE_CURVE},
+    {RTC_GEOMETRY_TYPE_ROUND_CATMULL_ROM_CURVE, FFG_ROUND_CATMULL_ROM_CURVE},
+    {RTC_GEOMETRY_TYPE_FLAT_CATMULL_ROM_CURVE, FFG_FLAT_CATMULL_ROM_CURVE},
+    {RTC_GEOMETRY_TYPE_NORMAL_ORIENTED_CATMULL_ROM_CURVE,
+        FFG_NORMAL_ORIENTED_CATMULL_ROM_CURVE}};
+
 // Curves definitions ///////////////////////////////////////////////////////
 
 Curves::Curves(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+    : AddStructShared(device.getIspcrtContext(), device, FFG_NONE)
 {
-  getSh()->super.postIntersect = ispc::Curves_postIntersect_addr();
+#ifndef OSPRAY_TARGET_SYCL
+  getSh()->super.postIntersect =
+      reinterpret_cast<ispc::Geometry_postIntersectFct>(
+          ispc::Curves_postIntersect_addr());
+#endif
   // TODO implement area sampling of OldCurves for geometry lights
 }
 
@@ -120,13 +147,31 @@ void Curves::commit()
 
   getSh()->geom = embreeGeometry;
   getSh()->flagMask = -1;
-  if (!colorData)
-    getSh()->flagMask &= ispc::int64(~DG_COLOR);
-  if (!texcoordData)
-    getSh()->flagMask &= ispc::int64(~DG_TEXCOORD);
   getSh()->super.numPrimitives = numPrimitives();
+  getSh()->curveType = curveType;
+  getSh()->curveBasis = curveBasis;
+#ifdef OSPRAY_TARGET_SYCL
+  getSh()->index = *ispc(indexData);
+#endif
+
+  if (!colorData) {
+    getSh()->flagMask &= ispc::int64(~DG_COLOR);
+  } else {
+#ifdef OSPRAY_TARGET_SYCL
+    getSh()->color = *ispc(colorData);
+#endif
+  }
+
+  if (!texcoordData) {
+    getSh()->flagMask &= ispc::int64(~DG_TEXCOORD);
+  } else {
+#ifdef OSPRAY_TARGET_SYCL
+    getSh()->texcoord = *ispc(texcoordData);
+#endif
+  }
 
   postCreationInfo(vertexData->size());
+  featureFlagsGeometry = curveFeatureFlags[embreeCurveType];
 }
 
 size_t Curves::numPrimitives() const

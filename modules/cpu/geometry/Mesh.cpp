@@ -4,18 +4,29 @@
 // ospray
 #include "Mesh.h"
 #include "common/DGEnum.h"
+#ifndef OSPRAY_TARGET_SYCL
 // ispc exports
 #include "geometry/Mesh_ispc.h"
+#else
+namespace ispc {
+void *QuadMesh_postIntersect_addr();
+void *TriangleMesh_postIntersect_addr();
+void *Mesh_sampleArea_addr();
+void *Mesh_getAreas_addr();
+} // namespace ispc
+#endif
 // std
-#include <cmath>
+#include <numeric>
 
 namespace ospray {
 
 Mesh::Mesh(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+    : AddStructShared(device.getIspcrtContext(), device, FFG_NONE)
 {
-  getSh()->super.getAreas = ispc::Mesh_getAreas_addr();
-  getSh()->super.sampleArea = ispc::Mesh_sampleArea_addr();
+  getSh()->super.getAreas =
+      reinterpret_cast<ispc::Geometry_GetAreasFct>(ispc::Mesh_getAreas_addr());
+  getSh()->super.sampleArea = reinterpret_cast<ispc::Geometry_SampleAreaFct>(
+      ispc::Mesh_sampleArea_addr());
 }
 
 std::string Mesh::toString() const
@@ -91,11 +102,31 @@ void Mesh::commit()
     texcoordData = getParamDataT<vec2f>("vertex.texcoord");
     isTexcoordFaceVarying = false;
   }
+
+  // get optional vec3i index, if successful, it's a triangle
   indexData = getParamDataT<vec3ui>("index");
+
+  // optionally get vec4i index, if successful, it's a quad
   if (!indexData)
-    indexData = getParamDataT<vec4ui>("index", true);
+    indexData = getParamDataT<vec4ui>("index");
+
+  // If no index data given, make tri or quad soup based on input parameter
+  // Index order is 0,1,2,3,...
+  if (!indexData) {
+    const bool quadSoup = getParam<bool>("quadSoup", false);
+    const int elements = quadSoup ? 4 : 3;
+    indexData = new Data(getISPCDevice(),
+        quadSoup ? OSP_VEC4UI : OSP_VEC3UI,
+        vec3l(vertexData->size() / elements, 1, 1));
+    indexData->refDec();
+    auto begin = (unsigned int *)indexData->data();
+    std::iota(begin, begin + indexData->size() * elements, 0);
+  }
 
   const bool isTri = indexData->type == OSP_VEC3UI;
+
+  getSh()->super.type =
+      isTri ? ispc::GEOMETRY_TYPE_TRIANGLE_MESH : ispc::GEOMETRY_TYPE_QUAD_MESH;
 
   createEmbreeGeometry(
       isTri ? RTC_GEOMETRY_TYPE_TRIANGLE : RTC_GEOMETRY_TYPE_QUAD);
@@ -141,8 +172,11 @@ void Mesh::commit()
   getSh()->has_alpha = colorData && colorData->type == OSP_VEC4F;
   getSh()->is_triangleMesh = isTri;
   getSh()->super.numPrimitives = numPrimitives();
-  getSh()->super.postIntersect = isTri ? ispc::TriangleMesh_PostIntersect_addr()
-                                       : ispc::QuadMesh_postIntersect_addr();
+  getSh()->super.postIntersect = isTri
+      ? reinterpret_cast<ispc::Geometry_postIntersectFct>(
+          ispc::TriangleMesh_postIntersect_addr())
+      : reinterpret_cast<ispc::Geometry_postIntersectFct>(
+          ispc::QuadMesh_postIntersect_addr());
 
   getSh()->flagMask = -1;
   if (!normalData)
@@ -153,6 +187,7 @@ void Mesh::commit()
     getSh()->flagMask &= ispc::int64(~DG_TEXCOORD);
 
   postCreationInfo(vertexData->size());
+  featureFlagsGeometry = isTri ? FFG_TRIANGLE : FFG_QUAD;
 }
 
 size_t Mesh::numPrimitives() const

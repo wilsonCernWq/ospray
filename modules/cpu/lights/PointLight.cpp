@@ -2,10 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "PointLight.h"
-// embree
-#include "embree3/rtcore.h"
-
+#ifndef OSPRAY_TARGET_SYCL
 #include "lights/PointLight_ispc.h"
+#else
+namespace ispc {
+void PointLight_Transform(const void *self, const void *xfm, void *dyn);
+void *PointLight_sample_addr();
+void *PointLight_sample_instanced_addr();
+void *PointLight_eval_addr();
+void *PointLight_eval_instanced_addr();
+} // namespace ispc
+#endif
 
 #include "PointLightShared.h"
 #include "common/InstanceShared.h"
@@ -16,12 +23,17 @@ ISPCRTMemoryView PointLight::createSh(
     uint32_t, const ispc::Instance *instance) const
 {
   ISPCRTMemoryView view = StructSharedCreate<ispc::PointLight>(
-      getISPCDevice().getIspcrtDevice().handle());
+      getISPCDevice().getIspcrtContext().handle());
   ispc::PointLight *sh = (ispc::PointLight *)ispcrtSharedPtr(view);
-  sh->super.sample = ispc::PointLight_sample_addr();
-  sh->super.eval = ispc::PointLight_eval_addr();
+
   sh->super.isVisible = visible;
   sh->super.instance = instance;
+#ifndef OSPRAY_TARGET_SYCL
+  sh->super.sample =
+      reinterpret_cast<ispc::Light_SampleFunc>(ispc::PointLight_sample_addr());
+  sh->super.eval =
+      reinterpret_cast<ispc::Light_EvalFunc>(ispc::PointLight_eval_addr());
+#endif
 
   sh->radiance = radiance;
   sh->intensity = radIntensity;
@@ -34,8 +46,12 @@ ISPCRTMemoryView PointLight::createSh(
   if (instance) {
     sh->pre.c0 = intensityDistribution.c0;
     if (instance->motionBlur) {
-      sh->super.sample = ispc::PointLight_sample_instanced_addr();
-      sh->super.eval = ispc::PointLight_eval_instanced_addr();
+#ifndef OSPRAY_TARGET_SYCL
+      sh->super.sample = reinterpret_cast<ispc::Light_SampleFunc>(
+          ispc::PointLight_sample_instanced_addr());
+      sh->super.eval = reinterpret_cast<ispc::Light_EvalFunc>(
+          ispc::PointLight_eval_instanced_addr());
+#endif
     } else
       ispc::PointLight_Transform(sh, instance->xfm, &sh->pre);
   } else {

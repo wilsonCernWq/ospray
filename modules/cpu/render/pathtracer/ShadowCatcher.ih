@@ -3,14 +3,21 @@
 
 #pragma once
 
+#include "common/FeatureFlags.ih"
+
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
 struct PathContext;
 struct PathState;
 struct PathVertex;
 struct Ray;
 struct ScreenSample;
 
-bool shadowCatcher(const PathContext &pathContext,
+SYCL_EXTERNAL bool shadowCatcher(const PathContext &pathContext,
     PathState &pathState,
     PathVertex &pathVertex,
     const Ray &ray,
-    ScreenSample &sample);
+    ScreenSample &sample,
+    const uniform FeatureFlagsHandler &ffh);
+
+OSPRAY_END_ISPC_NAMESPACE

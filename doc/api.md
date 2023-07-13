@@ -70,8 +70,7 @@ prefixed by convention with "`--osp:`") are understood:
                                                `--osp:load-modules=<name>` first
 
   `--osp:set-affinity=<n>`                     if `1`, bind software threads to hardware threads;
-                                               `0` disables binding; default is `1` on KNL and `0`
-                                               otherwise
+                                               `0` disables binding; default is `0`
 
   `--osp:device-params=<param>:<value>[,...]`  set one or more other device parameters; equivalent
                                                to calling `ospDeviceSet*(param, value)`
@@ -1101,6 +1100,7 @@ recognizes the following parameters:
   vec2f[]              texcoord                [data] array of face-varying texture coordinates
   vec2f[]              vertex.texcoord         [data] array of vertex-varying texture coordinates
   vec3ui[] / vec4ui[]  index                   [data] array of (either triangle or quad) indices (into the vertex array(s))
+  bool                 quadSoup                when no explicit `index` is given, indicates whether to assume a 'soup' of quads instead of triangles, default false
   vec3f[][]            motion.vertex.position  [data] array of vertex position arrays (uniformly distributed keys for deformation motion blur)
   vec3f[][]            motion.normal           [data] array of face-varying normal arrays (uniformly distributed keys for deformation motion blur)
   vec3f[][]            motion.vertex.normal    [data] array of vertex-varying normal arrays (uniformly distributed keys for deformation motion blur)
@@ -1115,8 +1115,14 @@ triangles, thus mixing triangles and quads is supported by encoding some
 triangle as a quad with the last two vertex indices being identical
 (`w=z`).
 
-The `vertex.position` and `index` arrays are mandatory to create a valid
-mesh.
+The `vertex.position` array is mandatory to create a valid mesh.
+
+The `index` array is optional. If none is provided, a 'triangle soup' is
+assumed, i.e., each three consecutive vertices form one triangle; unless
+the boolean `quadSoup` is set to true, then a 'quad soup' is assumed
+i.e., each four subsequent vertices form one quad. If the size of the
+`vertex.position` array is not a multiple of three for triangles or four
+for quads, the remainder vertices are ignored.
 
 ### Subdivision
 
@@ -2047,8 +2053,7 @@ ambient lights cause ambient illumination (without occlusion).
 
 This renderer supports only a subset of the features of the [SciVis
 renderer] to gain performance. As the name suggest its main shading
-method is ambient occlusion (AO), [lights] are *not* considered at all
-and ,
+method is ambient occlusion (AO), [lights] are *not* considered at all.
 Volume rendering is supported.
 The Ambient Occlusion renderer is created by passing the  type string
 "`ao`" to `ospNewRenderer`. In addition to the [general
@@ -2087,6 +2092,9 @@ supports the following special parameters:
 
   int        roulettePathLength          5  ray recursion depth at which to
                                             start Russian roulette termination
+
+  int        maxScatteringEvents        20  maximum number of non-specular
+                                            (i.e., diffuse and glossy) bounces
 
   float      maxContribution             ∞  samples are clamped to this value
                                             before they are accumulated into
@@ -2716,7 +2724,7 @@ All cameras accept these parameters:
 
 The camera is placed and oriented in the world with `position`,
 `direction` and `up`. Additionally, an extra transformation `transform`
-can be specified, which will only be applied to 3D vectors (i.e.
+can be specified, which will only be applied to 3D vectors (i.e.,
 `position`, `direction` and `up`), but does *not* affect any sizes
 (e.g., `nearClip`, `apertureRadius`, or `height`). The same holds for
 the array of transformations `motion.transform` to achieve camera motion
@@ -3053,11 +3061,14 @@ parameters to the values listed in the table below.
 
 #### Denoiser
 
-OSPRay comes with a module that adds support for Intel® Open Image Denoise.
-This is provided as an optional module as it creates an additional project
-dependency at compile time. The module implements a "`denoiser`"
-frame operation, which denoises the entire frame before the frame is
-completed.
+OSPRay comes with a module that adds support for Intel® Open Image
+Denoise (OIDN). This is provided as an optional module as it creates an
+additional project dependency at compile time. The module implements a
+"`denoiser`" frame operation, which denoises the entire frame before the
+frame is completed. OIDN will automatically select the fastest device,
+using a GPU when available. The device selection be overriden by the
+environment valiable `OIDN_DEFAULT_DEVICE`, possible values are `cpu`,
+`sycl`, `cuda`, `hip`, or a physical device ID
 
 
 Rendering
@@ -3167,21 +3178,29 @@ rendered, the result is undefined behavior and should be avoided.
 Distributed Rendering with MPI
 ==============================
 
-The purpose of the MPI module for OSPRay is to provide distributed
-rendering capabilities for OSPRay. The module enables image- and
+The purpose of OSPRay's MPI modules is to provide distributed
+rendering capabilities for OSPRay. The modules enables image- and
 data-parallel rendering across HPC clusters using MPI, allowing
 applications to transparently distribute rendering work, or to render
 data sets which are too large to fit in memory on a single machine.
 
-The MPI module provides two OSPRay devices to allow applications to
-leverage distributed rendering capabilities. The `mpiOffload` device
-provides transparent image-parallel rendering, where the same OSPRay
-application written for local rendering can be replicated across
-multiple nodes to distribute the rendering work. The `mpiDistributed`
-device allows MPI distributed applications to use OSPRay for distributed
-rendering, where each rank can render and independent piece of a global
-data set, or hybrid rendering where ranks partially or completely share
-data.
+OSPRay provides two MPI modules that expose different distributed rendering
+capabilities. The `mpi_offload` module provides image-parallel rendering
+through the `mpiOffload` device, while the `mpi_distributed_cpu` module
+provides data-parallel rendering through the `mpiDistributed` device.
+The `mpiOffload` device in the `mpi_offload` module
+enables OSPRay applications written for local rendering to be replicated across
+multiple nodes to distribute the rendering work without code changes.
+The `mpi_distributed_cpu` module provides the `mpiDistributed` device, which
+allows MPI distributed applications to use OSPRay for distributed
+rendering. Each rank using the `mpiDistributed` device can render an
+independent piece of a global data set, or perform hybrid rendering where ranks
+partially or completely share data.
+
+The `mpiDistributed` device's image-parallel rendering support can be used to
+accelerate data loading for image-parallel applications, where all ranks load
+the same data from a shared disk and then perform image-parallel rendering
+on the replicated data, as if the `mpiOffload` device where being used.
 
 MPI Offload Rendering
 ---------------------
@@ -3191,12 +3210,12 @@ across a cluster without requiring modifications to the application
 itself. Existing applications using OSPRay for local rendering simply be
 passed command line arguments to load the module and indicate that the
 `mpiOffload` device should be used for image-parallel rendering. To load
-the module, pass `--osp:load-modules=mpi`, to select the
+the module, pass `--osp:load-modules=mpi_offload`, to select the
 MPIOffloadDevice, pass `--osp:device=mpiOffload`. For example, the
 `ospExamples` application can be run as:
 
 ```sh
-mpirun -n <N> ./ospExamples --osp:load-modules=mpi --osp:device=mpiOffload
+mpirun -n <N> ./ospExamples --osp:load-modules=mpi_offload --osp:device=mpiOffload
 ```
 
 and will automatically distribute the image rendering tasks among the
@@ -3214,7 +3233,7 @@ The `ospray_mpi_worker` will load the MPI module and select the offload
 device by default.
 
 ```sh
-mpirun -n 1 ./ospExamples --osp:load-modules=mpi --osp:device=mpiOffload \
+mpirun -n 1 ./ospExamples --osp:load-modules=mpi_offload --osp:device=mpiOffload \
   : -n <N> ./ospray_mpi_worker
 ```
 
@@ -3227,7 +3246,7 @@ through the command line, the following parameters can be set:
   -------- ------------------------ ---------  ---------------------------------
   string   mpiMode                        mpi  The mode to communicate with the
                                                worker ranks. `mpi` will assume
-                                               you're launching the application
+                                               you are launching the application
                                                and workers in the same mpi
                                                command (or split launch
                                                command). `mpi` is the only
@@ -3272,10 +3291,10 @@ While MPI Offload rendering is used to transparently distribute
 rendering work without requiring modification to the application, MPI
 Distributed rendering is targeted at use of OSPRay within MPI-parallel
 applications. The MPI distributed device can be selected by loading the
-`mpi` module, and manually creating and using an instance of the
-`mpiDistributed` device:
+`mpi_distributed_cpu` module, and manually creating and using an instance
+of the `mpiDistributed` device:
 
-    ospLoadModule("mpi");
+    ospLoadModule("mpi_distributed_cpu");
     
     OSPDevice mpiDevice = ospNewDevice("mpiDistributed");
     ospDeviceCommit(mpiDevice);
@@ -3403,11 +3422,11 @@ limited to automatically creating ISPCDevice delegates.
 
 If you wish to try it set the OSPRAY_NUM_SUBDEVICES environmental variable to
 the number of subdevices you want to create and tell OSPRay to both load the
-multidevice extension and create a multidevice for rendering instead of the
+multidevice_cpu extension and create a multidevice for rendering instead of the
 default ISPCDevice.
 
 One example in a bash like shell is as follows:
 
 ```sh
-OSPRAY_NUM_SUBDEVICES=6 ./ospTutorial --osp:load-modules=multidevice --osp:device=multidevice
+OSPRAY_NUM_SUBDEVICES=6 ./ospTutorial --osp:load-modules=multidevice_cpu --osp:device=multidevice
 ```

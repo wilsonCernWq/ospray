@@ -4,9 +4,9 @@
 #pragma once
 
 // ospray stuff
-#include "./Group.h"
+#include "Group.h"
 // embree
-#include "embree3/rtcore.h"
+#include "Embree.h"
 
 namespace ospray {
 

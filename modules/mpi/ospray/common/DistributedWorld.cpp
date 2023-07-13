@@ -15,7 +15,7 @@ namespace mpi {
 using namespace rkcommon;
 
 DistributedWorld::DistributedWorld(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device),
+    : AddStructShared(device.getIspcrtContext(), device),
       mpiGroup(mpicommon::worker.dup())
 {
   managedObjectType = OSP_WORLD;
@@ -67,6 +67,7 @@ void DistributedWorld::commit()
           vec3f(b.upper.x, b.upper.y, b.upper.z)));
     }
 
+#ifdef OSPRAY_ENABLE_VOLUMES
     if (getSh()->super.embreeSceneHandleVolumes) {
       box4f b;
       rtcGetSceneBounds(
@@ -74,6 +75,7 @@ void DistributedWorld::commit()
       localBounds.extend(box3f(vec3f(b.lower.x, b.lower.y, b.lower.z),
           vec3f(b.upper.x, b.upper.y, b.upper.z)));
     }
+#endif
     myRegions.push_back(localBounds);
   }
 
@@ -107,14 +109,16 @@ void DistributedWorld::commit()
 
     regionScene = rtcNewScene(getISPCDevice().getEmbreeDevice());
     rtcAttachGeometry(regionScene, regionGeometry->getEmbreeGeometry());
-    rtcSetSceneFlags(regionScene, RTC_SCENE_FLAG_CONTEXT_FILTER_FUNCTION);
+    rtcSetSceneFlags(regionScene, RTC_SCENE_FLAG_FILTER_FUNCTION_IN_ARGUMENTS);
     rtcCommitScene(regionScene);
 
+    // Remove the extra local refs
     regionGeometry->refDec();
     allRegionsData->refDec();
   }
 
-  getSh()->regions = allRegions.data();
+  getSh()->localRegions = myRegions.data();
+  getSh()->numLocalRegions = myRegions.size();
   getSh()->numRegions = allRegions.size();
   getSh()->regionScene = regionScene;
 }

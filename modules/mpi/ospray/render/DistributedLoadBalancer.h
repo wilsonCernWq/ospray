@@ -3,7 +3,12 @@
 
 #pragma once
 
+#ifdef OSPRAY_TARGET_SYCL
+#include <sycl/sycl.hpp>
+#endif
+
 #include "../fb/DistributedFrameBuffer.h"
+#include "ObjectHandle.h"
 #include "camera/Camera.h"
 #include "common/World.h"
 #include "render/LoadBalancer.h"
@@ -21,31 +26,20 @@ struct DistributedWorld;
  */
 struct DistributedLoadBalancer : public TiledLoadBalancer
 {
-  DistributedLoadBalancer();
+  DistributedLoadBalancer(ObjectHandle handle);
+
   ~DistributedLoadBalancer() override;
-  void renderFrame(FrameBuffer *fb,
+
+  std::pair<AsyncEvent, AsyncEvent> renderFrame(FrameBuffer *fb,
       Renderer *renderer,
       Camera *camera,
-      World *world) override;
+      World *world,
+      bool wait = true) override;
 
   void renderFrameReplicated(DistributedFrameBuffer *dfb,
       Renderer *renderer,
       Camera *camera,
       DistributedWorld *world);
-
-  void setObjectHandle(ObjectHandle &handle_);
-
-  /* Not implemented by Distributed load balancer currently,
-   * this could potentially be useful to implement later to manage
-   * the actual tile list rendering after computing the list of tiles
-   * to be rendered by this rank in renderFrame
-   */
-  void runRenderTasks(FrameBuffer *fb,
-      Renderer *renderer,
-      Camera *camera,
-      World *world,
-      const utility::ArrayView<uint32_t> &renderTaskIDs,
-      void *perFrameData) override;
 
   std::string toString() const override;
 

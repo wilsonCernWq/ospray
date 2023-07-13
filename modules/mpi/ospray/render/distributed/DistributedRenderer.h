@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include "../../fb/DistributedFrameBuffer.h"
-#include "../../fb/TileOperation.h"
 #include "camera/Camera.h"
+#include "fb/DistributedFrameBuffer.h"
+#include "fb/TileOperation.h"
 #include "render/Renderer.h"
 // ispc shared
-#include "DistributedRendererShared.h"
+#include "render/RendererShared.h"
 
 namespace ospray {
 namespace mpi {
@@ -22,8 +22,7 @@ struct RegionInfo
   uint8_t *regionVisible = nullptr;
 };
 
-struct DistributedRenderer
-    : public AddStructShared<Renderer, ispc::DistributedRenderer>
+struct DistributedRenderer : public AddStructShared<Renderer, ispc::Renderer>
 {
   DistributedRenderer(api::ISPCDevice &device);
   ~DistributedRenderer() override;
@@ -35,12 +34,32 @@ struct DistributedRenderer
       void *perFrameData,
       const utility::ArrayView<uint32_t> &taskIDs) const;
 
-  void renderRegionTasks(SparseFrameBuffer *fb,
+  // Not used by distributed renderers
+  AsyncEvent renderTasks(FrameBuffer *,
+      Camera *,
+      World *,
+      void * /*perFrameData*/,
+      const utility::ArrayView<uint32_t> & /*taskIDs*/,
+      bool /*wait*/) const override
+  {
+    return AsyncEvent();
+  }
+
+#ifndef OSPRAY_TARGET_SYCL
+  virtual void renderRegionTasks(SparseFrameBuffer *fb,
       Camera *camera,
       DistributedWorld *world,
       const box3f &region,
       void *perFrameData,
-      const utility::ArrayView<uint32_t> &taskIDs) const;
+      const utility::ArrayView<uint32_t> &taskIDs) const = 0;
+#else
+  virtual void renderRegionTasks(SparseFrameBuffer *fb,
+      Camera *camera,
+      DistributedWorld *world,
+      const box3f &region,
+      void *perFrameData,
+      const utility::ArrayView<uint32_t> &taskIDs) const = 0;
+#endif
 
   virtual std::shared_ptr<TileOperation> tileOperation() = 0;
 

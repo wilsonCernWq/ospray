@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iterator>
+#include <memory>
 #include "ISPCDeviceObject.h"
 #include "StructShared.h"
 #include "ispcrt.hpp"
@@ -48,10 +49,17 @@ struct OSPRAY_SDK_INTERFACE Data : public ISPCDeviceObject
   bool compact() const; // all strides are natural
   void copy(const Data &source, const vec3ul &destinationIndex);
 
+#ifdef OSPRAY_TARGET_SYCL
+  void commit() override;
+#endif
+
   bool isShared() const;
 
   template <typename T, int DIM = 1>
   const DataT<T, DIM> &as() const;
+
+  template <typename T, int DIM = 1>
+  DataT<T, DIM> &as();
 
   template <typename T, int DIM>
   typename std::enable_if<std::is_pointer<T>::value, bool>::type is() const;
@@ -60,8 +68,14 @@ struct OSPRAY_SDK_INTERFACE Data : public ISPCDeviceObject
   typename std::enable_if<!std::is_pointer<T>::value, bool>::type is() const;
 
  protected:
-  ISPCRTMemoryView view{nullptr};
+  // The actual buffer storing the data
+  std::unique_ptr<BufferShared<char>> view;
   char *addr{nullptr};
+  // We need to track the appSharedPtr separately for the GPU backend, if we
+  // were passed a shared ptr to memory that was not in USM we made a copy that
+  // addr points to and we need to keep it in sync with the shared data from the
+  // app.
+  char *appSharedPtr{nullptr};
   bool shared;
 
  public:
@@ -245,6 +259,12 @@ const ispc::Data1D *ispc(Ref<const DataT<T, 1>> &dataRef)
   return dataRef ? &dataRef->ispc : &Data::emptyData1D;
 }
 
+template <typename T>
+ispc::Data1D *ispc(Ref<DataT<T, 1>> &dataRef)
+{
+  return dataRef ? &dataRef->ispc : &Data::emptyData1D;
+}
+
 inline size_t Data::size() const
 {
   return numItems.x * numItems.y * numItems.z;
@@ -286,6 +306,20 @@ Data::is() const
 
 template <typename T, int DIM>
 inline const DataT<T, DIM> &Data::as() const
+{
+  if (is<T, DIM>())
+    return (DataT<T, DIM> &)*this;
+  else {
+    std::stringstream ss;
+    ss << "Incompatible type or dimension for DataT; requested type[dim]: "
+       << stringFor(OSPTypeFor<T>::value) << "[" << DIM
+       << "], actual: " << stringFor(type) << "[" << dimensions << "].";
+    throw std::runtime_error(ss.str());
+  }
+}
+
+template <typename T, int DIM>
+inline DataT<T, DIM> &Data::as()
 {
   if (is<T, DIM>())
     return (DataT<T, DIM> &)*this;
@@ -362,6 +396,22 @@ std::vector<T *> createArrayOfSh(const DataT<U *, DIM> &data)
     retval.push_back(obj->getSh());
 
   return retval;
+}
+
+template <>
+inline Data *ManagedObject::getParam<Data *>(
+    const char *name, Data *valIfNotFound)
+{
+  auto *obj = ParameterizedObject::getParam<ManagedObject *>(
+      name, (ManagedObject *)valIfNotFound);
+  if (obj && obj->managedObjectType == OSP_DATA)
+    return (Data *)obj;
+  else {
+    // reset query status if object is not a Data*
+    if (obj)
+      findParam(name)->query = false;
+    return valIfNotFound;
+  }
 }
 
 } // namespace ospray

@@ -8,15 +8,36 @@
 // ispcrt
 #include "ispcrt.hpp"
 // embree
-#include "embree3/rtcore.h"
+#include "common/Embree.h"
+#ifdef OSPRAY_ENABLE_VOLUMES
 // openvkl
 #include "openvkl/openvkl.h"
+// comment break to prevent clang-format from reordering openvkl includes
+#if OPENVKL_VERSION_MAJOR > 1
+#include "openvkl/device/openvkl.h"
+#endif
+#endif
 
 /*! \file ISPCDevice.h Implements the "local" device for local rendering */
+
+#ifdef OSPRAY_TARGET_SYCL
+namespace ispc {
+int ISPCDevice_programCount();
+int ISPCDevice_isa();
+} // namespace ispc
+#endif
 
 namespace ospray {
 
 struct LocalTiledLoadBalancer;
+
+#ifdef OSPRAY_TARGET_SYCL
+using AsyncEvent = sycl::event;
+#else
+struct AsyncEvent
+{
+};
+#endif
 
 namespace api {
 
@@ -134,20 +155,69 @@ struct OSPRAY_SDK_INTERFACE ISPCDevice : public Device
     return embreeDevice;
   }
 
+#ifdef OSPRAY_ENABLE_VOLUMES
   VKLDevice getVklDevice()
   {
     return vklDevice;
   }
+#endif
 
   ispcrt::Device &getIspcrtDevice()
   {
     return ispcrtDevice;
   }
 
+  ispcrt::Context &getIspcrtContext()
+  {
+    return ispcrtContext;
+  }
+
+  ispcrt::TaskQueue &getIspcrtQueue()
+  {
+    return ispcrtQueue;
+  }
+
+  void *getPostProcessingCommandQueuePtr() override
+  {
+#ifdef OSPRAY_TARGET_SYCL
+    return &syclQueue;
+#else
+    return nullptr;
+#endif
+  }
+
+#ifdef OSPRAY_TARGET_SYCL
+  sycl::queue &getSyclQueue()
+  {
+    return syclQueue;
+  }
+
+  /* Compute the rounded dispatch global size for the given work group size.
+   * SYCL requires that globalSize % workgroupSize == 0, ths function will
+   * round up globalSize and return nd_range(roundedSize, workgroupSize).
+   * The kernel being launched must discard tasks that are out of bounds
+   * bounds due to this rounding
+   */
+  sycl::nd_range<1> computeDispatchRange(
+      const size_t globalSize, const size_t workgroupSize) const;
+#endif
+
  private:
+  ispcrt::Context ispcrtContext;
   ispcrt::Device ispcrtDevice;
+  ispcrt::TaskQueue ispcrtQueue;
+
   RTCDevice embreeDevice = nullptr;
+#ifdef OSPRAY_ENABLE_VOLUMES
   VKLDevice vklDevice = nullptr;
+#endif
+
+#ifdef OSPRAY_TARGET_SYCL
+  sycl::platform syclPlatform;
+  sycl::device syclDevice;
+  sycl::context syclContext;
+  sycl::queue syclQueue;
+#endif
 };
 
 } // namespace api

@@ -4,9 +4,11 @@
 #pragma once
 
 #include "Texture.ih"
-#include "math/AffineSpace.ih"
-
+#include "rkcommon/math/AffineSpace.ih"
+// c++ shared
 #include "TextureParamShared.h"
+
+OSPRAY_BEGIN_ISPC_NAMESPACE
 
 inline uniform bool valid(const uniform TextureParam uniform &tex)
 {
@@ -24,7 +26,7 @@ inline uniform bool hasAlpha(const uniform TextureParam uniform &tex)
                                                                                \
   DifferentialGeometry xfmDg = dg;                                             \
   if (tp.transformFlags & TRANSFORM_FLAG_2D)                                   \
-    xfmDg.st = tp.xform2f * dg.st;                                             \
+    xfmDg.st = xfmPoint(tp.xform2f, dg.st);                                    \
   if (tp.transformFlags & TRANSFORM_FLAG_3D)                                   \
     xfmDg.lP = xfmPoint(tp.xform3f, dg.lP);                                    \
   return fn(tp.ptr, xfmDg)
@@ -82,3 +84,4 @@ inline vec3f getNormal(const uniform TextureParam uniform &tp,
 {
   TEXTURE_TRANSFORM(getNormal);
 }
+OSPRAY_END_ISPC_NAMESPACE

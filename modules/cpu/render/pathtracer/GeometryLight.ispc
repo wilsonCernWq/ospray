@@ -9,20 +9,29 @@
 
 #include "common/Instance.ih"
 #include "geometry/GeometricModel.ih"
-#include "math/AffineSpace.ih"
 #include "math/Distribution1D.ih"
+#include "rkcommon/math/AffineSpace.ih"
 // c++ shared
 #include "GeometryLightShared.h"
 
-vec3f evaluateGeometryLights(const PathContext &pathContext,
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+SYCL_EXTERNAL vec3f evaluateGeometryLights(const PathContext &pathContext,
     const PathState &pathState,
     const PathVertex &lastVertex,
     const PathVertex &pathVertex,
-    Ray &ray)
+    const Ray &ray)
 {
   vec3f L = make_vec3f(0.f);
   Material *material = (Material *)pathVertex.dg.material;
+
+#ifdef OSPRAY_TARGET_SYCL
+  {
+    // SYCL execution in a thread is scalar
+    const Material *m = material;
+#else
   foreach_unique (m in material) {
+#endif
     if (m != NULL && reduce_max(m->emission) > 0.f) {
       // at the moment we only support uniform light selection
       // therefore we can evaluate the selection PDF directly
@@ -45,10 +54,11 @@ vec3f evaluateGeometryLights(const PathContext &pathContext,
 
 // Implementation /////////////////////////////////////////////////////////////
 
-Light_SampleRes GeometryLight_sample(const Light *uniform super,
+SYCL_EXTERNAL Light_SampleRes GeometryLight_sample(const Light *uniform super,
     const DifferentialGeometry &dg,
     const vec2f &s,
-    const float time)
+    const float time,
+    const uniform FeatureFlagsHandler &ffh)
 {
   const GeometryLight *uniform self = (GeometryLight * uniform) super;
   const GeometricModel *uniform model = self->model;
@@ -67,14 +77,21 @@ Light_SampleRes GeometryLight_sample(const Light *uniform super,
   SampleAreaRes as;
   const Instance *uniform instance = self->super.instance;
   assert(instance);
-  if (instance->motionBlur)
+  if (instance->motionBlur) {
+#ifdef OSPRAY_TARGET_SYCL
+    {
+      // SYCL execution in a thread is scalar
+      const float utime = time;
+#else
     foreach_unique (utime in time) {
+#endif
       const uniform affine3f xfm = Instance_getTransform(instance, utime);
-      as = geo->sampleArea(geo, primID, xfm, rcp(xfm), ns, time);
+      as = Geometry_dispatch_sampleArea(
+          geo, primID, xfm, rcp(xfm), ns, time, ffh);
     }
-  else {
-    as = geo->sampleArea(
-        geo, primID, instance->xfm, instance->rcp_xfm, ns, time);
+  } else {
+    as = Geometry_dispatch_sampleArea(
+        geo, primID, instance->xfm, instance->rcp_xfm, ns, time, ffh);
   }
   // note that sample.pdf/primitives * sampleArea(worldspace).pdf == self->pdf
 
@@ -104,5 +121,7 @@ Light_SampleRes GeometryLight_sample(const Light *uniform super,
 
 export void *uniform GeometryLight_sample_addr()
 {
-  return GeometryLight_sample;
+  return (void *uniform)GeometryLight_sample;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

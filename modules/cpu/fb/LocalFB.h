@@ -4,10 +4,12 @@
 #pragma once
 
 // ospray
+#include "common/ISPCRTBuffers.h"
 #include "fb/FrameBuffer.h"
 #include "fb/TaskError.h"
 // rkcommon
 #include "rkcommon/containers/AlignedVector.h"
+#include "rkcommon/utility/ArrayView.h"
 // ispc shared
 #include "LocalFBShared.h"
 #include "TileShared.h"
@@ -24,7 +26,13 @@ struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
       ColorBufferFormat colorBufferFormat,
       const uint32 channels);
 
-  virtual ~LocalFrameBuffer() override = default;
+  virtual ~LocalFrameBuffer() override
+  {
+#ifdef OSPRAY_TARGET_SYCL
+    device.getSyclQueue().wait_and_throw();
+    device.getIspcrtQueue().sync();
+#endif
+  }
 
   virtual void commit() override;
 
@@ -34,7 +42,8 @@ struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
 
   virtual uint32_t getTotalRenderTasks() const override;
 
-  virtual utility::ArrayView<uint32_t> getRenderTaskIDs() override;
+  virtual utility::ArrayView<uint32_t> getRenderTaskIDs(
+      float errorThreshold) override;
 
   // common function to help printf-debugging, every derived class should
   // override this!
@@ -45,6 +54,8 @@ struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
   void beginFrame() override;
 
   void endFrame(const float errorThreshold, const Camera *camera) override;
+
+  AsyncEvent postProcess(const Camera *camera, bool wait) override;
 
   const void *mapBuffer(OSPFrameBufferChannel channel) override;
 
@@ -58,7 +69,7 @@ struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
    * Safe to call in parallel from multiple threads, as long as each thread is
    * writing different tiles
    */
-  void writeTiles(const containers::AlignedVector<Tile> &tiles);
+  void writeTiles(const utility::ArrayView<Tile> &tiles);
 
   /* Write the tiles of the sparse fb into this framebuffer's row-major storage.
    * Will also copy error data from the sparseFb the full framebuffer task error
@@ -72,32 +83,36 @@ struct OSPRAY_SDK_INTERFACE LocalFrameBuffer
   //       flag was passed on construction
 
   // format depends on FrameBuffer::colorBufferFormat
-  std::vector<uint8_t> colorBuffer;
+  std::unique_ptr<BufferDeviceShadowed<uint8_t>> colorBuffer;
   // one float per pixel
-  containers::AlignedVector<float> depthBuffer;
+  std::unique_ptr<BufferDeviceShadowed<float>> depthBuffer;
   // one RGBA per pixel
-  containers::AlignedVector<vec4f> accumBuffer;
+  std::unique_ptr<BufferDevice<vec4f>> accumBuffer;
   // one RGBA per pixel, accumulates every other sample, for variance estimation
-  containers::AlignedVector<vec4f> varianceBuffer;
+  std::unique_ptr<BufferDevice<vec4f>> varianceBuffer;
   // accumulated world-space normal per pixel
-  containers::AlignedVector<vec3f> normalBuffer;
+  std::unique_ptr<BufferDeviceShadowed<vec3f>> normalBuffer;
   // accumulated, one RGB per pixel
-  containers::AlignedVector<vec3f> albedoBuffer;
+  std::unique_ptr<BufferDeviceShadowed<vec3f>> albedoBuffer;
   // primitive ID, object ID, and instance ID
-  containers::AlignedVector<uint32> primitiveIDBuffer;
-  containers::AlignedVector<uint32> objectIDBuffer;
-  containers::AlignedVector<uint32> instanceIDBuffer;
+  std::unique_ptr<BufferDeviceShadowed<uint32_t>> primitiveIDBuffer;
+  std::unique_ptr<BufferDeviceShadowed<uint32_t>> objectIDBuffer;
+  std::unique_ptr<BufferDeviceShadowed<uint32_t>> instanceIDBuffer;
 
  protected:
   vec2i getTaskStartPos(const uint32_t taskID) const;
 
   //// Data ////
 
-  vec2i numRenderTasks;
-  std::vector<uint32_t> renderTaskIDs;
+  api::ISPCDevice &device;
 
+  vec2i numRenderTasks;
+
+  std::unique_ptr<BufferShared<uint32_t>> renderTaskIDs;
+  std::unique_ptr<BufferShared<uint32_t>> activeTaskIDs;
   // holds accumID per render task, for adaptive accumulation
-  containers::AlignedVector<int32> taskAccumID;
+  std::unique_ptr<BufferDeviceShadowed<int32_t>> taskAccumID;
+
   // holds error per tile and adaptive regions
   TaskError taskErrorRegion;
 };

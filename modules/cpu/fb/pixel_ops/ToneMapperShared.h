@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../ImageOpShared.h"
+#include "fb/PixelOpShared.h"
 
 #ifdef __cplusplus
 namespace ispc {
@@ -21,7 +21,6 @@ struct LiveToneMapper
   // ACES color transform flag
   bool acesColor;
 };
-
 #ifdef __cplusplus
 }
 #endif

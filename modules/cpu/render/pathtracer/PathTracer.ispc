@@ -6,6 +6,7 @@
 #include "PathTracerDefines.ih"
 #include "PathTracerUtil.ih"
 
+#include "common/FeatureFlagsEnum.h"
 #include "render/Renderer.ih"
 #include "render/bsdfs/BSDF.ih"
 #include "render/bsdfs/MicrofacetAlbedoTables.ih"
@@ -14,27 +15,30 @@
 #include "volumes/VolumeSampler.ih"
 
 #include "camera/Camera.ih"
+#include "camera/CameraDispatch.ih"
 #include "common/World.ih"
+#include "fb/FrameBuffer.ih"
+#include "fb/FrameBufferDispatch.ih"
+#include "fb/RenderTaskDesc.ih"
 #include "math/Distribution1D.ih"
 #include "math/random.ih"
-#include "pf/PixelFilter.ih"
+#include "pf/PixelFilterDispatch.ih"
 // c++ shared
 #include "PathTracerDataShared.h"
 #include "PathTracerShared.h"
-#include "fb/FrameBufferShared.h"
 #include "render/MaterialShared.h"
+
+OSPRAY_BEGIN_ISPC_NAMESPACE
 
 #define MAX_LIGHTS 1000u
 
-ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
+static ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
     const World *uniform world,
-    FrameBuffer *uniform fb,
-    const uint32 ix,
-    const uint32 iy,
     const vec2f &pixel, // normalized, i.e. in [0..1]
     Ray &ray,
     varying LDSampler *uniform ldSampler,
-    varying RandomSampler *uniform randomSampler)
+    varying RandomSampler *uniform randomSampler,
+    const uniform FeatureFlagsHandler &ffh)
 {
   ScreenSample sample;
   sample.rgb = make_vec3f(0.f);
@@ -47,10 +51,11 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
 
   uniform PathTracerData &pathtracerData =
       *((uniform PathTracerData *)world->pathtracerData);
-  const uniform int numLights =
+  const uniform uint32 numLights =
       pathtracerData.lights ? min(MAX_LIGHTS, pathtracerData.numLights) : 0;
-  const uniform int numLightSamples =
-      self->numLightSamples >= 0 ? self->numLightSamples : numLights;
+  const uniform uint32 numLightSamples =
+      self->numLightSamples >= 0 && numLights > 0 ? self->numLightSamples
+                                                  : numLights;
   PathContext pathContext;
   pathContext.context = self;
   pathContext.world = world;
@@ -61,12 +66,11 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
   pathContext.numLightSamples = numLightSamples;
   pathContext.lightsCDF = pathtracerData.lightsCDF;
 
-  pathContext.numBounceSampleDims =
-      4 + numLightSamples * 3; // BSDF sample (3D), roulette (1D), light samples
-                               // * (3D, light selection and sampling the light)
+  // BSDF sample (3D), light samples * (3D, light selection and sampling)
+  pathContext.numBounceSampleDims = 3 + numLightSamples * 3;
 
   PathState pathState;
-  pathState.disableNEE = false;
+  pathState.disableNEE = numLightSamples == 0;
   pathState.disableFWD = false;
   pathState.straightPath = true; // path from camera did not change direction,
                                  // for alpha and backplate
@@ -76,26 +80,28 @@ ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
   pathState.auxFree = true; // normal & albedo buffer were not yet written to
   pathState.depth = 0;
   pathState.sampleDim = 5; // skip: pixel (2D), lens (2D), time (1D)
+  pathState.scatteringEvents = 0;
   pathState.throughput = make_vec3f(1.f);
   pathState.contribution = make_vec3f(0.f);
   pathState.time = ray.time;
   pathState.currentMedium = make_Medium_vacuum();
-  pathState.shadowCatcherDist = -inf;
+  pathState.shadowCatcherDist = -(float)inf;
 
   pathState.debug = false;
 
-  samplePath(pathContext, pathState, ray, sample);
+  samplePath(pathContext, pathState, ray, sample, ffh);
 
   return sample;
 }
 
-inline ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
+static ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
     FrameBuffer *uniform fb,
     Camera *uniform camera,
     World *uniform world,
     const uint32 ix,
     const uint32 iy,
-    const uint32 accumID)
+    const uint32 accumID,
+    const uniform FeatureFlagsHandler &ffh)
 {
   ScreenSample screenSample;
   screenSample.rgb = make_vec3f(0.f);
@@ -121,16 +127,18 @@ inline ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
     // init RNG
     const uint32 sampleID = accumID * spp + s;
     screenSample.sampleID.z = sampleID;
-    LDSampler_init(ldSampler, fb->size.x * iy + ix, sampleID);
+    LDSampler_init(
+        ldSampler, self->super.mathConstants, fb->size.x * iy + ix, sampleID);
     RandomSampler_init(randomSampler, fb->size.x * iy + ix, sampleID);
 
     CameraSample cameraSample;
     const vec2f pixelSample = LDSampler_getFloat2(ldSampler, 0);
 
     vec2f pfSample = pixelSample;
-    PixelFilter *uniform pf = self->super.pixelFilter;
+    const PixelFilter *uniform pf = self->super.pixelFilter;
     if (pf) {
-      pfSample = pf->sample(pf, pixelSample) + make_vec2f(0.5f);
+      pfSample =
+          PixelFilter_dispatch_sample(pf, pixelSample) + make_vec2f(0.5f);
     }
 
     cameraSample.screen.x =
@@ -141,19 +149,20 @@ inline ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
     cameraSample.lens = LDSampler_getFloat2(ldSampler, 2);
     cameraSample.time = LDSampler_getFloat(ldSampler, 4);
 
-    camera->initRay(camera, screenSample.ray, cameraSample);
-    const float tMax = Renderer_getMaxDepth(&self->super, cameraSample.screen);
+    Camera_dispatch_initRay(camera, screenSample.ray, cameraSample, ffh);
+    const float tMax =
+        Renderer_getMaxDepth(&self->super, cameraSample.screen, ffh);
+
     screenSample.ray.t = min(screenSample.ray.t, tMax);
 
     ScreenSample sample = PathTraceIntegrator_Li(self,
         world,
-        fb,
-        ix,
-        iy,
         cameraSample.screen,
         screenSample.ray,
         ldSampler,
-        randomSampler);
+        randomSampler,
+        ffh);
+
     screenSample.rgb =
         screenSample.rgb + min(sample.rgb, make_vec3f(self->maxRadiance));
     screenSample.alpha = screenSample.alpha + sample.alpha;
@@ -176,46 +185,64 @@ inline ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
   return screenSample;
 }
 
-task void PathTracer_renderTask(PathTracer *uniform self,
-    FrameBuffer *uniform fb,
-    Camera *uniform camera,
-    World *uniform world,
-    void *uniform perFrameData,
-    const uint32 *uniform taskIDs)
+#ifndef OSPRAY_TARGET_SYCL
+task
+#endif
+    SYCL_EXTERNAL void
+    PathTracer_renderTask(Renderer *uniform _self,
+        FrameBuffer *uniform fb,
+        Camera *uniform camera,
+        World *uniform world,
+        const uint32 *uniform taskIDs,
+#ifdef OSPRAY_TARGET_SYCL
+        const int taskIndex0,
+#endif
+        const uniform FeatureFlagsHandler &ffh)
 {
+  PathTracer *uniform self = (PathTracer * uniform) _self;
   uniform RenderTaskDesc taskDesc =
-      fb->getRenderTaskDesc(fb, taskIDs[taskIndex0]);
+      FrameBuffer_dispatch_getRenderTaskDesc(fb, taskIDs[taskIndex0], ffh);
 
   if (fb->cancelRender || isEmpty(taskDesc.region)) {
     return;
   }
 
+#ifdef OSPRAY_TARGET_SYCL
+  for (uint32 y = taskDesc.region.lower.y; y < (uint32)taskDesc.region.upper.y;
+       ++y)
+    for (uint32 x = taskDesc.region.lower.x;
+         x < (uint32)taskDesc.region.upper.x;
+         ++x) {
+#else
   foreach_tiled (y = taskDesc.region.lower.y... taskDesc.region.upper.y,
       x = taskDesc.region.lower.x... taskDesc.region.upper.x) {
-    ScreenSample screenSample =
-        PathTracer_renderPixel(self, fb, camera, world, x, y, taskDesc.accumID);
+#endif
+      ScreenSample screenSample = PathTracer_renderPixel(
+          self, fb, camera, world, x, y, taskDesc.accumID, ffh);
 
-    fb->accumulateSample(fb, screenSample, taskDesc);
-  }
-  fb->completeTask(fb, taskDesc);
+      FrameBuffer_dispatch_accumulateSample(fb, screenSample, taskDesc, ffh);
+    }
+  FrameBuffer_dispatch_completeTask(fb, taskDesc, ffh);
 }
 
 // Exports (called from C++) //////////////////////////////////////////////////
 
+#ifndef OSPRAY_TARGET_SYCL
 export void PathTracer_renderTasks(void *uniform _self,
     void *uniform _fb,
     void *uniform _camera,
     void *uniform _world,
-    void *uniform perFrameData,
     void *uniform _taskIDs,
     uniform uint32 numTasks)
 {
-  PathTracer *uniform self = (PathTracer * uniform) _self;
+  Renderer *uniform self = (Renderer * uniform) _self;
   FrameBuffer *uniform fb = (FrameBuffer * uniform) _fb;
   Camera *uniform camera = (Camera * uniform) _camera;
   World *uniform world = (World * uniform) _world;
   const uint32 *uniform taskIDs = (const uint32 *uniform)_taskIDs;
-
-  launch[numTasks] PathTracer_renderTask(
-      self, fb, camera, world, perFrameData, taskIDs);
+  uniform FeatureFlagsHandler ffh;
+  launch[numTasks] PathTracer_renderTask(self, fb, camera, world, taskIDs, ffh);
 }
+#endif
+
+OSPRAY_END_ISPC_NAMESPACE

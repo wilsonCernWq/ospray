@@ -3,10 +3,16 @@
 
 #pragma once
 
-#include "render/Renderer.ih"
-// c++ shared
-#include "SciVisShared.h"
+#include "common/FeatureFlags.ih"
+#include "render/ScreenSample.ih"
 
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+struct Renderer;
+struct SciVis;
+struct FrameBuffer;
+struct ScreenSample;
+struct World;
 struct LDSampler;
 struct DifferentialGeometry;
 
@@ -19,22 +25,21 @@ struct SciVisRenderContext
   varying LDSampler *uniform ldSampler;
 };
 
-vec3f lightAlpha(const uniform SciVis *uniform self,
+SYCL_EXTERNAL vec3f lightAlpha(const uniform SciVis *uniform self,
     Ray &ray,
-    const FrameBuffer *uniform fb,
     const World *uniform world,
-    ScreenSample &sample,
     varying LDSampler *uniform ldSampler,
     vec3f weight,
-    float rayOffset,
-    uniform float quality);
+    uniform float quality,
+    const uniform FeatureFlagsHandler &ffh);
 
-vec3f SciVis_computeAO(const uniform SciVis *uniform self,
-    const FrameBuffer *uniform fb,
+SYCL_EXTERNAL vec3f SciVis_computeAO(const uniform SciVis *uniform self,
     const World *uniform world,
-    ScreenSample &sample,
     varying LDSampler *uniform ldSampler,
     const varying DifferentialGeometry &dg,
     const uniform int sampleCnt,
     const uniform float aoRadius,
-    const varying vec3i &sampleID);
+    const varying vec3i &sampleID,
+    const uniform FeatureFlagsHandler &ffh);
+
+OSPRAY_END_ISPC_NAMESPACE

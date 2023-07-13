@@ -5,6 +5,8 @@
 
 #include "BSDF.ih"
 
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
 struct Velvety
 {
   BSDF super;
@@ -14,8 +16,10 @@ struct Velvety
   float f;
 };
 
-inline BSDF_EvalRes Velvety_eval(
-    const varying BSDF *uniform super, const vec3f &wo, const vec3f &wi)
+inline BSDF_EvalRes Velvety_eval(const varying BSDF *uniform super,
+    const vec3f &wo,
+    const vec3f &wi,
+    const uniform FeatureFlagsHandler &)
 {
   const varying Velvety *uniform self = (const varying Velvety *uniform)super;
   BSDF_EvalRes res;
@@ -25,22 +29,23 @@ inline BSDF_EvalRes Velvety_eval(
   const float sinThetaO = sqrt(1.0f - cosThetaO * cosThetaO);
   const float horizonScatter = pow(sinThetaO, self->f);
   res.pdf = cosineSampleHemispherePDF(cosThetaI);
-  res.value = (horizonScatter * cosThetaI * one_over_pi) * self->super.albedo;
+  res.value =
+      (horizonScatter * cosThetaI * (float)one_over_pi) * self->super.albedo;
   return res;
 }
 
 inline BSDF_SampleRes Velvety_sample(const varying BSDF *uniform super,
     const vec3f &wo,
     const vec2f &s,
-    float ss)
+    float,
+    const uniform FeatureFlagsHandler &ffh)
 {
-  const varying Velvety *uniform self = (const varying Velvety *uniform)super;
   BSDF_SampleRes res;
 
   const vec3f localDir = cosineSampleHemisphere(s);
   res.wi = getFrame(super) * localDir;
   res.type = BSDF_DIFFUSE_REFLECTION;
-  BSDF_EvalRes eval = Velvety_eval(super, wo, res.wi);
+  BSDF_EvalRes eval = Velvety_eval(super, wo, res.wi, ffh);
   res.pdf = eval.pdf;
   res.weight = eval.value * rcp(eval.pdf);
   return res;
@@ -54,8 +59,14 @@ inline void Velvety_Constructor(varying Velvety *uniform self,
   BSDF_Constructor(&self->super,
       R,
       BSDF_DIFFUSE_REFLECTION,
+      BSDF_TYPE_VELVETY,
+#ifdef OSPRAY_TARGET_SYCL
+      NULL,
+      NULL,
+#else
       Velvety_eval,
       Velvety_sample,
+#endif
       frame);
 
   self->f = f;
@@ -71,3 +82,5 @@ inline varying BSDF *uniform Velvety_create(uniform ShadingContext *uniform ctx,
   Velvety_Constructor(self, frame, R, f);
   return &self->super;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

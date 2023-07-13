@@ -6,7 +6,7 @@ tmptexfiles := $(addprefix tmp/, $(addsuffix .tex, overview changelog compilatio
 images_jpg := $(addprefix images/, $(addsuffix .jpg, exampleViewer $(addprefix camera_, perspective architectural stereo orthographic panoramic) $(addprefix material_, OBJ Principled CarPaint Metal Alloy Glass ThinGlass MetallicPaint Luminous) ColoredWindow $(addprefix ospMPIDistribTutorial, Volume Spheres _firstFrame _accumulatedFrame)))
 images_png := $(addprefix images/, $(addsuffix .png, diffuse_rooms normalmap_frustum tutorial_accumulatedframe tutorial_firstframe ospExamples renderSunSky))
 images_fig := spot_light c-gamma_coords quad_light hdri_light 
-images_svg := gitter_badge structured_spherical_coords vdb_structure
+images_svg := structured_spherical_coords vdb_structure
 
 images_fig2pdf := $(addprefix tmp/, $(addsuffix .pdf, $(images_fig)))
 images_svg2pdf := $(addprefix images/, $(addsuffix .pdf, $(images_svg)))
@@ -122,7 +122,7 @@ www/stylesheet.css: stylesheet.css
 tmp/api_web.md: api.md tmp/links.md tmp/images_local_png.md
 	$(PANDOC) $+ --indented-code-classes=cpp -t markdown-fenced_code_attributes -o $@
 
-tmp/compilation_web.md: compilation.md tmp/links.md
+tmp/compilation_web.md: prerequisites.md ../scripts/superbuild/README.md compilation.md tmp/links.md
 	$(PANDOC) $+ --indented-code-classes=sh -t markdown-fenced_code_attributes -o $@
 
 tmp/changelog.md: filter-sectionnumbers.py ../CHANGELOG.md
@@ -180,13 +180,13 @@ convert_nbsp_width = sed -e 's@\\ @ @g' -e 's/" style="width:/" width="/g' -e "
 tmp/api.md: api.md tmp/links_local.md tmp/images_web.md
 	$(PANDOC) $+ --indented-code-classes=cpp -t markdown-fenced_code_attributes -o $@
 
-tmp/compilation.md: compilation.md tmp/links_local.md
+tmp/compilation.md: prerequisites.md ../scripts/superbuild/README.md compilation.md tmp/links_local.md
 	$(PANDOC) $+ --indented-code-classes=sh -t markdown-fenced_code_attributes -o $@
 
 tmp/tutorials.md: tutorials.md tmp/links_local.md tmp/images_web.md
 	$(PANDOC) $+ --indented-code-classes=sh -t markdown-fenced_code_attributes -o $@
 
-../README.md: tmp/readme_head.md tmp/overview.md gitter.md tmp/compilation.md tmp/documentation.md tmp/api.md tmp/tutorials.md
+../README.md: tmp/readme_head.md tmp/overview.md tmp/compilation.md tmp/documentation.md tmp/api.md tmp/tutorials.md
 	$(PANDOC) --file-scope $+ --markdown-headings=setext -t gfm | $(convert_nbsp_width) > $@
 
 ### pdf
@@ -200,7 +200,7 @@ tmp/%.tex: filter-latex.py %.md tmp/links_local.md tmp/images_local_pdf.md
 tmp/api.tex: filter-latex.py api.md tmp/links_local.md tmp/images_local_pdf.md
 	$(markdown2tex) --indented-code-classes=cpp
 
-tmp/compilation.tex: filter-latex.py compilation.md tmp/links_local.md tmp/images_local_pdf.md
+tmp/compilation.tex: filter-latex.py prerequisites.md ../scripts/superbuild/README.md compilation.md tmp/links_local.md tmp/images_local_pdf.md
 	$(markdown2tex) --indented-code-classes=sh
 
 tmp/tutorials.tex: filter-latex.py tutorials.md tmp/links_local.md tmp/images_local_pdf.md

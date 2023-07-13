@@ -4,8 +4,10 @@
 // ospray
 #include "../FrameBufferView.ih"
 #include "../Tile.ih"
-#include "math/LinearSpace.ih"
+#include "rkcommon/math/LinearSpace.ih"
 #include "rkcommon/math/vec.ih"
+
+OSPRAY_BEGIN_ISPC_NAMESPACE
 
 struct LiveSSAOFrameOp
 {
@@ -56,11 +58,11 @@ export void LiveSSAOFrameOp_set(void *uniform _self,
 }
 
 export void LiveSSAOFrameOp_getOcclusion(const void *uniform _self,
-    void *uniform _fb,
+    const void *uniform _fb,
     float *uniform occlusionBuffer,
     const uniform float radius,
     const uniform float checkRadius,
-    int uniform kernelSize,
+    unsigned int uniform kernelSize,
     int uniform programID)
 {
   const LiveSSAOFrameOp *uniform self = (const LiveSSAOFrameOp *uniform)_self;
@@ -79,8 +81,8 @@ export void LiveSSAOFrameOp_getOcclusion(const void *uniform _self,
 
     // project pixel from screenspace to cameraspace, then to worldspace
     vec3f pixelPosCamera =
-        make_vec3f((i - fb.fbDims.x / 2.0) * self->pixelSize.x,
-            (j - fb.fbDims.y / 2.0) * self->pixelSize.y,
+        make_vec3f((i - fb.fbDims.x / 2.f) * self->pixelSize.x,
+            (j - fb.fbDims.y / 2.f) * self->pixelSize.y,
             -self->nearClip);
 
     pixelPosCamera = pixelPosCamera * ((pointDepth) / (length(pixelPosCamera)));
@@ -103,8 +105,8 @@ export void LiveSSAOFrameOp_getOcclusion(const void *uniform _self,
               * (-self->nearClip) / self->pixelSize.x,
           samplePosCamera.y / samplePosCamera.z * (-self->nearClip)
               / self->pixelSize.y);
-      int samplePos_i = fb.fbDims.x / 2.0 + samplePosScreen.x;
-      int samplePos_j = fb.fbDims.y / 2.0 + samplePosScreen.y;
+      int samplePos_i = fb.fbDims.x / 2.f + samplePosScreen.x;
+      int samplePos_j = fb.fbDims.y / 2.f + samplePosScreen.y;
 
       if (samplePos_i < 0 || samplePos_i >= fb.fbDims.x)
         continue;
@@ -116,25 +118,27 @@ export void LiveSSAOFrameOp_getOcclusion(const void *uniform _self,
 
       // range check & accumulate
       float rangeCheck =
-          abs(pointDepth - sampleDepth) < checkRadius ? 1.0 : 0.0;
+          abs(pointDepth - sampleDepth) < checkRadius ? 1.f : 0.f;
 
       occlusion = occlusion
-          + (length(samplePosCamera) > sampleDepth ? 1.0 : 0.0) * rangeCheck;
+          + (length(samplePosCamera) > sampleDepth ? 1.f : 0.f) * rangeCheck;
     }
     occlusion = 1 - self->ssaoStrength * (occlusion / kernelSize);
     occlusionBuffer[pixelID] = occlusion;
   }
 }
 
-export void LiveSSAOFrameOp_applyOcclusion(void *uniform _self,
-    void *uniform _fb,
+export void LiveSSAOFrameOp_applyOcclusion(void *uniform,
+    const void *uniform _fb,
     void *uniform _color,
     float *uniform occlusionBuffer)
 {
   FrameBufferView *uniform fb = (FrameBufferView * uniform) _fb;
-  for (uint32 pixelID = 0; pixelID < fb->fbDims.x * fb->fbDims.y; pixelID++) {
+  for (uniform uint32 pixelID = 0;
+       pixelID < (uniform uint32)(fb->fbDims.x * fb->fbDims.y);
+       pixelID++) {
     if (occlusionBuffer[pixelID] >= 0) {
-      for (uint32 c = 0; c < 3; ++c) {
+      for (uniform uint32 c = 0; c < 3; ++c) {
         if ((fb->colorBufferFormat == OSP_FB_RGBA8)
             || (fb->colorBufferFormat == OSP_FB_SRGBA)) {
           uint8 *uniform color = (uint8 * uniform) _color;
@@ -155,3 +159,4 @@ export int8 uniform getProgramCount()
 {
   return programCount;
 }
+OSPRAY_END_ISPC_NAMESPACE

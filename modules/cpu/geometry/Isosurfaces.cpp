@@ -1,27 +1,40 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
+#ifdef OSPRAY_ENABLE_VOLUMES
 
 // ospray
 #include "Isosurfaces.h"
 #include "common/Data.h"
 // openvkl
 #include "openvkl/openvkl.h"
+// comment break to prevent clang-format from reordering openvkl includes
+#if OPENVKL_VERSION_MAJOR > 1
+#include "openvkl/device/openvkl.h"
+#endif
+#ifndef OSPRAY_TARGET_SYCL
 // ispc-generated files
 #include "geometry/Isosurfaces_ispc.h"
+#else
+namespace ispc {
+void Isosurfaces_bounds(const RTCBoundsFunctionArguments *uniform args);
+}
+#endif
 
 namespace ospray {
 
 Isosurfaces::Isosurfaces(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+    : AddStructShared(
+        device.getIspcrtContext(), device, FFG_ISOSURFACE | FFG_USER_GEOMETRY)
 {
+#ifndef OSPRAY_TARGET_SYCL
   getSh()->super.postIntersect = ispc::Isosurfaces_postIntersect_addr();
+#endif
 }
 
 Isosurfaces::~Isosurfaces()
 {
   if (vklHitContext) {
     vklRelease(vklHitContext);
-    vklHitContext = nullptr;
   }
 }
 
@@ -60,7 +73,6 @@ void Isosurfaces::commit()
 
   if (vklHitContext) {
     vklRelease(vklHitContext);
-    vklHitContext = nullptr;
   }
 
   vklHitContext = (volume)
@@ -78,9 +90,7 @@ void Isosurfaces::commit()
 
   vklCommit(vklHitContext);
 
-  createEmbreeUserGeometry((RTCBoundsFunction)&ispc::Isosurfaces_bounds,
-      (RTCIntersectFunctionN)&ispc::Isosurfaces_intersect,
-      (RTCOccludedFunctionN)&ispc::Isosurfaces_occluded);
+  createEmbreeUserGeometry((RTCBoundsFunction)&ispc::Isosurfaces_bounds);
   getSh()->isovalues = isovaluesData->data();
   getSh()->volumetricModel = model ? model->getSh() : nullptr;
   getSh()->volume = volume ? volume->getSh() : nullptr;
@@ -96,3 +106,5 @@ size_t Isosurfaces::numPrimitives() const
 }
 
 } // namespace ospray
+
+#endif

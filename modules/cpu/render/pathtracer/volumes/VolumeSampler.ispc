@@ -1,20 +1,42 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
+#ifdef OSPRAY_ENABLE_VOLUMES
 
+#include "common/FeatureFlagsEnum.h"
 #include "common/World.ih"
 #include "render/pathtracer/volumes/VolumeSampler.ih"
+#include "volume/transferFunction/TransferFunctionDispatch.ih"
 
-float delta_tracking(VolumetricModel *uniform vModel,
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+float delta_tracking(const VolumetricModel *uniform vModel,
     const range1f &rInterval,
     varying RandomSampler *uniform randomSampler,
     const vec3f &o,
     const vec3f &w,
     const float &time,
     float &mu_t, // sampled extinction coefficint
-    vec3f &albedo) // sampled albedo (color)
+    vec3f &albedo,
+    const uniform FeatureFlagsHandler &ffh) // sampled albedo (color)
 {
-  void *uniform intervalIteratorBuffer =
-      alloca(vklGetIntervalIteratorSizeV(vModel->vklIntervalContext));
+  const uniform FeatureFlags ff = getFeatureFlags(ffh);
+
+#ifdef OSPRAY_TARGET_SYCL
+  // No alloca on GPU, need to be conservative for now and use the
+  // VKL_MAX_INTERVAL_ITERATOR_SIZE
+  uniform uint8 intervalIteratorBuffer[VKL_MAX_INTERVAL_ITERATOR_SIZE];
+#else
+  void *uniform intervalIteratorBuffer = alloca(vklGetIntervalIteratorSizeV(
+#if OPENVKL_VERSION_MAJOR == 1
+      vModel->vklIntervalContext
+#else
+      &vModel->vklIntervalContext
+#endif
+      ));
+#endif
+
+#if OPENVKL_VERSION_MAJOR == 1
+  // We know if we have OpenVKL version 1 we're not targetting SYCL
   VKLIntervalIterator intervalIterator =
       vklInitIntervalIteratorV(vModel->vklIntervalContext,
           (varying vkl_vec3f *)&o,
@@ -22,16 +44,37 @@ float delta_tracking(VolumetricModel *uniform vModel,
           (varying vkl_range1f *)&rInterval,
           &time,
           intervalIteratorBuffer);
-
+#else
+  VKLIntervalIterator intervalIterator =
+      vklInitIntervalIteratorV(&vModel->vklIntervalContext,
+          (varying vkl_vec3f *)&o,
+          (varying vkl_vec3f *)&w,
+          (varying vkl_range1f *)&rInterval,
+#ifdef OSPRAY_TARGET_SYCL
+          time,
+#else
+          &time,
+#endif
+          intervalIteratorBuffer
+#ifdef OSPRAY_TARGET_SYCL
+          ,
+          ff.volume
+#endif
+      );
+#endif
   float t = 0.f;
   VKLInterval interval;
-  while (vklIterateIntervalV(intervalIterator, &interval)) {
-    box1f subInterval =
-        make_box1f(interval.tRange.lower, interval.tRange.upper);
+  while (vklIterateIntervalV(intervalIterator,
+      &interval
+#ifdef OSPRAY_TARGET_SYCL
+      ,
+      ff.volume
+#endif
+      )) {
     t = interval.tRange.lower;
 
     const float maxOpacity =
-        vModel->transferFunction->getMaxOpacity(vModel->transferFunction,
+        TransferFunction_dispatch_getMaxOpacity(vModel->transferFunction,
             *((varying range1f * uniform) & interval.valueRange));
 
     const float mu_max = vModel->densityScale * maxOpacity;
@@ -48,13 +91,26 @@ float delta_tracking(VolumetricModel *uniform vModel,
       xi = RandomSampler_getFloat(randomSampler);
       const vec3f p = o + t * w;
 
+#if OPENVKL_VERSION_MAJOR == 1
+      // We know if we have OpenVKL version 1 we're not targetting SYCL
       const float sample = vklComputeSampleV(
           vModel->volume->vklSampler, (const varying vkl_vec3f *uniform) & p);
+#else
+      const float sample = vklComputeSampleV(&vModel->volume->vklSampler,
+          (const varying vkl_vec3f *uniform) & p
+#ifdef OSPRAY_TARGET_SYCL
+          ,
+          0,
+          time,
+          ff.volume
+#endif
+      );
+#endif
       if (isnan(sample))
         continue;
 
       const vec4f color =
-          vModel->transferFunction->get(vModel->transferFunction, sample);
+          TransferFunction_dispatch_get(vModel->transferFunction, sample);
       mu_t = vModel->densityScale * color.w;
       if (xi < mu_t / mu_max) {
         albedo = make_vec3f(color);
@@ -65,20 +121,29 @@ float delta_tracking(VolumetricModel *uniform vModel,
   return inf;
 }
 
-float volumeSampleFreePath(const PathState &pathState,
-    const World *uniform world,
+SYCL_EXTERNAL float volumeSampleFreePath(const World *uniform world,
     Ray &ray,
     RayIntervals &rayIntervals,
-    varying LDSampler *uniform ldSampler,
     varying RandomSampler *uniform randomSampler,
-    VolumetricModel *varying *uniform sampledInstance,
+    const VolumetricModel *varying *uniform sampledInstance,
     float &sampledExtinctionCoefficient,
-    vec3f &sampledAlbedo)
+    vec3f &sampledAlbedo,
+    const uniform FeatureFlagsHandler &ffh)
 {
-  // Get volume intervals
-  Ray volumeRay = ray;
+#ifdef OSPRAY_TARGET_SYCL
+  // We only support a single volume interval on the GPU
+  VolumeInterval vInterval;
+  VolumeIntervals volumeIntervals;
+  volumeIntervals.numVolumeIntervals = 0;
+  volumeIntervals.numAllocated = 1;
+  volumeIntervals.intervals = &vInterval;
+#else
   VolumeIntervals volumeIntervals;
   allocVolumeIntervals(volumeIntervals);
+#endif
+
+  // Get volume intervals
+  Ray volumeRay = ray;
   traceVolumeRay(world, volumeRay, volumeIntervals);
 
   // Iterate through volume intervals
@@ -87,7 +152,7 @@ float volumeSampleFreePath(const PathState &pathState,
   {
     *sampledInstance = NULL;
   }
-  for (uniform int i = 0; i < reduce_max(volumeIntervals.numVolumeIntervals);
+  for (uniform uint32 i = 0; i < reduce_max(volumeIntervals.numVolumeIntervals);
        i++) {
     if (i >= volumeIntervals.numVolumeIntervals)
       break;
@@ -101,21 +166,33 @@ float volumeSampleFreePath(const PathState &pathState,
       continue;
 
     AffineSpace3f xfm;
-    foreach_unique (inst in volumeIntervals.intervals[i].instance)
+#ifdef OSPRAY_TARGET_SYCL
+    {
+      const Instance *inst = volumeIntervals.intervals[i].instance;
+#else
+    foreach_unique (inst in volumeIntervals.intervals[i].instance) {
+#endif
       xfm = Instance_getTransform(inst, volumeRay.time);
+    }
     Ray transformedVolumeRay = volumeRay;
     transformRay(transformedVolumeRay, rcp(xfm));
 
     VolumetricModel *varying instance =
         volumeIntervals.intervals[i].volumetricModel;
+#ifdef OSPRAY_TARGET_SYCL
+    {
+      const VolumetricModel *inst = instance;
+#else
     foreach_unique (inst in instance) {
-      for (int j = 0; j < rayIntervals.count; j++) {
+#endif
+      for (uint32 j = 0; j < rayIntervals.count; j++) {
         range1f rInterval = rayIntervals.intervals[j];
 
         // Skip ray intervals outside of the volume range
-        if (or (vInterval.upper < rInterval.lower,
-                rInterval.upper < vInterval.lower))
+        if (vInterval.upper < rInterval.lower
+            || rInterval.upper < vInterval.lower) {
           continue;
+        }
 
         // Clip ray interval to the volume range
         rInterval.lower = max(rInterval.lower, vInterval.lower);
@@ -130,7 +207,8 @@ float volumeSampleFreePath(const PathState &pathState,
             transformedVolumeRay.dir,
             transformedVolumeRay.time,
             extinctionCoefficient,
-            albedo);
+            albedo,
+            ffh);
         if (dist < inf) {
           if (dist < min_dist) {
             min_dist = dist;
@@ -147,26 +225,38 @@ float volumeSampleFreePath(const PathState &pathState,
       }
     }
   }
+#ifndef OSPRAY_TARGET_SYCL
   freeVolumeIntervals(volumeIntervals);
+#endif
   return min_dist;
 }
 
-float volumeTransmittance(const PathState &pathState,
-    const World *uniform world,
+SYCL_EXTERNAL float volumeTransmittance(const World *uniform world,
     Ray &ray,
     RayIntervals &rayIntervals,
-    varying LDSampler *uniform ldSampler,
-    varying RandomSampler *uniform randomSampler)
+    varying RandomSampler *uniform randomSampler,
+    const uniform FeatureFlagsHandler &ffh)
 {
-  // Get volume intervals
-  Ray volumeRay = ray;
+#ifdef OSPRAY_TARGET_SYCL
+  // We only support a single volume interval on the GPU
+  VolumeInterval vInterval;
+  VolumeIntervals volumeIntervals;
+  volumeIntervals.numVolumeIntervals = 0;
+  volumeIntervals.numAllocated = 1;
+  volumeIntervals.intervals = &vInterval;
+#else
   VolumeIntervals volumeIntervals;
   allocVolumeIntervals(volumeIntervals);
+#endif
+
+  // Get volume intervals
+  Ray volumeRay = ray;
   traceVolumeRay(world, volumeRay, volumeIntervals);
 
   // Iterate through volume intervals
   float transmittance = 1.f;
-  for (int i = 0; and(i<volumeIntervals.numVolumeIntervals, transmittance> 0.f);
+  for (uint32 i = 0;
+       i < volumeIntervals.numVolumeIntervals && transmittance > 0.f;
        i++) {
     range1f vInterval = volumeIntervals.intervals[i].interval;
     vInterval.lower = max(ray.t0, vInterval.lower);
@@ -177,21 +267,33 @@ float volumeTransmittance(const PathState &pathState,
       continue;
 
     AffineSpace3f xfm;
-    foreach_unique (inst in volumeIntervals.intervals[i].instance)
+#ifdef OSPRAY_TARGET_SYCL
+    {
+      const Instance *inst = volumeIntervals.intervals[i].instance;
+#else
+    foreach_unique (inst in volumeIntervals.intervals[i].instance) {
+#endif
       xfm = Instance_getTransform(inst, volumeRay.time);
+    }
     Ray transformedVolumeRay = volumeRay;
     transformRay(transformedVolumeRay, rcp(xfm));
 
     VolumetricModel *varying instance =
         volumeIntervals.intervals[i].volumetricModel;
+#ifdef OSPRAY_TARGET_SYCL
+    {
+      const VolumetricModel *inst = instance;
+#else
     foreach_unique (inst in instance) {
-      for (int j = 0; and(j<rayIntervals.count, transmittance> 0.f); j++) {
+#endif
+      for (uint32 j = 0; j < rayIntervals.count && transmittance > 0.f; j++) {
         range1f rInterval = rayIntervals.intervals[j];
 
         // Skip ray intervals outside of the volume range
-        if (or (vInterval.upper < rInterval.lower,
-                rInterval.upper < vInterval.lower))
+        if (vInterval.upper < rInterval.lower
+            || rInterval.upper < vInterval.lower) {
           continue;
+        }
 
         // Clip ray interval to the volume range
         rInterval.lower = max(rInterval.lower, vInterval.lower);
@@ -206,11 +308,17 @@ float volumeTransmittance(const PathState &pathState,
             transformedVolumeRay.dir,
             transformedVolumeRay.time,
             extinctionCoefficient,
-            albedo);
+            albedo,
+            ffh);
         transmittance = transmittance * ((dist < rInterval.upper) ? 0.f : 1.f);
       }
     }
   }
+#ifndef OSPRAY_TARGET_SYCL
   freeVolumeIntervals(volumeIntervals);
+#endif
   return transmittance;
 }
+
+OSPRAY_END_ISPC_NAMESPACE
+#endif

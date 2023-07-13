@@ -2,51 +2,54 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "LoadBalancer.h"
-#include "Renderer.h"
-#include "api/Device.h"
-#include "rkcommon/tasking/parallel_for.h"
+#include "camera/Camera.h"
+#include "common/World.h"
+#include "fb/FrameBuffer.h"
+// ispc shared
+#include "fb/LocalFBShared.h"
+
+#ifndef OSPRAY_TARGET_SYCL
+#include "render/RenderTask.h"
+#include "rkcommon/utility/CodeTimer.h"
+#else
+#include "render/RenderTaskSycl.h"
+#endif
 
 namespace ospray {
 
-void LocalTiledLoadBalancer::renderFrame(
-    FrameBuffer *fb, Renderer *renderer, Camera *camera, World *world)
+std::pair<AsyncEvent, AsyncEvent> LocalTiledLoadBalancer::renderFrame(
+    FrameBuffer *fb,
+    Renderer *renderer,
+    Camera *camera,
+    World *world,
+    bool wait)
 {
   fb->beginFrame();
   void *perFrameData = renderer->beginFrame(fb, world);
 
-  runRenderTasks(
-      fb, renderer, camera, world, fb->getRenderTaskIDs(), perFrameData);
+  AsyncEvent rendererEvent = renderer->renderTasks(fb,
+      camera,
+      world,
+      perFrameData,
+      fb->getRenderTaskIDs(renderer->errorThreshold),
+      wait);
 
-  renderer->endFrame(fb, perFrameData);
-
-  fb->setCompletedEvent(OSP_WORLD_RENDERED);
-  fb->endFrame(renderer->errorThreshold, camera);
-  fb->setCompletedEvent(OSP_FRAME_FINISHED);
-}
-
-void LocalTiledLoadBalancer::runRenderTasks(FrameBuffer *fb,
-    Renderer *renderer,
-    Camera *camera,
-    World *world,
-    const utility::ArrayView<uint32_t> &renderTaskIDs,
-    void *perFrameData)
-{
-  if (renderer->errorThreshold > 0.f) {
-    std::vector<uint32_t> activeTasks;
-    for (auto &i : renderTaskIDs) {
-      const float error = fb->taskError(i);
-      if (error > renderer->errorThreshold) {
-        activeTasks.push_back(i);
-      }
-    }
-    renderer->renderTasks(fb,
-        camera,
-        world,
-        perFrameData,
-        utility::ArrayView<uint32_t>(activeTasks));
-  } else {
-    renderer->renderTasks(fb, camera, world, perFrameData, renderTaskIDs);
+  // Can't call renderer->endFrame() because we might still render
+  if (wait) {
+    renderer->endFrame(fb, perFrameData);
+    fb->setCompletedEvent(OSP_WORLD_RENDERED);
   }
+
+  // But we can queue FB post-processing kernel
+  AsyncEvent fbEvent = fb->postProcess(camera, wait);
+
+  // Can't call fb->endFrame() because we might still post-process
+  if (wait) {
+    fb->endFrame(renderer->errorThreshold, camera);
+    fb->setCompletedEvent(OSP_FRAME_FINISHED);
+  }
+
+  return std::make_pair(rendererEvent, fbEvent);
 }
 
 std::string LocalTiledLoadBalancer::toString() const

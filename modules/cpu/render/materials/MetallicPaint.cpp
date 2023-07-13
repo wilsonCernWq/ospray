@@ -2,17 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "MetallicPaint.h"
+#ifndef OSPRAY_TARGET_SYCL
 // ispc
 #include "render/materials/MetallicPaint_ispc.h"
+#endif
 
 namespace ospray {
 namespace pathtracer {
 
 MetallicPaint::MetallicPaint(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+    : AddStructShared(
+        device.getIspcrtContext(), device, FFO_MATERIAL_METALLICPAINT)
 {
-  getSh()->super.type = ispc::MATERIAL_TYPE_METALLICPAINT;
-  getSh()->super.getBSDF = ispc::MetallicPaint_getBSDF_addr();
+#ifndef OSPRAY_TARGET_SYCL
+  getSh()->super.getBSDF = reinterpret_cast<ispc::Material_GetBSDFFunc>(
+      ispc::MetallicPaint_getBSDF_addr());
+#endif
 }
 
 std::string MetallicPaint::toString() const
@@ -22,7 +27,7 @@ std::string MetallicPaint::toString() const
 
 void MetallicPaint::commit()
 {
-  MaterialParam3f color = getMaterialParam3f("baseColor", vec3f(.8f));
+  MaterialParam3f color = getMaterialParam3f("baseColor", vec3f(0.8f));
   const float flakeAmount = getParam<float>("flakeAmount", 0.3f);
   const vec3f &flakeColor = getParam<vec3f>("flakeColor", vec3f(RGB_AL_COLOR));
   const float flakeSpread = getParam<float>("flakeSpread", 0.5f);

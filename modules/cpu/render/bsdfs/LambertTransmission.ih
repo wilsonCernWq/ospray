@@ -5,18 +5,26 @@
 
 #include "BSDF.ih"
 
-inline BSDF_EvalRes LambertTransmission_eval(
-    const varying BSDF *uniform self, const vec3f &wo, const vec3f &wi)
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+inline BSDF_EvalRes LambertTransmission_eval(const varying BSDF *uniform self,
+    const vec3f &,
+    const vec3f &wi,
+    const uniform FeatureFlagsHandler &)
 {
   BSDF_EvalRes res;
   float cosThetaI = max(-dot(wi, getN(self)), 0.f);
   res.pdf = cosineSampleHemispherePDF(cosThetaI);
-  res.value = self->albedo * one_over_pi * cosThetaI;
+  res.value = self->albedo * (float)one_over_pi * cosThetaI;
   return res;
 }
 
 inline BSDF_SampleRes LambertTransmission_sample(
-    const varying BSDF *uniform self, const vec3f &wo, const vec2f &s, float ss)
+    const varying BSDF *uniform self,
+    const vec3f &,
+    const vec2f &s,
+    float,
+    const uniform FeatureFlagsHandler &)
 {
   const vec3f localDir = cosineSampleHemisphere(s);
   BSDF_SampleRes res;
@@ -37,8 +45,16 @@ inline varying BSDF *uniform LambertTransmission_create(
   BSDF_Constructor(self,
       R,
       BSDF_DIFFUSE_TRANSMISSION,
+      BSDF_TYPE_LAMBERT_TRANSMISSION,
+#ifdef OSPRAY_TARGET_SYCL
+      NULL,
+      NULL,
+#else
       LambertTransmission_eval,
       LambertTransmission_sample,
+#endif
       frame);
   return self;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

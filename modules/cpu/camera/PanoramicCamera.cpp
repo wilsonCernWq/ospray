@@ -3,14 +3,23 @@
 
 #include "PanoramicCamera.h"
 // ispc exports
+#ifndef OSPRAY_TARGET_SYCL
 #include "camera/PanoramicCamera_ispc.h"
+#else
+namespace ispc {
+void *PanoramicCamera_initRay_addr();
+}
+#endif
 
 namespace ospray {
 
 PanoramicCamera::PanoramicCamera(api::ISPCDevice &device)
-    : AddStructShared(device.getIspcrtDevice(), device)
+    : AddStructShared(device.getIspcrtContext(), device, FFO_CAMERA_PANORAMIC)
 {
-  getSh()->super.initRay = ispc::PanoramicCamera_initRay_addr();
+#ifndef OSPRAY_TARGET_SYCL
+  getSh()->super.initRay = reinterpret_cast<ispc::Camera_initRay>(
+      ispc::PanoramicCamera_initRay_addr());
+#endif
 }
 
 std::string PanoramicCamera::toString() const

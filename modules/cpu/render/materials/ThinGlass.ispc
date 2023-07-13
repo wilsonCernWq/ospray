@@ -1,14 +1,16 @@
 // Copyright 2009 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
+#include "common/Ray.ih"
 #include "render/Material.ih"
 #include "render/bsdfs/RobustThinDielectric.ih"
 #include "texture/TextureParam.ih"
 
-#include "ThinGlassShared.h"
+#include "ThinGlass.ih"
 
 ///////////////////////////////////////////////////////////////////////////////
 // Implementation
+OSPRAY_BEGIN_ISPC_NAMESPACE
 
 static inline const vec3f getAttenuation(
     const ThinGlass *uniform self, const DifferentialGeometry &dg)
@@ -24,23 +26,25 @@ static inline const vec3f getAttenuation(
   return attenuation;
 }
 
-const varying BSDF *varying ThinGlass_getBSDF(const Material *uniform super,
+SYCL_EXTERNAL const varying BSDF *varying ThinGlass_getBSDF(
+    const Material *uniform super,
     ShadingContext *uniform ctx,
     const DifferentialGeometry &dg,
-    const Ray &ray,
-    const Medium &currentMedium)
+    const Ray &,
+    const Medium &)
 {
   const ThinGlass *uniform self = (const ThinGlass *uniform)super;
 
-  varying linear3f *uniform frame = LinearSpace3f_create(ctx, frame(dg.Ns));
+  varying linear3f *uniform shadingframe =
+      LinearSpace3f_create(ctx, frame(dg.Ns));
   return RobustThinDielectric_create(
-      ctx, frame, self->eta, getAttenuation(self, dg));
+      ctx, shadingframe, self->eta, getAttenuation(self, dg));
 }
 
-vec3f ThinGlass_getTransparency(const Material *uniform material,
+SYCL_EXTERNAL vec3f ThinGlass_getTransparency(const Material *uniform material,
     const DifferentialGeometry &dg,
     const Ray &ray,
-    const Medium &currentMedium)
+    const Medium &)
 {
   const ThinGlass *uniform self = (const ThinGlass *uniform)material;
 
@@ -54,10 +58,12 @@ vec3f ThinGlass_getTransparency(const Material *uniform material,
 
 export void *uniform ThinGlass_getBSDF_addr()
 {
-  return ThinGlass_getBSDF;
+  return (void *uniform)ThinGlass_getBSDF;
 }
 
 export void *uniform ThinGlass_getTransparency_addr()
 {
-  return ThinGlass_getTransparency;
+  return (void *uniform)ThinGlass_getTransparency;
 }
+
+OSPRAY_END_ISPC_NAMESPACE

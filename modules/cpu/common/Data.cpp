@@ -3,6 +3,7 @@
 
 // ospray
 #include "Data.h"
+#include "common/ISPCRTBuffers.h"
 #include "ospray/ospray.h"
 #include "rkcommon/utility/multidim_index_sequence.h"
 
@@ -14,14 +15,16 @@ Data::Data(api::ISPCDevice &device,
     const vec3ul &numItems,
     const vec3l &byteStride)
     : ISPCDeviceObject(device),
+      appSharedPtr((char *)sharedData),
       shared(true),
       type(type),
       numItems(numItems),
       byteStride(byteStride)
 {
-  if (sharedData == nullptr)
+  if (sharedData == nullptr) {
     throw std::runtime_error("OSPData: shared buffer is NULL");
-  addr = (char *)sharedData;
+  }
+  addr = appSharedPtr;
   init();
 
   if (isObjectType(type)) {
@@ -39,9 +42,11 @@ Data::Data(api::ISPCDevice &device, OSPDataType type, const vec3ul &numItems)
       numItems(numItems),
       byteStride(0)
 {
-  view = BufferSharedCreate(
-      device.getIspcrtDevice().handle(), size() * sizeOf(type) + 16);
-  addr = (char *)ispcrtSharedPtr(view);
+  // TODO: is this pad out by 16 still needed?
+  view = make_buffer_shared_unique<char>(device.getIspcrtContext(),
+      size() * sizeOf(type) + 16,
+      ispcrt::SharedMemoryUsageHint::HostWriteDeviceRead);
+  addr = view->data();
 
   init();
   if (isObjectType(type)) // XXX initialize always? or never?
@@ -56,9 +61,6 @@ Data::~Data()
         child->refDec();
     }
   }
-
-  if (!shared)
-    BufferSharedDelete(view);
 }
 
 ispc::Data1D Data::emptyData1D;
@@ -77,6 +79,27 @@ void Data::init()
     byteStride.y = numItems.x * byteStride.x;
   if (byteStride.z == 0)
     byteStride.z = numItems.y * byteStride.y;
+
+#ifdef OSPRAY_TARGET_SYCL
+  // Check if the shared data the app gave is actually in USM, if not we still
+  // need to make a copy of it internally so it's accessible on the GPU
+  if (shared) {
+    ispcrt::Context &ispcrtContext = getISPCDevice().getIspcrtContext();
+    ispcrt::Device &ispcrtDevice = getISPCDevice().getIspcrtDevice();
+    auto memType = ispcrtDevice.getMemoryAllocType(addr);
+
+    if (memType != ISPCRT_ALLOC_TYPE_SHARED) {
+      const size_t sizeBytes = byteStride.z * numItems.z;
+      shared = false;
+      // TODO: is the padding still needed?
+      view = make_buffer_shared_unique<char>(ispcrtContext,
+          sizeBytes + 16,
+          ispcrt::SharedMemoryUsageHint::HostWriteDeviceRead);
+      addr = view->data();
+      std::memcpy(addr, appSharedPtr, sizeBytes);
+    }
+  }
+#endif
 
   // precompute dominant axis and set at ispc-side proxy
   if (dimensions != 1)
@@ -148,6 +171,18 @@ void Data::copy(const Data &source, const vec3ul &destinationIndex)
     }
   }
 }
+
+#ifdef OSPRAY_TARGET_SYCL
+void Data::commit()
+{
+  // If we were passed "shared" data that was not actually in USM we made a USM
+  // copy of it, and need to update that copy on commit
+  if (appSharedPtr && addr != appSharedPtr) {
+    const size_t sizeBytes = byteStride.z * numItems.z;
+    std::memcpy(addr, appSharedPtr, sizeBytes);
+  }
+}
+#endif
 
 bool Data::isShared() const
 {

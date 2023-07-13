@@ -4,30 +4,34 @@
 // ospray
 #include "SunSkyLight.h"
 #include "texture/Texture2D.h"
-// embree
-#include "embree3/rtcore.h"
+#ifndef OSPRAY_TARGET_SYCL
 // ispc exports
 #include "lights/HDRILight_ispc.h"
+#else
+namespace ispc {
+void HDRILight_initDistribution(const void *map, void *distribution);
+}
+#endif
 // ispc shared
 #include "DirectionalLightShared.h"
 #include "HDRILightShared.h"
 
 namespace ospray {
 
-SunSkyLight::SunSkyLight(api::ISPCDevice &device) : Light(device)
+SunSkyLight::SunSkyLight(api::ISPCDevice &device)
+    : Light(device, FFO_LIGHT_HDRI | FFO_LIGHT_DIRECTIONAL)
 {
   static const int skyResolution = 512;
-  skySize = vec2i(skyResolution, skyResolution / 2);
-  skyImage.resize(skySize.product());
+  this->skySize = vec2i(skyResolution, skyResolution / 2);
+  this->skyImage = make_buffer_shared_unique<vec3f>(
+      getISPCDevice().getIspcrtContext(), skySize.product());
   static auto format = static_cast<OSPTextureFormat>(OSP_TEXTURE_RGB32F);
   static auto filter =
       static_cast<OSPTextureFilter>(OSP_TEXTURE_FILTER_BILINEAR);
-  mapSh.set(skySize, skyImage.data(), format, filter);
-}
-
-SunSkyLight::~SunSkyLight()
-{
-  ispc::HDRILight_destroyDistribution(distributionIE);
+  map = new Texture2D(getISPCDevice());
+  map->refDec();
+  map->getSh()->set(
+      skySize, (ispc::vec3f *)this->skyImage->data(), format, filter);
 }
 
 ISPCRTMemoryView SunSkyLight::createSh(
@@ -36,19 +40,19 @@ ISPCRTMemoryView SunSkyLight::createSh(
   switch (index) {
   case 0: {
     ISPCRTMemoryView view = StructSharedCreate<ispc::HDRILight>(
-        getISPCDevice().getIspcrtDevice().handle());
+        getISPCDevice().getIspcrtContext().handle());
     ispc::HDRILight *sh = (ispc::HDRILight *)ispcrtSharedPtr(view);
     sh->set(visible,
         instance,
         coloredIntensity,
         frame,
-        &mapSh,
-        (const ispc::Distribution2D *)distributionIE);
+        map->getSh(),
+        distribution->getSh());
     return view;
   }
   case 1: {
     ISPCRTMemoryView view = StructSharedCreate<ispc::DirectionalLight>(
-        getISPCDevice().getIspcrtDevice().handle());
+        getISPCDevice().getIspcrtContext().handle());
     ispc::DirectionalLight *sh =
         (ispc::DirectionalLight *)ispcrtSharedPtr(view);
     sh->set(visible, instance, direction, solarIrradiance, cosAngle);
@@ -138,6 +142,7 @@ void SunSkyLight::commit()
     for (int x = 0; x < skySize.x; x++) {
       float theta = (y + 0.5) / skySize.y * float(pi);
       const size_t index = skySize.x * y + x;
+      // const size_t index = skySize.x * y + x * 3;
       vec3f skyRadiance = zero;
 
       const float maxTheta = 0.999 * float(pi) / 2.0;
@@ -157,7 +162,7 @@ void SunSkyLight::commit()
         float cosGamma = cos(theta) * cos(sunThetaMax)
             + sin(theta) * sin(sunThetaMax) * cos(phi - sunPhi);
 
-        float gamma = acos(clamp(cosGamma, -1.f, 1.f));
+        float gamma = std::acos(clamp(cosGamma, -1.f, 1.f));
 
         float rgbData[3];
         for (int i = 0; i < 3; ++i) {
@@ -168,14 +173,18 @@ void SunSkyLight::commit()
         skyRadiance = skyRadiance * shadow;
         skyRadiance *= intensityScale;
       }
-      skyImage[index] = max(skyRadiance, vec3f(0.0f));
+      skyImage->data()[index] = max(skyRadiance, vec3f(0.0f));
     }
   });
+
   arhosekskymodelstate_free(rgbModel);
 
   // recreate distribution
-  ispc::HDRILight_destroyDistribution(distributionIE);
-  distributionIE = ispc::HDRILight_createDistribution(&mapSh);
+  distribution = new Distribution2D(skySize, getISPCDevice());
+  // Release extra local ref
+  distribution->refDec();
+
+  ispc::HDRILight_initDistribution(map->getSh(), distribution->getSh());
 }
 
 void SunSkyLight::processIntensityQuantityType()

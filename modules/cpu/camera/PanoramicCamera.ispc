@@ -8,7 +8,9 @@
 // c++ shared
 #include "PanoramicCameraShared.h"
 
-void PanoramicCamera_initRay(const Camera *uniform _self,
+OSPRAY_BEGIN_ISPC_NAMESPACE
+
+SYCL_EXTERNAL void PanoramicCamera_initRay(const Camera *uniform _self,
     varying Ray &ray,
     const varying CameraSample &sample)
 {
@@ -40,8 +42,8 @@ void PanoramicCamera_initRay(const Camera *uniform _self,
 
   screen = Camera_subRegion(_self, screen);
 
-  const float phi = two_pi * screen.x;
-  const float theta = M_PI * screen.y;
+  const float phi = (float)two_pi * screen.x;
+  const float theta = (float)pi * screen.y;
 
   float sinTheta, cosTheta;
   sincos(theta, &sinTheta, &cosTheta);
@@ -52,6 +54,7 @@ void PanoramicCamera_initRay(const Camera *uniform _self,
   // transform to camera- and then to world-space
   vec3f dir;
   vec3f org;
+#ifndef OSPRAY_TARGET_SYCL
   if (self->super.motionBlur) {
     const affine3f xfm = getInterpolatedTransform(self->super.geom, time);
 
@@ -64,7 +67,9 @@ void PanoramicCamera_initRay(const Camera *uniform _self,
 
     dir = frameMB * make_vec3f(-localDir.y, -localDir.z, localDir.x);
     org = xfmPoint(xfm, self->org) + offset * cross(dir, frameMB.vy);
-  } else {
+  } else
+#endif
+  {
     dir = self->frame * make_vec3f(-localDir.y, -localDir.z, localDir.x);
     org = self->org + offset * cross(dir, self->frame.vy);
   }
@@ -76,5 +81,7 @@ void PanoramicCamera_initRay(const Camera *uniform _self,
 
 export void *uniform PanoramicCamera_initRay_addr()
 {
-  return PanoramicCamera_initRay;
+  return (void *uniform)PanoramicCamera_initRay;
 }
+
+OSPRAY_END_ISPC_NAMESPACE
