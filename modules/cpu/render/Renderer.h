@@ -95,6 +95,8 @@ struct OSPRAY_SDK_INTERFACE Renderer
   Ref<const DataT<Material *>> materialData;
   std::unique_ptr<BufferShared<ispc::Material *>> materialArray;
 
+  Ref<const DataT<vec2i>> sparseSamplingBuffer;
+
  private:
   void setupPixelFilter();
 };

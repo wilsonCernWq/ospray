@@ -84,6 +84,13 @@ void Renderer::commit()
   setupPixelFilter();
   getSh()->pixelFilter = pixelFilter ? pixelFilter->getSh() : nullptr;
 
+  getSh()->sparseSampling = getParam<bool>("sparseSampling", false) ? 1 : 0;
+  if (getSh()->sparseSampling) {
+    sparseSamplingBuffer = getParamDataT<vec2i>("sparseSamplingBuffer", true);
+    getSh()->sparseSamplingBuffer = *ispc(sparseSamplingBuffer);
+    getSh()->sparseSamplingSize = getParam<vec2i>("sparseSamplingSize");
+  }
+
   ispc::precomputeZOrder();
 }
 

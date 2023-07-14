@@ -37,6 +37,9 @@ task
     return;
   }
 
+  const uniform vec2f rcpSize = self->sparseSampling 
+    ? make_vec2f(1.f / self->sparseSamplingSize.x, 1.f / self->sparseSamplingSize.y) : fb->rcpSize;
+
 #ifdef OSPRAY_TARGET_SYCL
   for (int32 y = taskDesc.region.lower.y; y < taskDesc.region.upper.y; ++y)
     for (int32 x = taskDesc.region.lower.x; x < taskDesc.region.upper.x; ++x) {
@@ -44,13 +47,23 @@ task
   foreach_tiled (y = taskDesc.region.lower.y... taskDesc.region.upper.y,
       x = taskDesc.region.lower.x... taskDesc.region.upper.x) {
 #endif
-      screenSample.sampleID.x = x;
-      screenSample.sampleID.y = y;
+      // screenSample.sampleID.x = x;
+      // screenSample.sampleID.y = y;
+
+      if (self->sparseSampling) {
+        const vec2i xsys = get_vec2i(self->sparseSamplingBuffer, x);
+        screenSample.sampleID.x = xsys.x;
+        screenSample.sampleID.y = xsys.y;
+      }
+      else {
+        screenSample.sampleID.x = x;
+        screenSample.sampleID.y = y;
+      }
 
       // set ray t value for early ray termination (from maximum depth texture)
       vec2f center =
           make_vec2f(screenSample.sampleID.x, screenSample.sampleID.y) + 0.5f;
-      const float tMax = Renderer_getMaxDepth(self, center * fb->rcpSize);
+      const float tMax = Renderer_getMaxDepth(self, center * rcpSize);
       screenSample.z = tMax;
 
       vec3f col = make_vec3f(0.f);
@@ -77,9 +90,9 @@ task
         screenSample.sampleID.z = startSampleID + s;
 
         cameraSample.screen.x =
-            (screenSample.sampleID.x + pfSample.x) * fb->rcpSize.x;
+            (screenSample.sampleID.x + pfSample.x) * rcpSize.x;
         cameraSample.screen.y =
-            (screenSample.sampleID.y + pfSample.y) * fb->rcpSize.y;
+            (screenSample.sampleID.y + pfSample.y) * rcpSize.y;
         screenSample.pos = cameraSample.screen;
 
         // no DoF or MB per default
@@ -123,6 +136,11 @@ task
       screenSample.z = depth;
       screenSample.normal = normal * rspp;
       screenSample.albedo = albedo * rspp;
+
+      if (self->sparseSampling) {
+        screenSample.sampleID.x = x;
+        screenSample.sampleID.y = y;
+      }
 
       FrameBuffer_dispatch_accumulateSample(fb, screenSample, taskDesc);
     }

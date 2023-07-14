@@ -33,7 +33,6 @@ OSPRAY_BEGIN_ISPC_NAMESPACE
 
 static ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
     const World *uniform world,
-    FrameBuffer *uniform fb,
     const uint32 ix,
     const uint32 iy,
     const vec2f &pixel, // normalized, i.e. in [0..1]
@@ -95,7 +94,8 @@ static ScreenSample PathTraceIntegrator_Li(const PathTracer *uniform self,
 }
 
 static ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
-    FrameBuffer *uniform fb,
+    const uniform vec2i fbSize,
+    const uniform vec2f fbSizeRcp,
     Camera *uniform camera,
     World *uniform world,
     const uint32 ix,
@@ -127,8 +127,8 @@ static ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
     const uint32 sampleID = accumID * spp + s;
     screenSample.sampleID.z = sampleID;
     LDSampler_init(
-        ldSampler, self->super.mathConstants, fb->size.x * iy + ix, sampleID);
-    RandomSampler_init(randomSampler, fb->size.x * iy + ix, sampleID);
+        ldSampler, self->super.mathConstants, fbSize.x * iy + ix, sampleID);
+    RandomSampler_init(randomSampler, fbSize.x * iy + ix, sampleID);
 
     CameraSample cameraSample;
     const vec2f pixelSample = LDSampler_getFloat2(ldSampler, 0);
@@ -141,9 +141,9 @@ static ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
     }
 
     cameraSample.screen.x =
-        (screenSample.sampleID.x + pfSample.x) * fb->rcpSize.x;
+        (screenSample.sampleID.x + pfSample.x) * fbSizeRcp.x;
     cameraSample.screen.y =
-        (screenSample.sampleID.y + pfSample.y) * fb->rcpSize.y;
+        (screenSample.sampleID.y + pfSample.y) * fbSizeRcp.y;
 
     cameraSample.lens = LDSampler_getFloat2(ldSampler, 2);
     cameraSample.time = LDSampler_getFloat(ldSampler, 4);
@@ -155,7 +155,7 @@ static ScreenSample PathTracer_renderPixel(PathTracer *uniform self,
 
     ScreenSample sample = PathTraceIntegrator_Li(self,
         world,
-        fb,
+        // fb,
         ix,
         iy,
         cameraSample.screen,
@@ -209,6 +209,9 @@ task
     return;
   }
 
+  const uniform vec2i fbSize = self->super.sparseSampling ? self->super.sparseSamplingSize : fb->size;
+  const uniform vec2f fbSizeRcp = make_vec2f(1.f / fbSize.x, 1.f / fbSize.y);
+
 #ifdef OSPRAY_TARGET_SYCL
   for (uint32 y = taskDesc.region.lower.y; y < taskDesc.region.upper.y; ++y)
     for (uint32 x = taskDesc.region.lower.x; x < taskDesc.region.upper.x; ++x) {
@@ -216,8 +219,26 @@ task
   foreach_tiled (y = taskDesc.region.lower.y... taskDesc.region.upper.y,
       x = taskDesc.region.lower.x... taskDesc.region.upper.x) {
 #endif
+
+      uint32 px, py;
+      if (self->super.sparseSampling) {
+        // buffer is one dimensional
+        const vec2i xsys = get_vec2i(self->super.sparseSamplingBuffer, x);
+        px = xsys.x;
+        py = xsys.y;
+      }
+      else {
+        px = x;
+        py = y;
+      }
+
       ScreenSample screenSample = PathTracer_renderPixel(
-          self, fb, camera, world, x, y, taskDesc.accumID);
+          self, fbSize, fbSizeRcp, camera, world, px, py, taskDesc.accumID);
+
+      if (self->super.sparseSampling) {
+        screenSample.sampleID.x = x;
+        screenSample.sampleID.y = y;
+      }
 
       FrameBuffer_dispatch_accumulateSample(fb, screenSample, taskDesc);
     }

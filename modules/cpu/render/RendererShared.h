@@ -4,7 +4,10 @@
 #pragma once
 
 #ifdef __cplusplus
+#include "common/Data.h"
 namespace ispc {
+#else
+#include "common/Data.ih"
 #endif // __cplusplus
 
 struct Texture2D;
@@ -28,6 +31,10 @@ struct Renderer
   PixelFilter *pixelFilter;
   MathConstants *mathConstants;
 
+  int sparseSampling;
+  vec2i sparseSamplingSize;
+  Data1D sparseSamplingBuffer;
+
 #ifdef __cplusplus
   Renderer()
       : spp(1),
@@ -39,7 +46,9 @@ struct Renderer
         numMaterials(0),
         material(nullptr),
         pixelFilter(nullptr),
-        mathConstants(nullptr)
+        mathConstants(nullptr),
+        sparseSampling(0),
+        sparseSamplingSize(1)
   {}
 };
 } // namespace ispc
