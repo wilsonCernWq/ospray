@@ -1,0 +1,86 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ospExamples (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/${command:cmake.buildType}/build/ospExamples",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/${command:cmake.buildType}/build",
+      "environment": [
+        {
+          "name": "LD_LIBRARY_PATH",
+          "value": "${env:LD_LIBRARY_PATH}:${workspaceFolder}/build/${command:cmake.buildType}/install/lib"
+        }
+      ],
+      "MIMode": "gdb",
+      "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          }
+      ]
+    },
+    {
+      "name": "ospSimulator (gdb)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/ospSimulator",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "environment": [
+        {
+          "name": "LD_LIBRARY_PATH",
+          "value": "${env:LD_LIBRARY_PATH}:${workspaceFolder}/build/${command:cmake.buildType}/install/lib"
+        }
+      ],
+      "MIMode": "gdb",
+      "setupCommands": [
+          {
+              "description": "Enable pretty-printing for gdb",
+              "text": "-enable-pretty-printing",
+              "ignoreFailures": true
+          }
+      ]
+    },
+    {
+      "name": "ospExamples (Windows) RelWithDebInfo",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/${command:cmake.buildType}/build/${command:cmake.buildType}/ospExamples.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "${workspaceFolder}/build/${command:cmake.buildType}/install/bin;${workspaceFolder}/build/${command:cmake.buildType}/install/redist/intel64/vc14;${env:PATH}"
+        }
+      ],
+      "externalConsole": false
+    },
+    {
+      "name": "ospSimulator (Windows) RelWithDebInfo",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/RelWithDebInfo/ospSimulator.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}/build/RelWithDebInfo",
+      "environment": [
+        {
+          "name": "PATH",
+          "value": "${workspaceFolder}/build/${command:cmake.buildType}/install/bin;${workspaceFolder}/build/${command:cmake.buildType}/install/redist/intel64/vc14;${env:PATH}"
+        }
+      ],
+      "externalConsole": false
+    },
+  ]
+}

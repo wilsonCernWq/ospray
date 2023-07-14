@@ -1,0 +1,233 @@
+{
+  // See https://go.microsoft.com/fwlink/?LinkId=733558
+  // for the documentation about the tasks.json format
+  "version": "2.0.0",
+  "tasks": [
+    /* create the 'build-deps-${input:configuration}' directory for all platforms */
+    {
+      "label": "Build Dependencies (Make Dependency Directory)",
+      "type": "shell",
+      "windows": {
+        "command": "if (-not (Test-Path 'build/${input:configuration}/deps')) { mkdir 'build/${input:configuration}/deps' }"
+      },
+      "linux": {
+        "command": "mkdir -p 'build/${input:configuration}/deps'",
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    /* cleanup caches for previous builds */
+    {
+      "label": "Build Dependencies (Clean Dependency Directory)",
+      "type": "shell",
+      "windows": {
+        // ignore cleaning
+        "command": "if (Test-Path 'x64/${input:configuration}') { rm -r 'x64/${input:configuration}' }"
+      },
+      "linux": {
+        // ignore cleaning
+        "command": "rm -fr ${workspaceFolder}/build/${input:configuration}/deps/*"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/build/${input:configuration}/deps"
+      },
+      "problemMatcher": []
+    },
+    /* a clean OSPRay build */
+    {
+      "label": "Build Dependencies (Internal - CMake Configure - Default)",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+        "args": [
+          // "-G",
+          // "Visual Studio 16 2019",
+          "-T",
+          "host=x64",
+          "-A",
+          "x64",
+          "--no-warn-unused-cli",
+          "-DBUILD_OIDN=ON",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
+        ]
+      },
+      "linux": {
+        "command": "cmake",
+        "args": [
+          "--no-warn-unused-cli",
+          "-DBUILD_OIDN=ON",
+          // "-DBUILD_OSPRAY_MODULE_MPI=ON",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
+        ],
+      },
+      "problemMatcher": []
+    },
+    /* OSPRay build with customized OpenVKL */
+    {
+      "label": "Build Dependencies (Internal - CMake Configure - OpenVKL)",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+        "args": [
+          // "-G",
+          // "Visual Studio 16 2019",
+          "-T",
+          "host=x64",
+          "-A",
+          "x64",
+          "--no-warn-unused-cli",
+          "-DOPENVKL_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DBUILD_OIDN=ON",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
+        ]
+      },
+      "linux": {
+        "command": "cmake",
+        "args": [
+          "--no-warn-unused-cli",
+          "-DOPENVKL_ROOT=${workspaceFolder}/../openvkl", // build customized OpenVKL
+          "-DBUILD_OIDN=ON",
+          // "-DBUILD_OSPRAY_MODULE_MPI=ON",
+          "-DBUILD_EMBREE_FROM_SOURCE:BOOL=FALSE",
+          "-DBUILD_DEPENDENCIES_ONLY:BOOL=TRUE",
+          "-DINSTALL_IN_SEPARATE_DIRECTORIES:BOOL=FALSE",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE",
+          "-H${workspaceFolder}/scripts/superbuild",
+          "-B${workspaceFolder}/build/${input:configuration}/deps",
+          "-DCMAKE_INSTALL_PREFIX=${workspaceFolder}/build/${input:configuration}/install"
+        ],
+      },
+      "problemMatcher": []
+    },
+    /* start the build */
+    {
+      "label": "Build Dependencies (Internal - CMake Build)",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "linux": {
+        "command": "cmake",
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/build/${input:configuration}/deps",
+        "--config",
+        "${input:configuration}",
+        "--parallel",
+        "20"
+      ],
+      "problemMatcher": []
+    },
+    /* Build Options */
+    {
+      /* Creating a Clean OSPRay Build */
+      "label": "Build Dependencies (Default)",
+      "type": "shell",
+      "command": "echo",
+      "args": [
+        "${input:configuration}"
+      ],
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build Dependencies (Make Dependency Directory)",
+        "Build Dependencies (Internal - CMake Configure - Default)",
+        "Build Dependencies (Internal - CMake Build)"
+      ],
+      "problemMatcher": []
+    },
+    {
+      /* Creating a Clean OSPRay Build */
+      "label": "Build Dependencies (OpenVKL)",
+      "type": "shell",
+      "command": "echo",
+      "args": [
+        "${input:configuration}"
+      ],
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build Dependencies (Make Dependency Directory)",
+        "Build Dependencies (Internal - CMake Configure - OpenVKL)",
+        "Build Dependencies (Internal - CMake Build)"
+      ],
+      "problemMatcher": []
+    },
+    /* Build customized OpenVKL */
+    {
+      "label": "Build OpenVKL",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "linux": {
+        "command": "cmake",
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/build/${input:configuration}/deps/openvkl/build",
+        "--config",
+        "${input:configuration}",
+        "--target",
+        "install",
+        "--parallel",
+        "20"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Rebuild OpenVKL",
+      "type": "shell",
+      "windows": {
+        "command": "C:\\Program Files\\CMake\\bin\\cmake.EXE",
+      },
+      "linux": {
+        "command": "cmake",
+      },
+      "args": [
+        "--build",
+        "${workspaceFolder}/build/${input:configuration}/deps/openvkl/build",
+        "--config",
+        "${input:configuration}",
+        "--target",
+        "install",
+        "--parallel",
+        "20",
+        "--clean-first"
+      ],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "type": "pickString",
+      "id": "configuration",
+      "description": "What type of configuration do you want to create?",
+      "options": [
+        "Debug",
+        "Release",
+        "RelWithDebInfo"
+      ],
+      "default": "RelWithDebInfo"
+    },
+  ]
+}

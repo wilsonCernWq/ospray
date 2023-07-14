@@ -2,6 +2,7 @@
 *#
 bin
 *.user*
+/build*/
 /build*
 install*
 *.sw?
@@ -14,7 +15,7 @@ tags
 *.zip
 *.bak
 *.patch
-.vscode
+!.vscode
 deps
 tbb
 embree

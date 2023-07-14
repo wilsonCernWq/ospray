@@ -1,0 +1,18 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build/${command:cmake.buildType}/build",
+    "cmake.configureSettings": {
+        "OSPRAY_APPS_TUTORIAL_GLM": true,
+        "OSPRAY_BUILD_ISA": "ALL",
+        "OSPRAY_MODULE_BILINEAR_PATCH": false,
+        "OSPRAY_MODULE_DENOISER": true,
+        "OSPRAY_INSTALL_DEPENDENCIES": false,
+        "OSPRAY_STRICT_BUILD": true,
+        "OSPRAY_WARN_AS_ERRORS": false,
+        "OSPRAY_RKCOMMON_DEFINITIONS": true,
+        // "OSPRAY_MODULE_MPI": true,
+        "CMAKE_PREFIX_PATH": "${workspaceFolder}/deps",
+        "CMAKE_INSTALL_PREFIX": "${workspaceFolder}/build/${command:cmake.buildType}/install"
+    },
+    "cmake.parallelJobs": 16,
+}
